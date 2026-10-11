@@ -27,7 +27,7 @@
             <button class="nav-btn" data-screen="legends">Legends</button>
             <button class="nav-btn" data-screen="motorsport">Motorsport</button>
             <button class="nav-btn" data-screen="games">Games</button>
-            <button class="nav-btn soon" data-screen="build">Build</button>
+            <button class="nav-btn" data-screen="build">Build</button>
             <button class="nav-btn soon" data-screen="race">Race</button>
         </nav>
         <button class="units-btn" id="units-btn" title="Switch between mph and km/h">MPH</button>
@@ -192,7 +192,24 @@
         </section>
 
         <!-- COMING SOON SCREENS -->
-        <section id="screen-build" class="screen"><div class="soon-panel" data-soon="build"></div></section>
+        <!-- BUILD (3D garage) -->
+        <section id="screen-build" class="screen">
+            <div class="build-head">
+                <h1><span class="kicker">Build · prototype</span>Your garage</h1>
+                <div class="build-tools" id="build-tools">
+                    <button class="opt active" data-light="studio">Studio</button><button class="opt" data-light="day">Day</button><button class="opt" data-light="night">Night</button>
+                    <button class="opt" id="build-turntable">⟳ Turntable</button><button class="opt" id="build-photo">📷 Photo</button><button class="opt" id="build-reset">Reset</button>
+                </div>
+            </div>
+            <div class="build-layout">
+                <div class="build-stage" id="build-stage"><div class="build-loading">Starting the engine…</div></div>
+                <aside class="build-side">
+                    <div class="build-panel" id="build-panel"></div>
+                    <div class="build-stats panel" id="build-stats"></div>
+                </aside>
+            </div>
+            <p class="small build-note">Drag to spin the car, pinch or scroll to zoom. Your design is saved on this device. This is an early version for testing: more parts, liveries, saving several cars and share codes are coming.</p>
+        </section>
         <section id="screen-race" class="screen"><div class="soon-panel" data-soon="race"></div></section>
 
         <!-- CREDITS -->

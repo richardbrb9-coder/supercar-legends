@@ -12,7 +12,8 @@ Made to work offline on an Android tablet, an iPhone or a laptop.
 - **Legends:** 25 founders, engineers, designers and drivers, linked to their cars.
 - **Motorsport:** six true stories, from Ford v Ferrari to the Nürburgring lap-time battles.
 - **Games:** Top Trumps Battle, Guess the Car, Supercar Quiz, Timeline Order and Drag Race.
-- **Coming next:** a 3D car builder, then racing the cars you build.
+- **Build (prototype):** a 3D garage. Pick a body style, shape it with sliders, choose wheels, paint, finish, wings and engine, and watch the stats change.
+- **Coming next:** more builder parts, liveries, saved cars and share codes, then racing the cars you build.
 
 ## Install on a tablet or phone
 Open the link once while online so everything is saved, then:

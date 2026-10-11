@@ -130,6 +130,12 @@ function toast(msg, ms = 1800) {
 let currentScreen = 'garage';
 // Other files (stories.js, games.js) add what happens when a screen opens or closes
 const SCREEN_ENTER = {}, SCREEN_LEAVE = [];
+window.getUnits = () => units;
+// The 3D builder is a separate module, loaded the first time Build opens
+let builder = null;
+SCREEN_ENTER.build = () => import('./builder.js').then(m => { builder = m; if (currentScreen === 'build') m.enter(); })
+    .catch(() => { document.getElementById('build-stage').innerHTML = '<div class="b-nogl"><h2>The builder could not start</h2><p>Try reloading the app.</p></div>'; });
+SCREEN_LEAVE.push(id => { if (builder && id !== 'build') builder.leave(); });
 const GAME_SCREENS = ['games', 'trumps', 'guess', 'quiz', 'order', 'drag'];
 function switchScreen(screenId) {
     const navId = GAME_SCREENS.includes(screenId) ? 'games' : screenId;
@@ -164,6 +170,7 @@ function rerender() {
     if (currentScreen === 'records') renderRecords();
     if (currentScreen === 'trumps') trumpsRender();
     if (modalCar) openModal(modalCar, false);
+    if (builder) builder.refreshUnits();
 }
 
 // =====================================================================
@@ -463,7 +470,6 @@ document.getElementById('trumps-next').onclick = trumpsNextRound;
 //  COMING SOON
 // =====================================================================
 const SOON = {
-    build: ['Build your own supercar', 'A 3D garage where you design your own car: body shape, wings, wheels, paint, liveries and engine. Then save it and share it with a code.'],
     race: ['Race', 'Race the cars you build on tracks made in the app, against the computer or your own ghost lap.']
 };
 document.querySelectorAll('.soon-panel').forEach(el => {
@@ -480,7 +486,7 @@ function renderCredits() {
         <p><b>Supercar Legends is not connected to, or endorsed by, any car company.</b> Car names are used only as facts about history. The app shows no car-maker logos, and cars you build in the app are your own designs.</p>
         <p><b>Photos:</b> ${n + Object.keys(typeof PEOPLE_CREDITS !== 'undefined' ? PEOPLE_CREDITS : {}).length} free-licence photos from <a href="https://commons.wikimedia.org" target="_blank" rel="noopener">Wikimedia Commons</a>. Thank you to every photographer below. Tap a name to see the original.</p>
         <p><b>Facts:</b> figures are the makers' claims where there are any, checked against Wikipedia and other sources in October 2026. Different sources sometimes give different numbers.</p>
-        <p><b>Fonts:</b> Orbitron, Russo One and Exo 2, all under the SIL Open Font Licence, saved inside the app. <b>3D:</b> three.js (MIT licence), for the builder that's coming soon.</p>`;
+        <p><b>Fonts:</b> Orbitron, Russo One and Exo 2, all under the SIL Open Font Licence, saved inside the app. <b>3D:</b> three.js (MIT licence), saved inside the app. The cars in the builder are drawn in code, so they are your own designs.</p>`;
     document.getElementById('credit-list').innerHTML = cars.filter(c => CREDITS[c.id]).sort(SORTS.name).map(c => {
         const cr = CREDITS[c.id];
         return `<div class="credit-item"><img src="car-images/${c.id}.webp" alt="" loading="lazy"><div><b>${escapeHtml(c.name)}</b>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'supercar-legends-v2'; // Bump this on every change so tablets pick up the new version
+const CACHE_NAME = 'supercar-legends-v3'; // Bump this on every change so tablets pick up the new version
 
 // The car list and picture credits, so every photo can be saved for offline use.
 importScripts('cars.js', 'credits.js', 'people-credits.js');
@@ -16,6 +16,7 @@ const CORE_FILES = [
     './motorsport.js',
     './stories.js',
     './games.js',
+    './builder.js',
     './credits.js',
     './manifest.json',
     './icon-192.png',
@@ -28,7 +29,7 @@ const CORE_FILES = [
     './fonts/exo-2-latin-700-normal.woff2',
     './fonts/exo-2-latin-800-normal.woff2'
 ];
-// three.js for the 3D builder (coming next), saved now so it's ready offline
+// three.js for the 3D builder
 const LIB_FILES = [
     './lib/three.module.min.js',
     './lib/three.core.min.js',
