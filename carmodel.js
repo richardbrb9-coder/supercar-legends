@@ -8,7 +8,7 @@ import * as THREE from './lib/three.module.min.js';
 export const PRESETS = {
     // Inspired by the classic 1960s British grand tourer: long bonnet, rounded body, framed windows, chrome trim, wire wheels
     gt60:     { label: '60s GT',          L: 4.57, W: 1.70, nose: 0.62, deck: 0.84, roof: 1.30, tail: 0.80, cabin: [0.46, 0.86], fast: 0.45, ride: 0.15, wheel: 0.34,
-                noseW: 0.84, noseTip: 0.93, noseLift: 0.9, wbFrac: 0.545, axleShift: -0.035, round: 0.5, fenderH: 0.02, fenderReach: 3.2, cabinStyle: 'glasshouse', cabinWB: 0.9, cabinWT: 0.74,
+                cross: 'triple', crossB: 0.045, crossW: 0.085, noseW: 0.84, noseTip: 0.93, noseLift: 0.9, wbFrac: 0.545, axleShift: -0.035, round: 0.5, fenderH: 0.02, fenderReach: 3.2, cabinStyle: 'glasshouse', cabinWB: 0.9, cabinWT: 0.74,
                 grille: 'shield', lamps: 'round', bumpers: true, scoop: 'bonnet', exhaust: 'twin',
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'wire', rimColour: 'chrome' } },
     wedge70:  { label: '70s wedge',       L: 4.20, W: 1.92, nose: 0.40, deck: 0.80, roof: 1.07, tail: 0.98, cabin: [0.36, 0.66], fast: 0.25, ride: 0.11, wheel: 0.33 },
@@ -40,7 +40,7 @@ export const ENGINES = {
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
-export const SHAPE_DEFAULTS = { noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
+export const SHAPE_DEFAULTS = { cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
     grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none' };
 // Apply a body style: its shape, its details, and the parts that suit it
 export function applyPreset(design, key) {
@@ -119,7 +119,15 @@ function profiles(p) {
     const roof = curve([[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, 0.74)], [rakeEnd, p.roof], [roofEnd, p.roof * 0.995], [c1, p.deck]]);
     const shoulder = s => Math.max(centre(s) + 0.03, fender(s));
     // the height of the body surface across the car (u = -1 left side … 1 right side)
-    const topAt = (s, u) => { const c = centre(s); return c + (shoulder(s) - c) * Math.pow(Math.abs(u), 3.2); };
+    // 'triple' (60s GT): seen from the front, the bonnet is a wide dome in the middle with a valley each side, then a narrower
+    // rounded wing over each front wheel. It fades out where the bonnet meets the windscreen.
+    const tripleAmt = s => q.cross !== 'triple' ? 0 : s < c0 - 0.06 ? 1 : s > c0 + 0.02 ? 0 : (c0 + 0.02 - s) / 0.08;
+    const dome = (a, mid, half) => { const d = Math.abs(a - mid) / half; return d < 1 ? Math.cos(d * Math.PI / 2) ** 2 : 0; };
+    const topAt = (s, u) => {
+        const c = centre(s), a = Math.abs(u), base = c + (shoulder(s) - c) * Math.pow(a, 3.2), t = tripleAmt(s);
+        if (!t) return base;
+        return base + t * (q.crossB * (dome(a, 0, 0.44) - 1) + q.crossW * dome(a, 0.77, 0.3));
+    };
     const bottomAt = (s, u) => { const b0 = base(s), a = arch(s), t = Math.min(1, Math.max(0, (Math.abs(u) - 0.5) / 0.16)); return b0 + Math.max(0, a - b0) * t * t * (3 - 2 * t); };
     return { centre, width, arch, base, roof, topAt, bottomAt, top: centre, c0, c1, frontAxle, rearAxle, wheelR, rakeEnd, roofEnd, q };
 }
@@ -170,7 +178,7 @@ function loftUV(rings, byArc = true) {
     return g;
 }
 function bodyGeometry(p, pr) {
-    const N = 90, K = 56, rings = [];
+    const N = 90, K = 84, rings = [];
     for (let i = 0; i <= N; i++) {
         const s = i / N, x = p.L / 2 - s * p.L, w = pr.width(s), ring = [];
         for (let k = 0; k < K; k++) {
@@ -373,10 +381,10 @@ export function createCar(design) {
     const q = pr.q;
     for (const side of [1, -1]) {
         if (q.lamps === 'round') {          // round lamps in the front corners, behind glass covers
-            const z = side * pr.width(0) * 0.66, y = lerp(pr.base(0), pr.topAt(0, 0.66), 0.62);
-            const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.04, 20), mats.head); lamp.rotation.z = Math.PI / 2;
-            lamp.position.set(X(0) + 0.01, y, z); car.add(lamp);
-            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.014, 8, 24), mats.chrome); ring.rotation.y = Math.PI / 2; ring.position.set(X(0) + 0.03, y, z); car.add(ring);
+            const ls = 0, z = side * pr.width(0) * 0.7, y = pr.topAt(0, 0.72) - 0.12;
+            const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.115, 20, 12, 0, Math.PI), mats.head); lamp.rotation.y = Math.PI / 2; lamp.scale.z = 0.5;
+            lamp.position.set(X(ls) + 0.005, y, z); car.add(lamp);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.118, 0.014, 8, 24), mats.chrome); ring.rotation.y = Math.PI / 2; ring.position.set(X(ls) + 0.01, y, z); car.add(ring);
         } else if (q.lamps === 'pods') {    // two stacked lamps in a dark teardrop pod on each front wing
             const ls = 0.05, z = side * pr.width(ls) * 0.66, y = pr.topAt(ls, 0.66) - 0.04;
             const pod = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), mats.lens); pod.scale.set(0.2, 0.08, 0.14);
@@ -391,7 +399,7 @@ export function createCar(design) {
     }
     // grille: a wide shield shape on the nose
     if (q.grille === 'shield') {
-        const gw = pr.width(0) * 0.42, gh = (pr.centre(0) - pr.base(0)) * 0.62, sh = new THREE.Shape();
+        const gw = pr.width(0) * 0.5, gh = (pr.centre(0) - pr.base(0)) * 0.55, sh = new THREE.Shape();
         sh.moveTo(-gw, 0); sh.lineTo(gw, 0); sh.quadraticCurveTo(gw * 1.02, gh * 0.75, gw * 0.55, gh); sh.quadraticCurveTo(0, gh * 1.18, -gw * 0.55, gh); sh.quadraticCurveTo(-gw * 1.02, gh * 0.75, -gw, 0);
         const gy = pr.base(0) + 0.05;
         const make = (shape, mat, depth, dx) => { const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false }); g.rotateY(Math.PI / 2); const m = new THREE.Mesh(g, mat); m.position.set(X(0) + dx, gy, 0); car.add(m); return m; };
