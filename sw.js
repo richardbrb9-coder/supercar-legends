@@ -1,4 +1,4 @@
-const CACHE_NAME = 'supercar-legends-v3'; // Bump this on every change so tablets pick up the new version
+const CACHE_NAME = 'supercar-legends-v4'; // Bump this on every change so tablets pick up the new version
 
 // The car list and picture credits, so every photo can be saved for offline use.
 importScripts('cars.js', 'credits.js', 'people-credits.js');
@@ -66,7 +66,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     if (!event.request.url.startsWith('http') || event.request.method !== 'GET') return;
     event.respondWith(
-        caches.match(event.request, { ignoreSearch: true }).then((cached) => {
+        // Only this version's cache is used, so old and new files are never mixed
+        caches.open(CACHE_NAME).then((cache) => cache.match(event.request, { ignoreSearch: true })).then((cached) => {
             if (cached) return cached;
             return fetch(event.request).then((response) => {
                 if (response.ok && new URL(event.request.url).origin === self.location.origin) {

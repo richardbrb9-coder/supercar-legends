@@ -2,6 +2,12 @@
 'use strict';
 
 if ('serviceWorker' in navigator) {
+    // When a new version takes over, reload once so the old and new files are never mixed
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (hadController && !reloading) { reloading = true; window.location.reload(); }
+    });
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
 }
 
@@ -133,8 +139,21 @@ const SCREEN_ENTER = {}, SCREEN_LEAVE = [];
 window.getUnits = () => units;
 // The 3D builder is a separate module, loaded the first time Build opens
 let builder = null;
-SCREEN_ENTER.build = () => import('./builder.js').then(m => { builder = m; if (currentScreen === 'build') m.enter(); })
-    .catch(() => { document.getElementById('build-stage').innerHTML = '<div class="b-nogl"><h2>The builder could not start</h2><p>Try reloading the app.</p></div>'; });
+function loadBuilder(attempt = 0) {
+    // On a retry, ask for a fresh copy in case the browser remembered a failed download
+    const url = attempt ? `./builder.js?retry=${Date.now()}` : './builder.js';
+    return import(url).catch(err => attempt < 2 ? new Promise(r => setTimeout(r, 800)).then(() => loadBuilder(attempt + 1)) : Promise.reject(err));
+}
+SCREEN_ENTER.build = () => {
+    const stage = document.getElementById('build-stage');
+    (builder ? Promise.resolve(builder) : loadBuilder())
+        .then(m => { builder = m; if (currentScreen === 'build') m.enter(); })
+        .catch(err => {
+            stage.innerHTML = `<div class="b-nogl"><div><h2>The builder could not start</h2><p>Check you're online the first time you open it, then try again.</p>
+                <p class="small">${escapeHtml(String(err && err.message || err))}</p><button class="act-btn" id="build-retry">Try again</button></div></div>`;
+            document.getElementById('build-retry').onclick = () => { stage.innerHTML = '<div class="build-loading">Starting the engine…</div>'; SCREEN_ENTER.build(); };
+        });
+};
 SCREEN_LEAVE.push(id => { if (builder && id !== 'build') builder.leave(); });
 const GAME_SCREENS = ['games', 'trumps', 'guess', 'quiz', 'order', 'drag'];
 function switchScreen(screenId) {
