@@ -155,6 +155,11 @@ SCREEN_ENTER.build = () => {
         });
 };
 SCREEN_LEAVE.push(id => { if (builder && id !== 'build') builder.leave(); });
+// Racing is a separate module too, loaded the first time Race opens
+let racer = null;
+SCREEN_ENTER.race = () => import('./race.js').then(m => { racer = m; if (currentScreen === 'race') m.enter(); })
+    .catch(err => { document.getElementById('race-menu').innerHTML = `<div class="panel"><h2>Racing could not start</h2><p>Check you're online the first time you open it, then reload.</p><p class="small">${escapeHtml(String(err && err.message || err))}</p></div>`; });
+SCREEN_LEAVE.push(id => { if (racer && id !== 'race') racer.leave(); });
 const GAME_SCREENS = ['games', 'trumps', 'guess', 'quiz', 'order', 'drag'];
 function switchScreen(screenId) {
     const navId = GAME_SCREENS.includes(screenId) ? 'games' : screenId;

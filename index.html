@@ -28,7 +28,7 @@
             <button class="nav-btn" data-screen="motorsport">Motorsport</button>
             <button class="nav-btn" data-screen="games">Games</button>
             <button class="nav-btn" data-screen="build">Build</button>
-            <button class="nav-btn soon" data-screen="race">Race</button>
+            <button class="nav-btn" data-screen="race">Race</button>
         </nav>
         <button class="units-btn" id="units-btn" title="Switch between mph and km/h">MPH</button>
     </header>
@@ -210,7 +210,29 @@
             </div>
             <p class="small build-note">Drag to spin the car, pinch or scroll to zoom. Your design is saved on this device. This is an early version for testing: more parts, liveries, saving several cars and share codes are coming.</p>
         </section>
-        <section id="screen-race" class="screen"><div class="soon-panel" data-soon="race"></div></section>
+        <!-- RACE -->
+        <section id="screen-race" class="screen">
+            <div class="screen-head">
+                <h1><span class="kicker">Race · first track</span>Race your own car</h1>
+                <p class="subtitle">You drive the car you designed in Build. Arcade style: brake before the corners, and keep off the grass!</p>
+            </div>
+            <div id="race-menu"><div class="build-loading" style="position:static;padding:40px">Warming up the tyres…</div></div>
+            <div class="race-stage" id="race-stage" hidden>
+                <div class="race-canvas-wrap" id="race-canvas-wrap">
+                    <div class="race-hud" id="race-hud"></div>
+                    <canvas class="race-map" id="race-map" width="180" height="180"></canvas>
+                    <div class="race-flash" id="race-flash"></div>
+                    <div class="race-top">
+                        <button class="opt" data-race="pause">❚❚ Pause</button><button class="opt" id="race-cam">🎥 Camera</button>
+                        <button class="opt" id="race-tilt">📱 Tilt</button><button class="opt" id="race-sound">🔊 Sound</button>
+                    </div>
+                    <div class="pad pad-left"><button class="pad-btn" data-pad="left" aria-label="Steer left">◀</button><button class="pad-btn" data-pad="right" aria-label="Steer right">▶</button></div>
+                    <div class="pad pad-right"><button class="pad-btn brake" data-pad="brake" aria-label="Brake">BRAKE</button><button class="pad-btn gas" data-pad="gas" aria-label="Accelerate">GO</button></div>
+                    <div class="race-panel" id="race-pause-panel" hidden><div class="rr-box"><h2>Paused</h2><div class="rr-actions"><button class="big-btn" data-race="resume">Keep racing</button><button class="act-btn ghost" data-race="menu">Quit to menu</button></div></div></div>
+                    <div class="race-panel" id="race-result" hidden></div>
+                </div>
+            </div>
+        </section>
 
         <!-- CREDITS -->
         <section id="screen-credits" class="screen">

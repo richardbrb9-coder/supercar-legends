@@ -1,0 +1,651 @@
+// Supercar Legends: racing (first version, one track). Loaded only when the Race screen first opens.
+// Arcade driving, not a simulator. Your car is the one you designed in the Build screen.
+import * as THREE from './lib/three.module.min.js';
+import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT } from './carmodel.js';
+
+// =====================================================================
+//  THE TRACK (a closed spline; everything else is built along it)
+// =====================================================================
+const TRACK = {
+    id: 'coast', name: 'Coastline Circuit', laps: 3, width: 14,
+    points: [[0, 0], [260, 0], [410, 18], [470, 90], [452, 172], [372, 204], [312, 262], [330, 340], [270, 404], [158, 388],
+             [96, 306], [26, 326], [-58, 384], [-152, 344], [-176, 244], [-116, 172], [-156, 92], [-112, 18]]
+};
+const N = 1400;                       // samples along the track
+const HW = TRACK.width / 2, RUNOFF = 7;   // half-width of the road; grass before the barriers
+let samples = null, trackLen = 0;
+function buildSamples() {
+    const curve = new THREE.CatmullRomCurve3(TRACK.points.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'centripetal');
+    const pts = curve.getSpacedPoints(N);
+    pts.pop();
+    trackLen = curve.getLength();
+    samples = pts.map((p, i) => {
+        const nx = pts[(i + 1) % N], pv = pts[(i - 1 + N) % N];
+        const t = new THREE.Vector3().subVectors(nx, pv).normalize();
+        return { p, t, n: new THREE.Vector3(t.z, 0, -t.x), heading: Math.atan2(-t.z, t.x), d: i * trackLen / N };
+    });
+    // signed curvature (left turns positive) and the speed a car can take each point at
+    samples.forEach((s, i) => {
+        const a = samples[(i - 6 + N) % N].heading, b = samples[(i + 6) % N].heading;
+        let dh = b - a; while (dh > Math.PI) dh -= Math.PI * 2; while (dh < -Math.PI) dh += Math.PI * 2;
+        s.k = dh / (12 * trackLen / N);
+    });
+    // smooth the curvature so the AI's racing line is gentle
+    const k2 = samples.map((s, i) => { let sum = 0; for (let j = -10; j <= 10; j++) sum += samples[(i + j + N) % N].k; return sum / 21; });
+    samples.forEach((s, i) => { s.ks = k2[i]; s.line = Math.sign(k2[i]) * Math.min(HW * 0.6, Math.abs(k2[i]) * 900); });
+}
+const sampleAt = d => samples[((Math.floor(d / trackLen * N) % N) + N) % N];
+
+// A canvas texture: asphalt with a little grain
+function asphaltTexture() {
+    const c = document.createElement('canvas'); c.width = c.height = 256;
+    const x = c.getContext('2d');
+    x.fillStyle = '#34373d'; x.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 2600; i++) { const g = 40 + Math.random() * 40; x.fillStyle = `rgba(${g},${g},${g + 4},.5)`; x.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); }
+    // edge lines
+    x.fillStyle = '#E8E8E8'; x.fillRect(0, 0, 8, 256); x.fillRect(248, 0, 8, 256);
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    return t;
+}
+function ribbon(offA, offB, yA, yB, mat, vScale = 0.1, colorFn = null) {
+    const pos = [], uv = [], col = [], idx = [];
+    for (let i = 0; i <= N; i++) {
+        const s = samples[i % N], d = i * trackLen / N;
+        const a = s.p.clone().addScaledVector(s.n, offA), b = s.p.clone().addScaledVector(s.n, offB);
+        pos.push(a.x, yA, a.z, b.x, yB, b.z);
+        uv.push(0, d * vScale, 1, d * vScale);
+        if (colorFn) { const c = colorFn(i % N); col.push(...c, ...c); }
+        if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    if (colorFn) g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    g.setIndex(idx); g.computeVertexNormals();
+    return new THREE.Mesh(g, mat);
+}
+function buildTrack(scene) {
+    const group = new THREE.Group();
+    // grass
+    const grass = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), new THREE.MeshStandardMaterial({ color: 0x3d7a3a, roughness: 1 }));
+    grass.rotation.x = -Math.PI / 2; grass.position.set(150, -0.02, 200); group.add(grass);
+    // road (the texture's v runs along the track)
+    const tex = asphaltTexture(); tex.repeat.set(1, 1);
+    const road = ribbon(HW, -HW, 0.02, 0.02, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }), 1 / 16);
+    group.add(road);
+    // kerbs on the corners: red and white blocks
+    const kerbMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
+    const kerbCol = i => Math.abs(samples[i].ks) < 0.004 ? [0.047, 0.196, 0.043] : (Math.floor(i / 6) % 2 ? [0.92, 0.92, 0.92] : [0.86, 0.04, 0.02]);
+    group.add(ribbon(HW + 1.3, HW, 0.03, 0.05, kerbMat, 0.1, kerbCol));
+    group.add(ribbon(-HW, -HW - 1.3, 0.05, 0.03, kerbMat, 0.1, kerbCol));
+    // barriers (both sides), white with a blue stripe made with vertex colours
+    const barMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide });
+    for (const off of [HW + RUNOFF, -HW - RUNOFF]) {
+        const pos = [], col = [], idx = [];
+        for (let i = 0; i <= N; i++) {
+            const s = samples[i % N], p = s.p.clone().addScaledVector(s.n, off);
+            const c = Math.floor(i / 10) % 2 ? [0.95, 0.95, 0.95] : [0.12, 0.35, 0.85];
+            pos.push(p.x, 0, p.z, p.x, 1.0, p.z); col.push(...c, ...c);
+            if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+        g.setIndex(idx); g.computeVertexNormals(); group.add(new THREE.Mesh(g, barMat));
+    }
+    // start/finish line: chequered strip
+    const cc = document.createElement('canvas'); cc.width = 64; cc.height = 8; const cx = cc.getContext('2d');
+    for (let i = 0; i < 16; i++) for (let j = 0; j < 2; j++) { cx.fillStyle = (i + j) % 2 ? '#111' : '#fff'; cx.fillRect(i * 4, j * 4, 4, 4); }
+    const ct = new THREE.CanvasTexture(cc); ct.magFilter = THREE.NearestFilter;
+    const s0 = samples[0];
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(TRACK.width, 2), new THREE.MeshBasicMaterial({ map: ct }));
+    line.rotation.x = -Math.PI / 2; line.rotation.z = s0.heading + Math.PI / 2; line.position.set(s0.p.x, 0.04, s0.p.z); group.add(line);
+    // start gantry with five lights
+    const gantry = new THREE.Group(), steel = new THREE.MeshStandardMaterial({ color: 0x2a2f39, metalness: 0.6, roughness: 0.4 });
+    for (const side of [1, -1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.6, 7, 0.6), steel); post.position.set(0, 3.5, side * (HW + 1.5)); gantry.add(post); }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(1, 1.4, TRACK.width + 3.6), steel); beam.position.y = 7; gantry.add(beam);
+    const lightMats = [];
+    for (let i = 0; i < 5; i++) {
+        const m = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff1a10, emissiveIntensity: 0 }); lightMats.push(m);
+        const l = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 8), m); l.position.set(-0.55, 7, (i - 2) * 1.3); gantry.add(l);
+    }
+    gantry.position.set(s0.p.x, 0, s0.p.z); gantry.rotation.y = s0.heading; group.add(gantry);
+    // grandstands along the start straight
+    const standMat = new THREE.MeshStandardMaterial({ color: 0x1E3A8A, roughness: 0.8 }), roofMat = new THREE.MeshStandardMaterial({ color: 0xE10600, roughness: 0.6 });
+    for (const [d, side] of [[60, -1], [140, -1], [100, 1]]) {
+        const s = sampleAt(d), st = new THREE.Group();
+        for (let r = 0; r < 5; r++) { const step = new THREE.Mesh(new THREE.BoxGeometry(60, 1.2, 2.4), standMat); step.position.set(0, 0.6 + r * 1.2, -side * r * 2.4); st.add(step); }
+        const roof = new THREE.Mesh(new THREE.BoxGeometry(62, 0.4, 14), roofMat); roof.position.set(0, 9, -side * 5); st.add(roof);
+        st.position.copy(s.p).addScaledVector(s.n, side * (HW + RUNOFF + 9)); st.rotation.y = s.heading; group.add(st);
+    }
+    // trees: two instanced meshes, kept away from the track
+    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.5, 3, 6), new THREE.MeshStandardMaterial({ color: 0x5b3a1e }), 320);
+    const tops = new THREE.InstancedMesh(new THREE.ConeGeometry(2.6, 7, 7), new THREE.MeshStandardMaterial({ color: 0x24592b, flatShading: true }), 320);
+    const m4 = new THREE.Matrix4(); let placed = 0, tries = 0;
+    while (placed < 320 && tries < 6000) {
+        tries++;
+        const x = -300 + Math.random() * 900, z = -150 + Math.random() * 700;
+        let near = Infinity; for (let i = 0; i < N; i += 7) near = Math.min(near, (samples[i].p.x - x) ** 2 + (samples[i].p.z - z) ** 2);
+        if (near < (HW + RUNOFF + 8) ** 2) continue;
+        const sc = 0.7 + Math.random() * 0.8;
+        m4.makeScale(sc, sc, sc).setPosition(x, 1.5 * sc, z); trunks.setMatrixAt(placed, m4);
+        m4.makeScale(sc, sc, sc).setPosition(x, 6 * sc, z); tops.setMatrixAt(placed, m4);
+        placed++;
+    }
+    trunks.count = tops.count = placed; group.add(trunks, tops);
+    scene.add(group);
+    return { lightMats };
+}
+
+// =====================================================================
+//  CARS
+// =====================================================================
+const G = 9.81;
+function perf(stats, factor = 1) {
+    const vmax = stats.mph * 0.44704 * factor;
+    const a0 = 27.78 / stats.z62 / (1 - 0.5 * 27.78 / (stats.mph * 0.44704)) * factor;
+    return { vmax, a0, grip: G * (0.95 + stats.handling / 100 * 0.55) * factor, brake: 8 + stats.braking / 100 * 6 };
+}
+function blobShadow() {
+    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d');
+    const g = x.createRadialGradient(64, 64, 8, 64, 64, 64); g.addColorStop(0, 'rgba(0,0,0,.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(6, 3.2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.position.y = 0.06;
+    return m;
+}
+function makeRacer(design, factor, isPlayer) {
+    const model = createCar(design), stats = carStats(design);
+    const holder = new THREE.Group(); holder.add(model.group, blobShadow());
+    return { design, model, holder, stats, perf: perf(stats, factor), isPlayer, x: 0, z: 0, heading: 0, v: 0, steer: 0, d: 0, idx: 0, lap: 0,
+             lapStart: 0, lastLat: 0, finished: null, best: null, half: false, wheelSpin: 0, lineOffset: 0 };
+}
+// Rival cars are designed in code from the builder presets, so they're original designs too
+function rivalDesign(i) {
+    const keys = Object.keys(PRESETS), preset = keys[(i * 2 + 1 + Math.floor(Math.random() * 2)) % keys.length];
+    const paint = PAINTS.filter(c => c !== loadDesign().paint)[(i * 3 + Math.floor(Math.random() * 3)) % 10];
+    const engines = Object.keys(ENGINES), rims = Object.keys(RIMS);
+    return { ...DEFAULT, ...PRESETS[preset], preset, paint, finish: ['gloss', 'metallic', 'pearl'][i % 3], engine: engines[(i + 1) % engines.length],
+             rim: rims[(i * 2) % rims.length], rimColour: ['silver', 'black', 'gold'][i % 3], wing: ['gt', 'ducktail', 'swan'][i % 3] };
+}
+
+// =====================================================================
+//  STATE
+// =====================================================================
+let renderer, scene, camera, raf = null, started = false, lastT = 0;
+let world = null, player = null, rivals = [], ghost = null, mode = 'race', difficulty = 'medium';
+let race = null;                                  // { phase: 'grid'|'lights'|'go'|'done', t, lightsT, results }
+const input = { left: false, right: false, gas: false, brake: false, tilt: 0 };
+let camMode = 0;
+const DIFF = { easy: 0.8, medium: 0.88, hard: 0.96 };
+const fmtTime = t => t == null ? '–' : `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
+function store(key, fallback) { try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch (e) { return fallback; } }
+function storeSet(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
+
+function setupRace() {
+    // remove old cars
+    [player, ...rivals, ghost].forEach(r => { if (r) { scene.remove(r.holder); r.model.dispose(); } });
+    rivals = []; ghost = null;
+    player = makeRacer(loadDesign(), 1, true);
+    scene.add(player.holder);
+    // grid: two staggered columns behind the start line; you start at the back in a race
+    const slots = [[-12, 3.5], [-20, -3.5], [-28, 3.5], [-36, -3.5]];
+    const place = (r, [back, side]) => {
+        const s = sampleAt(trackLen + back);
+        r.x = s.p.x + s.n.x * side; r.z = s.p.z + s.n.z * side; r.heading = s.heading; r.d = back; r.lap = -1; r.half = true;
+        r.idx = ((Math.floor(((back % trackLen) + trackLen) / trackLen * N) % N) + N) % N; r.v = 0;
+    };
+    if (mode === 'race') {
+        for (let i = 0; i < 3; i++) {
+            const r = makeRacer(rivalDesign(i), DIFF[difficulty] * (1 - i * 0.02), false);
+            r.lineOffset = (i - 1) * 1.6;
+            rivals.push(r); scene.add(r.holder); place(r, slots[i]);
+        }
+        place(player, slots[3]);
+    } else {
+        place(player, [-12, 0]);
+        const g = store('ghost_' + TRACK.id, null);
+        if (g && g.frames && g.frames.length) {
+            ghost = makeRacer(g.design || loadDesign(), 1, false);
+            ghost.frames = g.frames; ghost.time = g.time;
+            ghost.model.group.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.35; o.material.depthWrite = false; } });
+            ghost.holder.visible = false; scene.add(ghost.holder);
+        }
+    }
+    race = { phase: 'lights', t: 0, lightsT: 0, raceTime: 0, results: null, recording: [], lapTimes: [] };
+    updateCars(0); placeCamera(true);
+    hud();
+}
+
+// =====================================================================
+//  DRIVING
+// =====================================================================
+function nearestIndex(r) {
+    let best = r.idx, bd = Infinity;
+    for (let j = -40; j <= 40; j++) {
+        const i = (r.idx + j + N) % N, s = samples[i], dx = r.x - s.p.x, dz = r.z - s.p.z, dd = dx * dx + dz * dz;
+        if (dd < bd) { bd = dd; best = i; }
+    }
+    return best;
+}
+function lapCrossing(r, prevIdx) {
+    if (prevIdx > N * 0.4 && prevIdx < N * 0.6) r.half = true;
+    if (prevIdx > N * 0.9 && r.idx < N * 0.1) {
+        if (r.half) {
+            r.lap++; r.half = false;
+            const now = race.raceTime, lapTime = r.lap >= 1 ? now - r.lapStart : null;
+            if (lapTime != null && (r.best == null || lapTime < r.best)) r.best = lapTime;
+            if (r.isPlayer) onPlayerLap(lapTime);
+            r.lapStart = now;
+            if (mode === 'race' && r.lap >= TRACK.laps && r.finished == null) { r.finished = now; if (r.isPlayer) finishRace(); }
+        }
+    }
+    if (prevIdx < N * 0.1 && r.idx > N * 0.9) r.half = false;   // reversing over the line doesn't count
+}
+function drivePlayer(dt) {
+    const r = player, P = r.perf, go = race.phase === 'go' || race.phase === 'done';
+    // steering: keys/buttons or tilt
+    let steerIn = (input.left ? 1 : 0) - (input.right ? 1 : 0);
+    if (Math.abs(input.tilt) > 0.05) steerIn = Math.max(-1, Math.min(1, input.tilt));
+    let gas = input.gas, brake = input.brake;
+    if (window.__autopilot) {                 // test driver: follow the racing line like a rival
+        const here = samples[r.idx].d, tgt = sampleAt(here + 14 + r.v * 0.3), off = tgt.line * 0.9;
+        const tx = tgt.p.x + tgt.n.x * off, tz = tgt.p.z + tgt.n.z * off;
+        let want = Math.atan2(-(tz - r.z), tx - r.x) - r.heading; while (want > Math.PI) want -= Math.PI * 2; while (want < -Math.PI) want += Math.PI * 2;
+        steerIn = Math.max(-1, Math.min(1, want * 3));
+        let target = P.vmax;
+        for (let ahead = 0; ahead <= 160; ahead += 8) { const k = Math.abs(sampleAt(here + ahead).ks); const vc = k > 1e-4 ? Math.sqrt(P.grip * 0.85 / k) : P.vmax; target = Math.min(target, Math.sqrt(vc * vc + 2 * P.brake * 0.7 * ahead)); }
+        gas = r.v < target; brake = r.v > target + 2;
+    }
+    const maxSteer = 0.55 / (1 + r.v / 22);
+    r.steer += (steerIn * maxSteer - r.steer) * Math.min(1, dt * 8);
+    // grass slows you down
+    const s = samples[r.idx], lat = (r.x - s.p.x) * s.n.x + (r.z - s.p.z) * s.n.z;
+    const onGrass = Math.abs(lat) > HW + 1.3;
+    const vmax = onGrass ? Math.min(P.vmax, 22) : P.vmax;
+    let a = 0;
+    if (go && gas) a += P.a0 * Math.max(0.12, 1 - r.v / vmax);
+    if (brake) a -= r.v > 0.5 ? P.brake : 3;           // brake, then gently reverse
+    a -= 0.25 + r.v * r.v * 0.0004 + (onGrass ? r.v * 0.12 : 0);  // rolling and air drag
+    if (!gas && !brake && Math.abs(r.v) < 0.3) r.v = 0;
+    r.v = go ? Math.max(-6, r.v + a * dt) : 0;
+    if (r.v > vmax && onGrass) r.v -= (r.v - vmax) * Math.min(1, dt * 2);
+    // turning, limited by grip: too fast into a corner and the car slides wide
+    const wb = r.design.L * 0.6;
+    let yawRate = r.v * Math.tan(r.steer) / wb;
+    const latAcc = Math.abs(yawRate * r.v), grip = P.grip * (onGrass ? 0.55 : 1);
+    if (latAcc > grip) { yawRate *= grip / latAcc; r.v -= (latAcc - grip) * 0.08 * dt * Math.sign(r.v); r.sliding = true; } else r.sliding = false;
+    r.heading += yawRate * dt;
+    r.x += Math.cos(r.heading) * r.v * dt; r.z -= Math.sin(r.heading) * r.v * dt;
+    // barriers
+    const prevIdx = r.idx; r.idx = nearestIndex(r);
+    const s2 = samples[r.idx], lat2 = (r.x - s2.p.x) * s2.n.x + (r.z - s2.p.z) * s2.n.z, wall = HW + RUNOFF - 1.1;
+    if (Math.abs(lat2) > wall) {
+        const push = Math.abs(lat2) - wall;
+        r.x -= s2.n.x * push * Math.sign(lat2); r.z -= s2.n.z * push * Math.sign(lat2);
+        let rel = r.heading - s2.heading; while (rel > Math.PI) rel -= Math.PI * 2; while (rel < -Math.PI) rel += Math.PI * 2;
+        if (Math.abs(rel) < Math.PI / 2) r.heading -= rel * 0.6; else r.heading -= (rel - Math.sign(rel) * Math.PI) * 0.6;
+        if (r.v > 8) bump(0.35);
+        r.v *= 0.82;
+    }
+    r.lastLat = lat2;
+    if (go) lapCrossing(r, prevIdx);
+}
+function driveRival(r, dt) {
+    const go = race.phase === 'go' || race.phase === 'done';
+    const P = r.perf;
+    // look ahead and slow down in time for the next corner
+    let target = P.vmax;
+    for (let ahead = 0; ahead <= 160; ahead += 8) {
+        const s = sampleAt(r.d + ahead), k = Math.abs(s.ks);
+        const vc = k > 1e-4 ? Math.sqrt(P.grip * 0.92 / k) : P.vmax;
+        target = Math.min(target, Math.sqrt(vc * vc + 2 * P.brake * 0.8 * ahead));
+    }
+    let a = 0;
+    if (go) a = r.v < target ? P.a0 * Math.max(0.12, 1 - r.v / P.vmax) : -P.brake * Math.min(1, (r.v - target) / 3);
+    a -= 0.25;
+    r.v = Math.max(0, r.v + a * dt);
+    r.d += r.v * dt;
+    const s = sampleAt(r.d), offset = s.line * 0.9 + r.lineOffset;
+    r.x = s.p.x + s.n.x * offset; r.z = s.p.z + s.n.z * offset;
+    let dh = s.heading - r.heading; while (dh > Math.PI) dh -= Math.PI * 2; while (dh < -Math.PI) dh += Math.PI * 2;
+    r.heading += dh * Math.min(1, dt * 6);
+    r.steer = Math.max(-0.4, Math.min(0.4, dh * 3));
+    const prevIdx = r.idx; r.idx = ((Math.floor(r.d / trackLen * N) % N) + N) % N;
+    if (go) lapCrossing(r, prevIdx);
+}
+// keep cars from driving through each other
+function collisions() {
+    const all = [player, ...rivals];
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
+        const a = all[i], b = all[j], dx = b.x - a.x, dz = b.z - a.z, dist = Math.hypot(dx, dz), min = 2.6;
+        if (dist < min && dist > 0.01) {
+            const push = (min - dist) / 2, nx = dx / dist, nz = dz / dist;
+            if (a.isPlayer) { a.x -= nx * push * 2; a.z -= nz * push * 2; a.v *= 0.97; if (Math.abs(a.v - b.v) > 4) bump(0.2); }
+            else if (b.isPlayer) { b.x += nx * push * 2; b.z += nz * push * 2; b.v *= 0.97; }
+            else { a.v *= 0.995; }
+        }
+    }
+}
+function progressOf(r) { return r.lap * trackLen + samples[r.idx].d; }
+function positionOf(r) {
+    if (mode !== 'race') return 1;
+    const all = [player, ...rivals].sort((a, b) => (a.finished ?? Infinity) - (b.finished ?? Infinity) || progressOf(b) - progressOf(a));
+    return all.indexOf(r) + 1;
+}
+function updateCars(dt) {
+    for (const r of [player, ...rivals]) {
+        r.holder.position.set(r.x, 0, r.z);
+        r.holder.rotation.y = r.heading;
+        r.wheelSpin += r.v * dt / r.design.wheel;
+        for (const w of r.model.wheels) {
+            const { front, side } = w.userData;
+            w.rotation.z = side > 0 ? -r.wheelSpin : r.wheelSpin;
+            w.rotation.y = (side < 0 ? Math.PI : 0) + (front ? r.steer : 0);
+        }
+    }
+}
+
+// =====================================================================
+//  LAPS, GHOST AND RESULTS
+// =====================================================================
+function onPlayerLap(lapTime) {
+    // lapTime is null when crossing the line for the first time, which starts lap 1
+    if (lapTime == null) { if (mode === 'trial') { race.recording = []; setupGhostFromStore(); } return; }
+    race.lapTimes.push(lapTime);
+    const key = 'raceBest_' + TRACK.id, best = store(key, null);
+    let msg = `Lap ${fmtTime(lapTime)}`;
+    if (best == null || lapTime < best) { storeSet(key, lapTime); msg += ' · New best lap!'; window.playSound && window.playSound('win'); }
+    if (mode === 'trial') {
+        const g = store('ghost_' + TRACK.id, null);
+        if (!g || lapTime < g.time) storeSet('ghost_' + TRACK.id, { time: lapTime, frames: race.recording, design: player.design });
+        race.recording = [];
+        // replay the best ghost from the start of the next lap
+        setupGhostFromStore();
+    }
+    flash(msg);
+}
+function setupGhostFromStore() {
+    const g = store('ghost_' + TRACK.id, null); if (!g) return;
+    if (!ghost) {
+        ghost = makeRacer(g.design || loadDesign(), 1, false);
+        ghost.model.group.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.35; o.material.depthWrite = false; } });
+        scene.add(ghost.holder);
+    }
+    ghost.frames = g.frames; ghost.time = g.time; ghost.lapT0 = race.raceTime;
+}
+function updateGhost() {
+    if (!ghost || !ghost.frames) return;
+    if (ghost.lapT0 == null) { ghost.holder.visible = false; return; }
+    const t = race.raceTime - ghost.lapT0, i = Math.floor(t / 0.05);
+    if (i >= ghost.frames.length) { ghost.holder.visible = false; return; }
+    const [x, z, h] = ghost.frames[i];
+    ghost.holder.visible = true; ghost.holder.position.set(x, 0, z); ghost.holder.rotation.y = h;
+}
+function finishRace() {
+    race.phase = 'done';
+    clearTimeout(flashTimer); document.getElementById('race-flash').classList.remove('show');
+    const pos = positionOf(player);
+    const medal = ['🥇 Gold', '🥈 Silver', '🥉 Bronze'][pos - 1] || 'No medal this time';
+    const medals = store('raceMedals', {}); const prev = medals[TRACK.id + '_' + difficulty];
+    if (pos <= 3 && (!prev || pos < prev)) { medals[TRACK.id + '_' + difficulty] = pos; storeSet('raceMedals', medals); }
+    window.playSound && window.playSound(pos === 1 ? 'win' : 'lose');
+    const el = document.getElementById('race-result');
+    el.innerHTML = `<div class="rr-box"><span class="kicker">${TRACK.name} · ${difficulty}</span>
+        <h2>${pos === 1 ? 'You win!' : `You finished ${['1st', '2nd', '3rd', '4th'][pos - 1]}`}</h2>
+        <p class="rr-medal">${medal}</p>
+        <p>Race time <b>${fmtTime(player.finished)}</b> · Best lap <b>${fmtTime(player.best)}</b></p>
+        <div class="rr-actions"><button class="big-btn" data-race="again">Race again</button><button class="act-btn ghost" data-race="menu">Menu</button></div></div>`;
+    el.hidden = false;
+}
+
+// =====================================================================
+//  CAMERA, HUD, MINIMAP, SOUND
+// =====================================================================
+const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
+function placeCamera(snap = false, dt = 0.016) {
+    const r = player, fx = Math.cos(r.heading), fz = -Math.sin(r.heading);
+    const [back, up, ahead] = camMode === 0 ? [8.5, 3.4, 6] : [5.2, 2.0, 8];
+    const want = new THREE.Vector3(r.x - fx * back, up, r.z - fz * back);
+    const look = new THREE.Vector3(r.x + fx * ahead, 0.9, r.z + fz * ahead);
+    if (snap) { camPos.copy(want); camLook.copy(look); }
+    else { const k = Math.min(1, dt * 6); camPos.lerp(want, k); camLook.lerp(look, Math.min(1, dt * 10)); }
+    camera.position.copy(camPos); camera.lookAt(camLook);
+    camera.fov = 60 + Math.min(14, Math.max(0, r.v - 30) * 0.25); camera.updateProjectionMatrix();
+}
+let mapCtx = null, mapScale = 1, mapOff = [0, 0];
+function drawMapBase() {
+    const c = document.getElementById('race-map'); mapCtx = c.getContext('2d');
+    const xs = samples.map(s => s.p.x), zs = samples.map(s => s.p.z);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
+    mapScale = Math.min((c.width - 20) / (maxX - minX), (c.height - 20) / (maxZ - minZ));
+    mapOff = [10 - minX * mapScale + (c.width - 20 - (maxX - minX) * mapScale) / 2, 10 - minZ * mapScale + (c.height - 20 - (maxZ - minZ) * mapScale) / 2];
+}
+function drawMap() {
+    const c = mapCtx.canvas, x = mapCtx;
+    x.clearRect(0, 0, c.width, c.height);
+    x.lineWidth = 6; x.strokeStyle = 'rgba(255,255,255,.85)'; x.lineJoin = 'round'; x.beginPath();
+    samples.forEach((s, i) => { const px = s.p.x * mapScale + mapOff[0], pz = s.p.z * mapScale + mapOff[1]; i ? x.lineTo(px, pz) : x.moveTo(px, pz); });
+    x.closePath(); x.stroke();
+    const dot = (r, col, size) => { x.fillStyle = col; x.beginPath(); x.arc(r.x * mapScale + mapOff[0], r.z * mapScale + mapOff[1], size, 0, Math.PI * 2); x.fill(); };
+    rivals.forEach(r => dot(r, r.design.paint, 5));
+    if (ghost && ghost.holder.visible) dot({ x: ghost.holder.position.x, z: ghost.holder.position.z }, 'rgba(0,229,255,.8)', 5);
+    dot(player, '#fff', 7); dot(player, '#E10600', 5);
+}
+let lastHud = '';
+function hud() {
+    const units = window.getUnits ? window.getUnits() : 'mph';
+    const spd = Math.abs(player.v) * (units === 'mph' ? 2.23694 : 3.6);
+    const lapShown = Math.max(1, Math.min(TRACK.laps, player.lap + 1));
+    const left = mode === 'race'
+        ? `<div class="hud-pos"><b>P${positionOf(player)}</b><span>/${rivals.length + 1}</span></div><div class="hud-lap">LAP ${lapShown}/${TRACK.laps}</div>`
+        : `<div class="hud-pos"><b>TIME</b></div><div class="hud-lap">TRIAL · LAP ${Math.max(1, player.lap + 1)}</div>`;
+    const lapNow = race.phase === 'go' && player.lap >= 0 ? race.raceTime - player.lapStart : 0;
+    const right = `<div class="hud-time">${fmtTime(lapNow)}</div><div class="hud-best">Best ${fmtTime(store('raceBest_' + TRACK.id, null))}</div>`;
+    const html = `<div class="hud-left">${left}</div><div class="hud-right">${right}</div><div class="hud-speed"><b>${Math.round(spd)}</b><span>${units === 'mph' ? 'MPH' : 'KM/H'}</span></div>`;
+    if (html !== lastHud) { document.getElementById('race-hud').innerHTML = html; lastHud = html; }
+}
+let flashTimer = null;
+function flash(text, ms = 1800) {
+    const el = document.getElementById('race-flash'); el.textContent = text; el.classList.add('show');
+    clearTimeout(flashTimer); flashTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+let lastBump = 0;
+function bump(vol) {
+    const now = performance.now(); if (now - lastBump < 300) return; lastBump = now;
+    const ctx = window.getAudio && window.getAudio(); if (!ctx || !soundOn) return;
+    const len = Math.floor(ctx.sampleRate * 0.25), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.value = vol * 0.5;
+    src.connect(g); g.connect(ctx.destination); src.start();
+}
+// engine: two oscillators whose pitch follows the speed through six imaginary gears
+let engine = null, soundOn = store('raceSound', true);
+function startEngine() {
+    const ctx = window.getAudio && window.getAudio(); if (!ctx || engine || !soundOn) return;
+    const ev = player.stats.engine.sound === 0;
+    const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    o1.type = ev ? 'sine' : 'sawtooth'; o2.type = ev ? 'triangle' : 'square';
+    f.type = 'lowpass'; f.frequency.value = ev ? 3000 : 900; g.gain.value = 0.0;
+    o1.connect(f); o2.connect(f); f.connect(g); g.connect(ctx.destination); o1.start(); o2.start();
+    engine = { ctx, o1, o2, g, ev };
+}
+function updateEngine() {
+    if (!engine) return;
+    const v = Math.abs(player.v), vmax = player.perf.vmax;
+    let f;
+    if (engine.ev) f = 200 + v / vmax * 1600;
+    else { const gearW = vmax / 6, inGear = (v % gearW) / gearW, gear = Math.min(5, Math.floor(v / gearW)); f = (player.stats.engine.sound || 90) * (0.55 + inGear * 1.1 + gear * 0.05); }
+    const t = engine.ctx.currentTime;
+    engine.o1.frequency.setTargetAtTime(f, t, 0.05); engine.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
+    engine.g.gain.setTargetAtTime(input.gas ? 0.07 : 0.035, t, 0.1);
+}
+function stopEngine() {
+    if (!engine) return;
+    try { engine.g.gain.setTargetAtTime(0, engine.ctx.currentTime, 0.05); engine.o1.stop(engine.ctx.currentTime + 0.3); engine.o2.stop(engine.ctx.currentTime + 0.3); } catch (e) { /* already stopped */ }
+    engine = null;
+}
+
+// =====================================================================
+//  MAIN LOOP
+// =====================================================================
+function frame(now) {
+    raf = requestAnimationFrame(frame);
+    const dt = Math.min(0.05, (now - lastT) / 1000 || 0); lastT = now;
+    if (!race || race.paused) { renderer.render(scene, camera); return; }
+    race.t += dt;
+    if (race.phase === 'lights') {
+        const lit = Math.min(5, Math.floor(race.t / 0.8));
+        world.lightMats.forEach((m, i) => { m.emissiveIntensity = i < lit ? 4 : 0; });
+        if (race.t > 4.0 + (race.goDelay ??= 0.3 + Math.random() * 0.8)) {
+            race.phase = 'go'; world.lightMats.forEach(m => { m.emissiveIntensity = 0; }); flash('GO!', 900);
+            player.lapStart = race.raceTime; rivals.forEach(r => { r.lapStart = race.raceTime; });
+        }
+    }
+    if (race.phase === 'go' || race.phase === 'done') race.raceTime += dt;
+    // fixed small steps keep the driving stable
+    const steps = Math.ceil(dt / 0.01), h = dt / steps;
+    for (let i = 0; i < steps; i++) { drivePlayer(h); rivals.forEach(r => driveRival(r, h)); collisions(); }
+    if (mode === 'trial' && race.phase === 'go') {
+        race.recT = (race.recT || 0) + dt;
+        while (race.recT >= 0.05) { race.recording.push([+player.x.toFixed(2), +player.z.toFixed(2), +player.heading.toFixed(3)]); race.recT -= 0.05; }
+        updateGhost();
+    }
+    updateCars(dt); placeCamera(false, dt); updateEngine();
+    hud(); drawMap();
+    renderer.render(scene, camera);
+}
+
+// =====================================================================
+//  CONTROLS (touch buttons with pointer events, keyboard, optional tilt)
+// =====================================================================
+function bindControls() {
+    document.querySelectorAll('[data-pad]').forEach(btn => {
+        const key = btn.dataset.pad;
+        const on = e => { e.preventDefault(); btn.setPointerCapture && btn.setPointerCapture(e.pointerId); input[key] = true; btn.classList.add('down'); getAudioStart(); };
+        const off = e => { e.preventDefault(); input[key] = false; btn.classList.remove('down'); };
+        btn.addEventListener('pointerdown', on); btn.addEventListener('pointerup', off); btn.addEventListener('pointercancel', off); btn.addEventListener('lostpointercapture', off);
+        btn.addEventListener('contextmenu', e => e.preventDefault());
+    });
+    const keys = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'gas', KeyW: 'gas', ArrowDown: 'brake', KeyS: 'brake', Space: 'brake' };
+    window.addEventListener('keydown', e => { if (!isRacing()) return; if (keys[e.code]) { input[keys[e.code]] = true; e.preventDefault(); getAudioStart(); } if (e.code === 'KeyC') camMode = 1 - camMode; if (e.code === 'Escape') togglePause(); });
+    window.addEventListener('keyup', e => { if (keys[e.code]) input[keys[e.code]] = false; });
+    window.addEventListener('blur', () => { Object.keys(input).forEach(k => { if (k !== 'tilt') input[k] = false; }); });
+}
+function getAudioStart() { if (!engine) startEngine(); }
+let tiltOn = false;
+function tiltHandler(e) { if (e.gamma == null) return; const landscape = Math.abs(window.orientation || 0) === 90 || innerWidth > innerHeight; const raw = landscape ? e.beta * (window.orientation === -90 ? -1 : 1) : e.gamma; input.tilt = -Math.max(-1, Math.min(1, raw / 25)); }
+async function toggleTilt() {
+    if (!tiltOn) {
+        try { if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) { const p = await DeviceOrientationEvent.requestPermission(); if (p !== 'granted') return; } } catch (e) { return; }
+        window.addEventListener('deviceorientation', tiltHandler); tiltOn = true; flash('Tilt steering on');
+    } else { window.removeEventListener('deviceorientation', tiltHandler); input.tilt = 0; tiltOn = false; flash('Tilt steering off'); }
+    document.getElementById('race-tilt').classList.toggle('active', tiltOn);
+}
+const isRacing = () => !document.getElementById('race-stage').hidden;
+function togglePause() {
+    if (!race || race.phase === 'done') return;
+    race.paused = !race.paused;
+    document.getElementById('race-pause-panel').hidden = !race.paused;
+    if (race.paused) stopEngine();
+}
+
+// =====================================================================
+//  MENU AND SCREEN
+// =====================================================================
+function renderMenu() {
+    const d = loadDesign(), s = carStats(d), units = window.getUnits ? window.getUnits() : 'mph';
+    const medals = store('raceMedals', {}), best = store('raceBest_' + TRACK.id, null);
+    const medalFor = k => ({ 1: '🥇', 2: '🥈', 3: '🥉' }[medals[TRACK.id + '_' + k]] || '');
+    document.getElementById('race-menu').innerHTML = `
+        <div class="race-menu-grid">
+            <div class="panel">
+                <span class="kicker">Your car</span><h2>${escapeHtml(d.name || 'My Supercar')}</h2>
+                <p class="small">${escapeHtml((PRESETS[d.preset] || {}).label || 'Custom')} · ${ENGINES[d.engine].label} · ${s.bhp} bhp · ${units === 'mph' ? s.mph + ' mph' : Math.round(s.mph * 1.609) + ' km/h'} · 0–62 in ${s.z62.toFixed(1)} s</p>
+                <button class="act-btn ghost" data-screen="build">Change it in Build</button>
+            </div>
+            <div class="panel">
+                <span class="kicker">Track</span><h2>${TRACK.name}</h2>
+                <p class="small">${(trackLen / 1000).toFixed(1)} km · ${TRACK.laps} laps · Best lap ${fmtTime(best)}</p>
+                <p class="b-label">Race against 3 rivals</p>
+                <div class="opts">${Object.keys(DIFF).map(k => `<button class="opt ${k === difficulty ? 'active' : ''}" data-diff="${k}">${k[0].toUpperCase() + k.slice(1)} ${medalFor(k)}</button>`).join('')}</div>
+                <div class="rr-actions"><button class="big-btn" data-race="start-race">Start race</button><button class="act-btn" data-race="start-trial">Time trial (with ghost)</button></div>
+            </div>
+        </div>
+        <div class="panel how"><h3>How to drive</h3><p><b>Tablet and phone:</b> hold the arrow buttons on the left to steer, and the pedals on the right to go and brake. You can also turn on tilt steering. <b>Laptop:</b> arrow keys or W A S D, C changes the camera, Esc pauses.</p></div>`;
+}
+function onMenuClick(e) {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.diff) { difficulty = b.dataset.diff; renderMenu(); return; }
+    if (b.dataset.race === 'start-race' || b.dataset.race === 'start-trial') { mode = b.dataset.race === 'start-race' ? 'race' : 'trial'; showStage(); }
+}
+function showStage() {
+    document.getElementById('race-menu').hidden = true;
+    document.getElementById('race-stage').hidden = false;
+    document.getElementById('race-result').hidden = true;
+    document.getElementById('race-pause-panel').hidden = true;
+    document.body.classList.add('racing');
+    resize(); setupRace(); startEngine();
+}
+function showMenu() {
+    stopEngine(); race = null;
+    document.getElementById('race-stage').hidden = true;
+    document.getElementById('race-menu').hidden = false;
+    document.body.classList.remove('racing');
+    renderMenu();
+}
+function resize() {
+    if (!renderer) return;
+    const el = document.getElementById('race-canvas-wrap'), w = el.clientWidth, h = el.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function init() {
+    const wrap = document.getElementById('race-canvas-wrap'), canvas = document.createElement('canvas');
+    try { renderer = new THREE.WebGLRenderer({ canvas, antialias: (window.devicePixelRatio || 1) < 2 }); } catch (e) { return false; }
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
+    wrap.prepend(canvas);
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x8ec5ee); scene.fog = new THREE.Fog(0x8ec5ee, 150, 650);
+    scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x3d5a2a, 1.3));
+    const sun = new THREE.DirectionalLight(0xfff2dd, 2.2); sun.position.set(100, 160, 60); scene.add(sun);
+    camera = new THREE.PerspectiveCamera(60, 1, 0.5, 900);
+    buildSamples();
+    world = buildTrack(scene);
+    drawMapBase();
+    bindControls();
+    new ResizeObserver(resize).observe(wrap);
+    return true;
+}
+export function enter() {
+    if (!started) {
+        started = true;
+        if (!init()) { document.getElementById('race-menu').innerHTML = `<div class="b-nogl" style="position:static"><h2>3D isn't available here</h2><p>This device or browser can't show 3D graphics, so racing can't open. Everything else in the app still works.</p></div>`; return; }
+        document.getElementById('race-menu').addEventListener('click', onMenuClick);
+        document.getElementById('race-stage').addEventListener('click', e => {
+            const b = e.target.closest('button'); if (!b) return;
+            if (b.dataset.race === 'again') showStage();
+            if (b.dataset.race === 'menu') showMenu();
+            if (b.dataset.race === 'pause') togglePause();
+            if (b.dataset.race === 'resume') togglePause();
+            if (b.id === 'race-tilt') toggleTilt();
+            if (b.id === 'race-cam') camMode = 1 - camMode;
+            if (b.id === 'race-sound') { soundOn = !soundOn; storeSet('raceSound', soundOn); b.classList.toggle('active', soundOn); soundOn ? startEngine() : stopEngine(); }
+        });
+        document.getElementById('race-sound').classList.toggle('active', soundOn);
+    }
+    if (!renderer) return;
+    if (document.getElementById('race-stage').hidden) renderMenu();
+    if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(frame); }
+}
+export function leave() {
+    if (raf) { cancelAnimationFrame(raf); raf = null; }
+    stopEngine();
+    if (race && race.phase !== 'done') showMenu();
+    document.body.classList.remove('racing');
+}
+// for testing: drive automatically along the racing line
+export function autopilot(on) { window.__autopilot = on; }
+export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), trackLen, ghost: !!(ghost && ghost.holder.visible) }; }
