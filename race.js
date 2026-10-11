@@ -175,7 +175,7 @@ let renderer, scene, camera, raf = null, started = false, lastT = 0;
 let world = null, player = null, rivals = [], ghost = null, mode = 'race', difficulty = 'medium';
 let race = null;                                  // { phase: 'grid'|'lights'|'go'|'done', t, lightsT, results }
 const input = { left: false, right: false, gas: false, brake: false, tilt: 0 };
-let camMode = 0;
+let camMode = 0, help = store('raceHelp', true);
 const DIFF = { easy: 0.8, medium: 0.88, hard: 0.96 };
 const fmtTime = t => t == null ? '–' : `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
 function store(key, fallback) { try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch (e) { return fallback; } }
@@ -247,6 +247,13 @@ function drivePlayer(dt) {
     let steerIn = (input.left ? 1 : 0) - (input.right ? 1 : 0);
     if (Math.abs(input.tilt) > 0.05) steerIn = Math.max(-1, Math.min(1, input.tilt));
     let gas = input.gas, brake = input.brake;
+    if (window.__kidbot) {                    // test driver: flat out, steers late with a slow reaction, never brakes
+        const tgt = sampleAt(samples[r.idx].d + 10);
+        let want = Math.atan2(-(tgt.p.z - r.z), tgt.p.x - r.x) - r.heading; while (want > Math.PI) want -= Math.PI * 2; while (want < -Math.PI) want += Math.PI * 2;
+        r.botSteer = r.botSteer ?? 0; r.botT = (r.botT ?? 0) + dt;
+        if (r.botT > 0.25) { r.botT = 0; r.botSteer = Math.abs(want) > 0.06 ? Math.sign(want) : 0; }
+        steerIn = r.botSteer; gas = true; brake = false;
+    }
     if (window.__autopilot) {                 // test driver: follow the racing line like a rival
         const here = samples[r.idx].d, tgt = sampleAt(here + 14 + r.v * 0.3), off = tgt.line * 0.9;
         const tx = tgt.p.x + tgt.n.x * off, tz = tgt.p.z + tgt.n.z * off;
@@ -256,23 +263,35 @@ function drivePlayer(dt) {
         for (let ahead = 0; ahead <= 160; ahead += 8) { const k = Math.abs(sampleAt(here + ahead).ks); const vc = k > 1e-4 ? Math.sqrt(P.grip * 0.85 / k) : P.vmax; target = Math.min(target, Math.sqrt(vc * vc + 2 * P.brake * 0.7 * ahead)); }
         gas = r.v < target; brake = r.v > target + 2;
     }
-    const maxSteer = 0.55 / (1 + r.v / 22);
-    r.steer += (steerIn * maxSteer - r.steer) * Math.min(1, dt * 8);
-    // grass slows you down
     const s = samples[r.idx], lat = (r.x - s.p.x) * s.n.x + (r.z - s.p.z) * s.n.z;
+    const playerGrip = P.grip * 1.3;                        // arcade grip: more forgiving than the rivals
+    if (help && !window.__autopilot && go) {
+        // driving help 1: ease off before a corner you're going too fast for
+        const here = samples[r.idx].d; let target = P.vmax;
+        for (let ahead = 0; ahead <= 120; ahead += 8) { const k = Math.abs(sampleAt(here + ahead).ks); const vc = k > 1e-4 ? Math.sqrt(playerGrip * 0.9 / k) : P.vmax; target = Math.min(target, Math.sqrt(vc * vc + 2 * P.brake * 0.8 * ahead)); }
+        if (r.v > target + 1) { gas = false; r.v -= P.brake * 0.6 * dt; }
+        // driving help 2: a gentle nudge back towards the road near the edge
+        const edge = HW - 1.5;
+        if (Math.abs(lat) > edge) steerIn -= Math.sign(lat) * 0.45 * Math.min(1, (Math.abs(lat) - edge) / 3);
+        steerIn = Math.max(-1, Math.min(1, steerIn));
+    }
+    const maxSteer = 0.62 / (1 + r.v / 30);
+    r.steer += (steerIn * maxSteer - r.steer) * Math.min(1, dt * 16);   // steering responds quickly
+    // grass slows you down (but not too much)
     const onGrass = Math.abs(lat) > HW + 1.3;
-    const vmax = onGrass ? Math.min(P.vmax, 22) : P.vmax;
+    if (go) { r.driveTime = (r.driveTime || 0) + dt; if (onGrass) r.grassTime = (r.grassTime || 0) + dt; }
+    const vmax = onGrass ? Math.min(P.vmax, 30) : P.vmax;
     let a = 0;
     if (go && gas) a += P.a0 * Math.max(0.12, 1 - r.v / vmax);
     if (brake) a -= r.v > 0.5 ? P.brake : 3;           // brake, then gently reverse
-    a -= 0.25 + r.v * r.v * 0.0004 + (onGrass ? r.v * 0.12 : 0);  // rolling and air drag
+    a -= 0.25 + r.v * r.v * 0.0004 + (onGrass ? r.v * 0.06 : 0);  // rolling and air drag
     if (!gas && !brake && Math.abs(r.v) < 0.3) r.v = 0;
     r.v = go ? Math.max(-6, r.v + a * dt) : 0;
     if (r.v > vmax && onGrass) r.v -= (r.v - vmax) * Math.min(1, dt * 2);
     // turning, limited by grip: too fast into a corner and the car slides wide
     const wb = r.design.L * 0.6;
     let yawRate = r.v * Math.tan(r.steer) / wb;
-    const latAcc = Math.abs(yawRate * r.v), grip = P.grip * (onGrass ? 0.55 : 1);
+    const latAcc = Math.abs(yawRate * r.v), grip = playerGrip * (onGrass ? 0.7 : 1);
     if (latAcc > grip) { yawRate *= grip / latAcc; r.v -= (latAcc - grip) * 0.08 * dt * Math.sign(r.v); r.sliding = true; } else r.sliding = false;
     r.heading += yawRate * dt;
     r.x += Math.cos(r.heading) * r.v * dt; r.z -= Math.sin(r.heading) * r.v * dt;
@@ -632,9 +651,11 @@ export function enter() {
             if (b.dataset.race === 'resume') togglePause();
             if (b.id === 'race-tilt') toggleTilt();
             if (b.id === 'race-cam') camMode = 1 - camMode;
+            if (b.id === 'race-help') { help = !help; storeSet('raceHelp', help); b.classList.toggle('active', help); flash(help ? 'Driving help on' : 'Driving help off'); }
             if (b.id === 'race-sound') { soundOn = !soundOn; storeSet('raceSound', soundOn); b.classList.toggle('active', soundOn); soundOn ? startEngine() : stopEngine(); }
         });
         document.getElementById('race-sound').classList.toggle('active', soundOn);
+        document.getElementById('race-help').classList.toggle('active', help);
     }
     if (!renderer) return;
     if (document.getElementById('race-stage').hidden) renderMenu();
@@ -648,4 +669,5 @@ export function leave() {
 }
 // for testing: drive automatically along the racing line
 export function autopilot(on) { window.__autopilot = on; }
-export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), trackLen, ghost: !!(ghost && ghost.holder.visible) }; }
+export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), trackLen, ghost: !!(ghost && ghost.holder.visible), grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
+export function setHelp(on) { help = on; }
