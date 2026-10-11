@@ -2,7 +2,8 @@
 import * as THREE from './lib/three.module.min.js';
 import { OrbitControls } from './lib/addons/OrbitControls.js';
 import { RoomEnvironment } from './lib/addons/RoomEnvironment.js';
-import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, loadDesign, saveDesign as saveDesignTo, createCar, carStats } from './carmodel.js';
+import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, LIVERIES, UNLOCKS, loadDesign, saveDesign as saveDesignTo, createCar, carStats,
+    medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign } from './carmodel.js';
 
 // =====================================================================
 //  SCENE
@@ -82,12 +83,21 @@ function frame() {
 // =====================================================================
 //  CONTROLS PANEL
 // =====================================================================
-let panelTab = 'body';
-const swatch = (val, cur, attr, col = val) => `<button class="swatch ${val === cur ? 'active' : ''}" data-${attr}="${val}" style="--sw:${col}" aria-label="${val}"></button>`;
-const choice = (obj, cur, attr) => Object.entries(obj).map(([k, v]) => `<button class="opt ${k === cur ? 'active' : ''}" data-${attr}="${k}">${typeof v === 'string' ? v : v.label}</button>`).join('');
+let panelTab = 'body', shareCode = '';
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const KIND = { rim: 'rim', rimcol: 'rimColour', finish: 'finish', wing: 'wing', livery: 'livery' };
+const swatch = (val, cur, attr, col = val) => {
+    const lock = KIND[attr] && lockFor(KIND[attr], val, design);
+    return `<button class="swatch ${val === cur ? 'active' : ''} ${lock ? 'locked' : ''}" data-${attr}="${val}" style="--sw:${col}" aria-label="${val}${lock ? ' (locked)' : ''}"></button>`;
+};
+const choice = (obj, cur, attr) => Object.entries(obj).map(([k, v]) => {
+    const lock = KIND[attr] && lockFor(KIND[attr], k, design);
+    return `<button class="opt ${k === cur ? 'active' : ''} ${lock ? 'locked' : ''}" data-${attr}="${k}">${lock ? '🔒 ' : ''}${typeof v === 'string' ? v : v.label}</button>`;
+}).join('');
 const slider = (key, label, min, max, step) => `<label class="slider"><span>${label}</span><input type="range" min="${min}" max="${max}" step="${step}" value="${design[key]}" data-slider="${key}"></label>`;
+const COLOURS = ['#F4F6F8', '#0B0C0F', '#E10600', '#FFB300', '#C6FF00', '#00B8D9', '#1E3A8A', '#FF6D00', '#7E57C2', '#9AA3AF'];
 function renderPanel() {
-    const tabs = { body: 'Body', wheels: 'Wheels', paint: 'Paint', aero: 'Aero', engine: 'Engine' };
+    const tabs = { body: 'Body', wheels: 'Wheels', paint: 'Paint', livery: 'Livery', aero: 'Aero', engine: 'Engine', cars: 'My cars' };
     let html = `<div class="b-tabs">${Object.entries(tabs).map(([k, v]) => `<button class="b-tab ${k === panelTab ? 'active' : ''}" data-btab="${k}">${v}</button>`).join('')}</div><div class="b-body">`;
     if (panelTab === 'body') html += `<p class="b-label">Body style</p><div class="opts">${choice(PRESETS, design.preset, 'preset')}</div>
         ${slider('L', 'Length', 4.0, 5.2, 0.05)}${slider('W', 'Width', 1.7, 2.1, 0.01)}${slider('roof', 'Roof height', 1.0, 1.35, 0.01)}
@@ -97,11 +107,32 @@ function renderPanel() {
         <p class="b-label">Brake callipers</p><div class="swatches">${['#FFB300', '#E10600', '#00B8D9', '#C6FF00', '#16181C', '#F4F6F8'].map(c => swatch(c, design.caliper, 'caliper')).join('')}</div>
         ${slider('wheel', 'Wheel size', 0.31, 0.38, 0.005)}`;
     if (panelTab === 'paint') html += `<p class="b-label">Colour</p><div class="swatches">${PAINTS.map(c => swatch(c, design.paint, 'paint')).join('')}
-        <label class="swatch custom" style="--sw:${design.paint}" title="Pick any colour"><input type="color" value="${design.paint}" data-paintpick></label></div>
+        <label class="swatch custom" style="--sw:${design.paint}" title="Pick any colour"><input type="color" value="${design.paint}" data-paintpick="paint"></label></div>
         <p class="b-label">Finish</p><div class="opts">${choice(FINISHES, design.finish, 'finish')}</div>`;
+    if (panelTab === 'livery') html += `<p class="b-label">Stripes and graphics</p><div class="opts">${choice(LIVERIES, design.livery || 'none', 'livery')}</div>
+        <p class="b-label">Stripe colour</p><div class="swatches">${COLOURS.map(c => swatch(c, design.stripeColour, 'stripe')).join('')}</div>
+        <p class="b-label">Two-tone paint</p><div class="opts"><button class="opt ${design.twoTone ? 'active' : ''}" data-toggle="twoTone">${design.twoTone ? 'On' : 'Off'}</button></div>
+        ${design.twoTone ? `<div class="swatches" style="margin-top:8px">${COLOURS.map(c => swatch(c, design.paint2, 'paint2')).join('')}</div>` : ''}
+        <label class="field"><span>Race number</span><input type="text" inputmode="numeric" maxlength="2" value="${esc(design.number)}" data-text="number" placeholder="e.g. 7"></label>
+        <label class="field"><span>Your name or tag</span><input type="text" maxlength="14" value="${esc(design.tag)}" data-text="tag" placeholder="e.g. MAX"></label>`;
     if (panelTab === 'aero') html += `<p class="b-label">Rear wing</p><div class="opts">${choice(WINGS, design.wing, 'wing')}</div>
         <p class="b-label">Extras</p><div class="opts"><button class="opt ${design.splitter ? 'active' : ''}" data-toggle="splitter">Front splitter</button><button class="opt ${design.skirts ? 'active' : ''}" data-toggle="skirts">Side skirts</button></div>`;
     if (panelTab === 'engine') html += `<p class="b-label">Engine</p><div class="opts">${choice(ENGINES, design.engine, 'engine')}</div><p class="small">${ENGINES[design.engine].note}. Tap again to hear it.</p>`;
+    if (panelTab === 'cars') {
+        const saved = loadSavedCars(), pts = medalPoints(), next = UNLOCKS.find(u => u.pts > pts);
+        html += `<label class="field"><span>Car name</span><input type="text" maxlength="24" value="${esc(design.name)}" data-text="name"></label>
+            <div class="opts"><button class="opt" data-cars="save">💾 Save</button><button class="opt" data-cars="saveNew">Save as a new car</button><button class="opt" data-cars="new">Start a new car</button></div>
+            <p class="b-label">My cars (${saved.length})</p>
+            <div class="saved-list">${saved.length ? saved.map(c => `<div class="saved-car ${c.id === design._id ? 'current' : ''}"><span class="sw-dot" style="--sw:${esc(c.design.paint)}"></span><b>${esc(c.design.name || 'My Supercar')}</b>
+                <button class="opt" data-cars="load" data-id="${c.id}">Load</button><button class="opt" data-cars="delete" data-id="${c.id}" aria-label="Delete">✕</button></div>`).join('') : '<p class="small">No saved cars yet. Tap Save to keep this one.</p>'}</div>
+            <p class="b-label">Share code</p>
+            <p class="small">Send this code to a friend so they can load your design. It only contains the car's settings.</p>
+            <div class="opts"><button class="opt" data-cars="code">Make share code</button></div>
+            ${shareCode ? `<div class="code-row"><input type="text" readonly value="${esc(shareCode)}" id="share-code-out"><button class="opt" data-cars="copy">Copy</button></div>` : ''}
+            <div class="code-row"><input type="text" placeholder="Paste a friend's code (starts SL1-)" id="share-code-in"><button class="opt" data-cars="loadCode">Load</button></div>
+            <p class="b-label">Unlocks</p><p class="small">You have ${pts} medal point${pts === 1 ? '' : 's'} from racing.${next ? ` Next: <b>${next.label}</b> at ${next.pts} points.` : ' Everything is unlocked!'}</p>
+            <ul class="unlock-list">${UNLOCKS.map(u => `<li class="${pts >= u.pts ? 'got' : ''}">${pts >= u.pts ? '✓' : '🔒'} ${u.label} <span>${u.pts} pts</span></li>`).join('')}</ul>`;
+    }
     html += `</div>`;
     document.getElementById('build-panel').innerHTML = html;
     renderStats();
@@ -142,26 +173,73 @@ function engineSound() {
         o.connect(f); f.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + 1.25);
     });
 }
+function lockedToast(kind, value) {
+    const u = lockFor(kind, value, design);
+    if (!u) return false;
+    const need = u.pts - medalPoints();
+    window.toast && window.toast(`🔒 ${u.label}: win ${need} more medal point${need > 1 ? 's' : ''} in Race to unlock it`, 2600);
+    return true;
+}
+function setDesign(d) { design = { ...DEFAULT, ...d }; saveDesign(); renderPanel(); buildCar(); }
+function onCars(action, id) {
+    const saved = loadSavedCars();
+    const toast = (m, ms) => window.toast && window.toast(m, ms);
+    if (action === 'save' || action === 'saveNew') {
+        const copy = { ...design }; delete copy._id;
+        let slot = action === 'save' && saved.find(c => c.id === design._id);
+        if (!slot) {
+            if (saved.length >= 12) { toast('You can keep 12 cars. Delete one first.'); return; }
+            slot = { id: 'c' + Date.now().toString(36) }; saved.push(slot); design._id = slot.id;
+        }
+        slot.design = copy; storeSavedCars(saved); saveDesign(); toast(`Saved "${design.name || 'My Supercar'}"`);
+    }
+    if (action === 'new') { setDesign({ ...DEFAULT, name: 'New Supercar' }); toast('A fresh car. Remember to save it!'); return; }
+    if (action === 'load') { const c = saved.find(x => x.id === id); if (c) { setDesign({ ...c.design, _id: c.id }); toast(`Loaded "${c.design.name}"`); } return; }
+    if (action === 'delete') { const c = saved.find(x => x.id === id); if (c && confirm(`Delete "${c.design.name}"?`)) { storeSavedCars(saved.filter(x => x.id !== id)); if (design._id === id) delete design._id; } }
+    if (action === 'code') { shareCode = encodeDesign(design); }
+    if (action === 'copy') {
+        const el = document.getElementById('share-code-out');
+        (navigator.clipboard ? navigator.clipboard.writeText(shareCode) : Promise.reject()).then(() => toast('Code copied')).catch(() => { el.select(); toast('Select the code and copy it'); });
+        return;
+    }
+    if (action === 'loadCode') {
+        const d = decodeDesign(document.getElementById('share-code-in').value);
+        if (!d) { toast("That code doesn't look right. It should start with SL1-", 2600); return; }
+        setDesign(d); toast(`Loaded "${d.name}". Tap Save to keep it.`, 2600); return;
+    }
+    renderPanel();
+}
 function onPanelClick(e) {
     const b = e.target.closest('button'); if (!b) return;
     const d = b.dataset;
     if (d.btab) { panelTab = d.btab; renderPanel(); return; }
+    if (d.cars) { onCars(d.cars, d.id); return; }
     if (d.preset) { Object.assign(design, PRESETS[d.preset], { preset: d.preset }); renderPanel(); changed(); return; }
-    if (d.rim) design.rim = d.rim;
-    else if (d.rimcol) design.rimColour = d.rimcol;
+    if (d.rim) { if (lockedToast('rim', d.rim)) return; design.rim = d.rim; }
+    else if (d.rimcol) { if (lockedToast('rimColour', d.rimcol)) return; design.rimColour = d.rimcol; }
     else if (d.caliper) design.caliper = d.caliper;
     else if (d.paint) design.paint = d.paint;
-    else if (d.finish) design.finish = d.finish;
-    else if (d.wing) design.wing = d.wing;
+    else if (d.finish) { if (lockedToast('finish', d.finish)) return; design.finish = d.finish; }
+    else if (d.wing) { if (lockedToast('wing', d.wing)) return; design.wing = d.wing; }
+    else if (d.livery) { if (lockedToast('livery', d.livery)) return; design.livery = d.livery; }
+    else if (d.stripe) design.stripeColour = d.stripe;
+    else if (d.paint2) design.paint2 = d.paint2;
     else if (d.toggle) design[d.toggle] = !design[d.toggle];
     else if (d.engine) { design.engine = d.engine; engineSound(); }
     else return;
     renderPanel(); changed(!d.engine);
 }
+let textTimer = null;
 function onPanelInput(e) {
     const t = e.target;
     if (t.dataset.slider) { design[t.dataset.slider] = parseFloat(t.value); design.preset = 'custom'; changed(); }
     if (t.dataset.paintpick !== undefined) { design.paint = t.value; t.parentElement.style.setProperty('--sw', t.value); changed(); }
+    if (t.dataset.text) {
+        let v = t.value;
+        if (t.dataset.text === 'number') { v = v.replace(/[^0-9]/g, '').slice(0, 2); if (v !== t.value) t.value = v; }
+        design[t.dataset.text] = v;
+        clearTimeout(textTimer); textTimer = setTimeout(() => changed(t.dataset.text !== 'name'), 350);
+    }
 }
 function syncTurntableButton() {
     const b = document.getElementById('build-turntable'); if (b) b.classList.toggle('active', controls.autoRotate);

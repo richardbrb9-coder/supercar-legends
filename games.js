@@ -241,18 +241,36 @@ function gearRpm(m) {
     const lo = m.gear === 1 ? 0 : gearTop(m, m.gear - 1), hi = gearTop(m, m.gear);
     return RPM_IDLE + (RPM_RED - RPM_IDLE) * Math.max(0, Math.min(1, (m.v - lo) / (hi - lo)));
 }
+// Your own car from the Build screen, made to look like a garage car for the race
+let myDragCar = null;
+function loadMyDragCar() {
+    return import('./carmodel.js').then(m => {
+        const d = m.loadDesign(), s = m.carStats(d);
+        myDragCar = { id: 'my_car', name: d.name || 'My Supercar', maker: 'Your design', type: 'supercar', year: new Date().getFullYear(),
+                      mph: s.mph, z62: s.z62, bhp: s.bhp, paint: d.paint };
+        return myDragCar;
+    }).catch(() => null);
+}
 function dragPick() {
     D = null; cancelAnimationFrame(dragRaf);
     document.getElementById('drag-stage').hidden = true;
     const choices = sample(DRAG_POOL, 3);
-    document.getElementById('drag-pick').hidden = false;
-    document.getElementById('drag-pick').innerHTML = `<p class="section-label">Choose your car</p>
-        <div class="car-grid no-open">${choices.map(c => carCard(c).replace('class="car-card"', `class="car-card" data-drag="${c.id}"`)).join('')}</div>
-        <p class="small">When the 3D builder is ready, you'll be able to race your own car here too.</p>`;
+    const pickEl = document.getElementById('drag-pick');
+    pickEl.hidden = false;
+    const render = mine => {
+        const myCard = mine ? `<button class="car-card my-car-card" data-drag="my_car" style="--tc:${mine.paint}">
+            <div class="cc-photo my-car-photo"><span class="cc-year">YOU</span><span class="my-car-label">Your car from Build</span></div>
+            <div class="cc-body"><div class="cc-maker">Your design</div><h3 class="cc-name">${escapeHtml(mine.name)}</h3>
+            <div class="mini-stats">${miniStat('bhp', fmt(mine.bhp))}${miniStat(units === 'mph' ? 'mph' : 'km/h', units === 'mph' ? mine.mph : kmh(mine.mph))}${miniStat('0–62', secs(mine.z62))}</div></div></button>` : '';
+        pickEl.innerHTML = `<p class="section-label">Choose your car</p>
+            <div class="car-grid no-open">${myCard}${choices.map(c => carCard(c).replace('class="car-card"', `class="car-card" data-drag="${c.id}"`)).join('')}</div>`;
+    };
+    render(myDragCar);
+    loadMyDragCar().then(mine => { if (mine && !D) render(mine); });
 }
 document.getElementById('drag-pick').addEventListener('click', e => {
     const b = e.target.closest('[data-drag]'); if (!b) return;
-    dragStart(carById[b.dataset.drag]);
+    dragStart(b.dataset.drag === 'my_car' ? myDragCar : carById[b.dataset.drag]);
 });
 function dragStart(playerCar) {
     // An opponent with a similar 0–62 time, so every race is close
@@ -352,7 +370,7 @@ function dragDraw(now, el) {
     const fx = sx(DRAG_LEN);
     if (fx < W + 40) for (let i = 0; i < 14; i++) for (let j = 0; j < 2; j++) { ctx.fillStyle = (i + j) % 2 ? '#fff' : '#111'; ctx.fillRect(fx + j * 12, 90 + i * 19, 12, 19); }
     drawCarSide(ctx, sx(D.cpu.x) - 76, 150, CAR_TYPES[D.cpu.c.type].color);
-    drawCarSide(ctx, sx(D.p.x) - 76, 300, '#E10600');
+    drawCarSide(ctx, sx(D.p.x) - 76, 300, D.p.c.paint || '#E10600');
     const cpuX = sx(D.cpu.x) - 76, gap = Math.round(Math.abs(D.cpu.x - D.p.x));
     ctx.font = '800 20px "Exo 2", sans-serif'; ctx.fillStyle = '#FFB300';
     if (cpuX > W - 40) { ctx.textAlign = 'right'; ctx.fillText(`CPU ${gap} m ahead ▶`, W - 14, 158); }

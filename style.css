@@ -323,6 +323,8 @@ button.stat:active { transform: scale(.98); }
 .oc-num { position: absolute; left: 8px; top: 8px; width: 44px; height: 44px; display: grid; place-items: center; background: var(--amber); color: #111; font-family: var(--display); font-weight: 900; font-size: 1.4rem; clip-path: polygon(20% 0, 100% 0, 80% 100%, 0 100%); }
 .order-card h3 { font-size: .98rem; margin: 10px 8px 2px; line-height: 1.2; }
 .oc-year { font-family: var(--display); font-weight: 900; color: var(--amber); }
+.my-car-photo { display: grid; place-items: center; background: radial-gradient(circle at 50% 60%, var(--tc), #111317 75%); }
+.my-car-label { font-family: var(--display); font-weight: 900; font-size: .9rem; letter-spacing: .08em; text-shadow: 0 2px 6px rgba(0,0,0,.6); z-index: 1; }
 .drag-stage canvas { width: 100%; height: auto; display: block; background: #111317; border: 1px solid var(--line); }
 .drag-controls { display: flex; gap: 14px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
 .drag-readout { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 48px; }
@@ -359,7 +361,7 @@ button.stat:active { transform: scale(.98); }
 .b-nogl h2 { color: var(--text); margin-bottom: 8px; }
 .build-side { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
 .build-panel { flex: 1; min-height: 0; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); }
-.b-tabs { display: grid; grid-template-columns: repeat(5, 1fr); position: sticky; top: 0; z-index: 1; background: var(--bg-2); }
+.b-tabs { display: grid; grid-template-columns: repeat(4, 1fr); position: sticky; top: 0; z-index: 1; background: var(--bg-2); }
 .b-tab { background: none; border: 0; border-bottom: 3px solid transparent; padding: 12px 2px; font-family: var(--head); font-size: .82rem; color: var(--muted); letter-spacing: .03em; }
 .b-tab.active { color: #fff; border-bottom-color: var(--red); background: var(--panel); }
 .b-body { padding: 12px 14px 16px; }
@@ -375,6 +377,20 @@ button.stat:active { transform: scale(.98); }
 .swatch.custom { display: grid; place-items: center; cursor: pointer; }
 .swatch.custom::after { content: '+'; font-weight: 900; color: #fff; text-shadow: 0 1px 3px #000; font-size: 1.3rem; pointer-events: none; }
 .swatch.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.field { display: grid; gap: 6px; margin: 12px 0; font-size: .85rem; font-weight: 700; }
+.field input, .code-row input { background: var(--bg-2); border: 1px solid var(--line-2); padding: 10px 12px; font-size: 1rem; color: var(--text); width: 100%; min-width: 0; }
+.code-row { display: flex; gap: 6px; margin-top: 8px; }
+.code-row input { font-family: monospace; font-size: .85rem; }
+.saved-list { display: grid; gap: 6px; }
+.saved-car { display: flex; align-items: center; gap: 8px; background: var(--panel-2); padding: 6px 8px; border-left: 3px solid transparent; }
+.saved-car.current { border-left-color: var(--red); }
+.saved-car b { flex: 1; font-size: .9rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.saved-car .opt { padding: 6px 10px; }
+.sw-dot { width: 18px; height: 18px; border-radius: 50%; background: var(--sw); flex-shrink: 0; border: 1px solid var(--line-2); }
+.unlock-list { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 4px; font-size: .85rem; }
+.unlock-list li { display: flex; gap: 6px; color: var(--muted); }
+.unlock-list li.got { color: var(--lime); }
+.unlock-list span { margin-left: auto; color: var(--dim); }
 .slider { display: grid; grid-template-columns: 100px 1fr; align-items: center; gap: 10px; margin: 10px 0; font-size: .88rem; font-weight: 600; }
 .slider input { width: 100%; accent-color: var(--red); height: 28px; }
 .build-stats { --tc: var(--red); padding: 10px; display: grid; gap: 5px; }
@@ -426,6 +442,17 @@ body.racing .topbar { display: none; }
 .rr-box h2 { font-size: 2rem; margin: 6px 0; }
 .rr-medal { font-size: 1.5rem; font-family: var(--head); margin: 6px 0 10px; }
 .rr-box .rr-actions { justify-content: center; }
+.rr-unlock { color: var(--lime); font-weight: 700; margin: 6px 0; }
+.track-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+.track-card { background: var(--panel-2); border: 1px solid var(--line-2); border-bottom: 3px solid var(--line-2); padding: 10px; text-align: left; color: var(--text); display: flex; flex-direction: column; gap: 3px; }
+.track-card b { font-family: var(--head); font-weight: 400; font-size: .95rem; }
+.track-card span { font-size: .75rem; color: var(--muted); }
+.track-card.active { border-color: var(--red); background: #2a1416; }
+.tc-medals { font-size: 1rem !important; }
+.opt.locked { opacity: .55; border-style: dashed; }
+.swatch.locked { opacity: .45; }
+.swatch.locked::after { content: '🔒'; position: absolute; inset: 0; display: grid; place-items: center; font-size: .9rem; }
+@media (max-width: 640px) { .track-cards { grid-template-columns: 1fr; } }
 @media (max-width: 900px) { .race-menu-grid { grid-template-columns: 1fr; } }
 @media (max-width: 640px) {
     .pad-btn { width: 74px; height: 74px; font-size: 1.5rem; } .pad-btn.gas { width: 84px; height: 104px; } .pad-btn.brake { width: 74px; height: 88px; }

@@ -1,24 +1,38 @@
-// Supercar Legends: racing (first version, one track). Loaded only when the Race screen first opens.
+// Supercar Legends: racing. Loaded only when the Race screen first opens.
 // Arcade driving, not a simulator. Your car is the one you designed in the Build screen.
 import * as THREE from './lib/three.module.min.js';
-import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT } from './carmodel.js';
+import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints } from './carmodel.js';
 
 // =====================================================================
 //  THE TRACK (a closed spline; everything else is built along it)
 // =====================================================================
-const TRACK = {
-    id: 'coast', name: 'Coastline Circuit', laps: 3, width: 14,
-    points: [[0, 0], [260, 0], [410, 18], [470, 90], [452, 172], [372, 204], [312, 262], [330, 340], [270, 404], [158, 388],
-             [96, 306], [26, 326], [-58, 384], [-152, 344], [-176, 244], [-116, 172], [-156, 92], [-112, 18]]
-};
-const N = 1400;                       // samples along the track
-const HW = TRACK.width / 2, RUNOFF = 7;   // half-width of the road; grass before the barriers
+const TRACKS = [
+    { id: 'coast', name: 'Coastline Circuit', theme: 'coast', laps: 3, width: 14, runoff: 7,
+      about: 'A flowing circuit by the sea, with a hairpin and quick bends.',
+      points: [[0, 0], [260, 0], [410, 18], [470, 90], [452, 172], [372, 204], [312, 262], [330, 340], [270, 404], [158, 388],
+               [96, 306], [26, 326], [-58, 384], [-152, 344], [-176, 244], [-116, 172], [-156, 92], [-112, 18]] },
+    { id: 'city', name: 'City Streets', theme: 'city', laps: 3, width: 12, runoff: 2.5,
+      about: 'Tight right-angle corners between tall buildings, with walls close to the road. Brake early!',
+      points: [[0, 0], [180, 0], [200, 8], [210, 30], [210, 140], [220, 160], [240, 170], [330, 170], [350, 180], [358, 200],
+               [358, 300], [350, 320], [330, 328], [60, 328], [40, 320], [32, 300], [32, 230], [24, 210], [4, 202], [-60, 202],
+               [-80, 194], [-88, 174], [-88, 30], [-80, 8], [-60, 0]] },
+    { id: 'lemans', name: 'Le Mans Sprint', theme: 'forest', laps: 2, width: 15, runoff: 9,
+      about: 'Inspired by the famous 24-hour race: a very long straight with a chicane, then fast sweeping bends through the forest.',
+      points: [[0, 0], [400, 0], [430, -12], [470, -12], [500, 0], [900, 0], [960, 10], [985, 40], [975, 80], [940, 100], [900, 110],
+               [880, 130], [890, 160], [930, 175], [960, 200], [965, 260], [930, 300], [860, 320], [700, 330], [560, 320], [520, 300],
+               [500, 270], [460, 250], [300, 250], [200, 270], [120, 300], [40, 300], [-30, 270], [-70, 210], [-70, 120], [-50, 50], [-30, 15]] }
+];
+let TRACK = TRACKS[0];
+let N = 1400;                          // samples along the track (about one every 1.4 m)
+let HW = TRACK.width / 2, RUNOFF = TRACK.runoff;   // half-width of the road; space before the barriers
 let samples = null, trackLen = 0;
 function buildSamples() {
+    HW = TRACK.width / 2; RUNOFF = TRACK.runoff;
     const curve = new THREE.CatmullRomCurve3(TRACK.points.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'centripetal');
+    trackLen = curve.getLength();
+    N = Math.max(1000, Math.round(trackLen / 1.4));
     const pts = curve.getSpacedPoints(N);
     pts.pop();
-    trackLen = curve.getLength();
     samples = pts.map((p, i) => {
         const nx = pts[(i + 1) % N], pv = pts[(i - 1 + N) % N];
         const t = new THREE.Vector3().subVectors(nx, pv).normalize();
@@ -65,17 +79,20 @@ function ribbon(offA, offB, yA, yB, mat, vScale = 0.1, colorFn = null) {
     return new THREE.Mesh(g, mat);
 }
 function buildTrack(scene) {
-    const group = new THREE.Group();
-    // grass
-    const grass = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), new THREE.MeshStandardMaterial({ color: 0x3d7a3a, roughness: 1 }));
-    grass.rotation.x = -Math.PI / 2; grass.position.set(150, -0.02, 200); group.add(grass);
+    const group = new THREE.Group(), city = TRACK.theme === 'city';
+    const xs = samples.map(s => s.p.x), zs = samples.map(s => s.p.z);
+    const bounds = { minX: Math.min(...xs) - 160, maxX: Math.max(...xs) + 160, minZ: Math.min(...zs) - 160, maxZ: Math.max(...zs) + 160 };
+    // ground: grass, or pavement in the city
+    const gw = bounds.maxX - bounds.minX + 800, gd = bounds.maxZ - bounds.minZ + 800;
+    const grass = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd), new THREE.MeshStandardMaterial({ color: city ? 0x4a4f57 : 0x3d7a3a, roughness: 1 }));
+    grass.rotation.x = -Math.PI / 2; grass.position.set((bounds.minX + bounds.maxX) / 2, -0.02, (bounds.minZ + bounds.maxZ) / 2); group.add(grass);
     // road (the texture's v runs along the track)
     const tex = asphaltTexture(); tex.repeat.set(1, 1);
     const road = ribbon(HW, -HW, 0.02, 0.02, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }), 1 / 16);
     group.add(road);
     // kerbs on the corners: red and white blocks
     const kerbMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
-    const kerbCol = i => Math.abs(samples[i].ks) < 0.004 ? [0.047, 0.196, 0.043] : (Math.floor(i / 6) % 2 ? [0.92, 0.92, 0.92] : [0.86, 0.04, 0.02]);
+    const kerbCol = i => Math.abs(samples[i].ks) < 0.004 ? (city ? [0.07, 0.078, 0.095] : [0.047, 0.196, 0.043]) : (Math.floor(i / 6) % 2 ? [0.92, 0.92, 0.92] : [0.86, 0.04, 0.02]);
     group.add(ribbon(HW + 1.3, HW, 0.03, 0.05, kerbMat, 0.1, kerbCol));
     group.add(ribbon(-HW, -HW - 1.3, 0.05, 0.03, kerbMat, 0.1, kerbCol));
     // barriers (both sides), white with a blue stripe made with vertex colours
@@ -84,8 +101,8 @@ function buildTrack(scene) {
         const pos = [], col = [], idx = [];
         for (let i = 0; i <= N; i++) {
             const s = samples[i % N], p = s.p.clone().addScaledVector(s.n, off);
-            const c = Math.floor(i / 10) % 2 ? [0.95, 0.95, 0.95] : [0.12, 0.35, 0.85];
-            pos.push(p.x, 0, p.z, p.x, 1.0, p.z); col.push(...c, ...c);
+            const c = city ? (Math.floor(i / 6) % 2 ? [0.6, 0.6, 0.62] : [0.75, 0.05, 0.03]) : (Math.floor(i / 10) % 2 ? [0.95, 0.95, 0.95] : [0.12, 0.35, 0.85]);
+            pos.push(p.x, 0, p.z, p.x, city ? 1.4 : 1.0, p.z); col.push(...c, ...c);
             if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
         }
         const g = new THREE.BufferGeometry();
@@ -111,21 +128,36 @@ function buildTrack(scene) {
     gantry.position.set(s0.p.x, 0, s0.p.z); gantry.rotation.y = s0.heading; group.add(gantry);
     // grandstands along the start straight
     const standMat = new THREE.MeshStandardMaterial({ color: 0x1E3A8A, roughness: 0.8 }), roofMat = new THREE.MeshStandardMaterial({ color: 0xE10600, roughness: 0.6 });
-    for (const [d, side] of [[60, -1], [140, -1], [100, 1]]) {
+    for (const [d, side] of city ? [] : [[60, -1], [140, -1], [100, 1]]) {
         const s = sampleAt(d), st = new THREE.Group();
         for (let r = 0; r < 5; r++) { const step = new THREE.Mesh(new THREE.BoxGeometry(60, 1.2, 2.4), standMat); step.position.set(0, 0.6 + r * 1.2, -side * r * 2.4); st.add(step); }
         const roof = new THREE.Mesh(new THREE.BoxGeometry(62, 0.4, 14), roofMat); roof.position.set(0, 9, -side * 5); st.add(roof);
         st.position.copy(s.p).addScaledVector(s.n, side * (HW + RUNOFF + 9)); st.rotation.y = s.heading; group.add(st);
     }
+    const nearTrack = (x, z) => { let near = Infinity; for (let i = 0; i < N; i += 5) near = Math.min(near, (samples[i].p.x - x) ** 2 + (samples[i].p.z - z) ** 2); return Math.sqrt(near); };
+    // city: blocks of buildings just outside the walls
+    if (city) {
+        const MAXB = 420, blocks = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true }), MAXB);
+        const palette = [0x8a8f98, 0x6d7480, 0xb7aa96, 0x9c6b52, 0x5c6f82, 0xc9c4ba, 0x3f4650].map(c => new THREE.Color(c));
+        const mb = new THREE.Matrix4(); let nb = 0;
+        for (let i = 0; i < N && nb < MAXB; i += 14) for (const side of [1, -1]) {
+            const s = samples[i], w = 14 + Math.random() * 12, dpt = 14 + Math.random() * 10, h = 12 + Math.random() * 38;
+            const off = side * (HW + RUNOFF + 9 + dpt / 2), x = s.p.x + s.n.x * off, z = s.p.z + s.n.z * off;
+            if (nearTrack(x, z) < HW + RUNOFF + 8 + dpt / 2) continue;
+            mb.compose(new THREE.Vector3(x, h / 2, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.heading), new THREE.Vector3(w, h, dpt));
+            blocks.setMatrixAt(nb, mb); blocks.setColorAt(nb, palette[Math.floor(Math.random() * palette.length)]); nb++;
+        }
+        blocks.count = nb; group.add(blocks);
+    }
     // trees: two instanced meshes, kept away from the track
-    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.5, 3, 6), new THREE.MeshStandardMaterial({ color: 0x5b3a1e }), 320);
-    const tops = new THREE.InstancedMesh(new THREE.ConeGeometry(2.6, 7, 7), new THREE.MeshStandardMaterial({ color: 0x24592b, flatShading: true }), 320);
+    const TREES = city ? 0 : TRACK.theme === 'forest' ? 900 : 320;
+    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.5, 3, 6), new THREE.MeshStandardMaterial({ color: 0x5b3a1e }), Math.max(1, TREES));
+    const tops = new THREE.InstancedMesh(new THREE.ConeGeometry(2.6, 7, 7), new THREE.MeshStandardMaterial({ color: 0x24592b, flatShading: true }), Math.max(1, TREES));
     const m4 = new THREE.Matrix4(); let placed = 0, tries = 0;
-    while (placed < 320 && tries < 6000) {
+    while (placed < TREES && tries < TREES * 20) {
         tries++;
-        const x = -300 + Math.random() * 900, z = -150 + Math.random() * 700;
-        let near = Infinity; for (let i = 0; i < N; i += 7) near = Math.min(near, (samples[i].p.x - x) ** 2 + (samples[i].p.z - z) ** 2);
-        if (near < (HW + RUNOFF + 8) ** 2) continue;
+        const x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX), z = bounds.minZ + Math.random() * (bounds.maxZ - bounds.minZ);
+        if (nearTrack(x, z) < HW + RUNOFF + 8) continue;
         const sc = 0.7 + Math.random() * 0.8;
         m4.makeScale(sc, sc, sc).setPosition(x, 1.5 * sc, z); trunks.setMatrixAt(placed, m4);
         m4.makeScale(sc, sc, sc).setPosition(x, 6 * sc, z); tops.setMatrixAt(placed, m4);
@@ -133,7 +165,7 @@ function buildTrack(scene) {
     }
     trunks.count = tops.count = placed; group.add(trunks, tops);
     scene.add(group);
-    return { lightMats };
+    return { lightMats, group };
 }
 
 // =====================================================================
@@ -406,13 +438,19 @@ function finishRace() {
     const pos = positionOf(player);
     const medal = ['🥇 Gold', '🥈 Silver', '🥉 Bronze'][pos - 1] || 'No medal this time';
     const medals = store('raceMedals', {}); const prev = medals[TRACK.id + '_' + difficulty];
+    const before = medalPoints();
     if (pos <= 3 && (!prev || pos < prev)) { medals[TRACK.id + '_' + difficulty] = pos; storeSet('raceMedals', medals); }
+    const after = medalPoints(), unlocked = UNLOCKS.filter(u => u.pts > before && u.pts <= after);
+    const next = UNLOCKS.find(u => u.pts > after);
     window.playSound && window.playSound(pos === 1 ? 'win' : 'lose');
     const el = document.getElementById('race-result');
     el.innerHTML = `<div class="rr-box"><span class="kicker">${TRACK.name} · ${difficulty}</span>
         <h2>${pos === 1 ? 'You win!' : `You finished ${['1st', '2nd', '3rd', '4th'][pos - 1]}`}</h2>
         <p class="rr-medal">${medal}</p>
         <p>Race time <b>${fmtTime(player.finished)}</b> · Best lap <b>${fmtTime(player.best)}</b></p>
+        ${after > before ? `<p class="rr-unlock">+${after - before} medal point${after - before > 1 ? 's' : ''} (${after} in total)</p>` : ''}
+        ${unlocked.map(u => `<p class="rr-unlock">🔓 Unlocked in Build: <b>${u.label}</b></p>`).join('')}
+        ${next ? `<p class="small">Next unlock at ${next.pts} points: ${next.label}</p>` : ''}
         <div class="rr-actions"><button class="big-btn" data-race="again">Race again</button><button class="act-btn ghost" data-race="menu">Menu</button></div></div>`;
     el.hidden = false;
 }
@@ -423,7 +461,8 @@ function finishRace() {
 const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
 function placeCamera(snap = false, dt = 0.016) {
     const r = player, fx = Math.cos(r.heading), fz = -Math.sin(r.heading);
-    const [back, up, ahead] = camMode === 0 ? [8.5, 3.4, 6] : [5.2, 2.0, 8];
+    const city = TRACK.theme === 'city';
+    const [back, up, ahead] = camMode === 0 ? (city ? [6.8, 4.2, 6] : [8.5, 3.4, 6]) : [5.2, 2.0, 8];
     const want = new THREE.Vector3(r.x - fx * back, up, r.z - fz * back);
     const look = new THREE.Vector3(r.x + fx * ahead, 0.9, r.z + fz * ahead);
     if (snap) { camPos.copy(want); camLook.copy(look); }
@@ -574,27 +613,36 @@ function togglePause() {
 function renderMenu() {
     const d = loadDesign(), s = carStats(d), units = window.getUnits ? window.getUnits() : 'mph';
     const medals = store('raceMedals', {}), best = store('raceBest_' + TRACK.id, null);
-    const medalFor = k => ({ 1: '🥇', 2: '🥈', 3: '🥉' }[medals[TRACK.id + '_' + k]] || '');
+    const medalFor = (tid, k) => ({ 1: '🥇', 2: '🥈', 3: '🥉' }[medals[tid + '_' + k]] || '');
+    const trackCard = t => {
+        const got = Object.keys(DIFF).map(k => medalFor(t.id, k)).join('');
+        return `<button class="track-card ${t === TRACK ? 'active' : ''}" data-track="${t.id}"><b>${t.name}</b><span>${t.laps} laps · ${t.theme === 'city' ? 'street circuit' : t.theme === 'forest' ? 'high speed' : 'flowing'}</span><span class="tc-medals">${got || '&nbsp;'}</span></button>`;
+    };
     document.getElementById('race-menu').innerHTML = `
         <div class="race-menu-grid">
             <div class="panel">
                 <span class="kicker">Your car</span><h2>${escapeHtml(d.name || 'My Supercar')}</h2>
                 <p class="small">${escapeHtml((PRESETS[d.preset] || {}).label || 'Custom')} · ${ENGINES[d.engine].label} · ${s.bhp} bhp · ${units === 'mph' ? s.mph + ' mph' : Math.round(s.mph * 1.609) + ' km/h'} · 0–62 in ${s.z62.toFixed(1)} s</p>
                 <button class="act-btn ghost" data-screen="build">Change it in Build</button>
+                <p class="b-label" style="margin-top:18px">Medal points</p>
+                <p class="small">${medalPoints()} points so far. Medals unlock new paint finishes, rims and wings in Build.</p>
             </div>
             <div class="panel">
-                <span class="kicker">Track</span><h2>${TRACK.name}</h2>
-                <p class="small">${(trackLen / 1000).toFixed(1)} km · ${TRACK.laps} laps · Best lap ${fmtTime(best)}</p>
+                <span class="kicker">Choose a track</span>
+                <div class="track-cards">${TRACKS.map(trackCard).join('')}</div>
+                <h2 style="margin-top:12px">${TRACK.name}</h2>
+                <p class="small">${TRACK.about} ${(trackLen / 1000).toFixed(1)} km · ${TRACK.laps} laps · Best lap ${fmtTime(best)}</p>
                 <p class="b-label">Race against 3 rivals</p>
-                <div class="opts">${Object.keys(DIFF).map(k => `<button class="opt ${k === difficulty ? 'active' : ''}" data-diff="${k}">${k[0].toUpperCase() + k.slice(1)} ${medalFor(k)}</button>`).join('')}</div>
+                <div class="opts">${Object.keys(DIFF).map(k => `<button class="opt ${k === difficulty ? 'active' : ''}" data-diff="${k}">${k[0].toUpperCase() + k.slice(1)} ${medalFor(TRACK.id, k)}</button>`).join('')}</div>
                 <div class="rr-actions"><button class="big-btn" data-race="start-race">Start race</button><button class="act-btn" data-race="start-trial">Time trial (with ghost)</button></div>
             </div>
         </div>
-        <div class="panel how"><h3>How to drive</h3><p><b>Tablet and phone:</b> hold the arrow buttons on the left to steer, and the pedals on the right to go and brake. You can also turn on tilt steering. <b>Laptop:</b> arrow keys or W A S D, C changes the camera, Esc pauses.</p></div>`;
+        <div class="panel how"><h3>How to drive</h3><p><b>Tablet and phone:</b> hold the arrow buttons on the left to steer, and the pedals on the right to go and brake. You can also turn on tilt steering. <b>Driving help</b> (on at the start) slows you down before tight corners and nudges you back onto the road. <b>Laptop:</b> arrow keys or W A S D, C changes the camera, Esc pauses.</p></div>`;
 }
 function onMenuClick(e) {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.diff) { difficulty = b.dataset.diff; renderMenu(); return; }
+    if (b.dataset.track) { loadTrack(b.dataset.track); renderMenu(); return; }
     if (b.dataset.race === 'start-race' || b.dataset.race === 'start-trial') { mode = b.dataset.race === 'start-race' ? 'race' : 'trial'; showStage(); }
 }
 function showStage() {
@@ -620,6 +668,19 @@ function resize() {
 }
 const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+const SKIES = { coast: [0x8ec5ee, 150, 650], city: [0xaec4d6, 120, 520], forest: [0x9fcbe6, 160, 800] };
+function loadTrack(id) {
+    const t = TRACKS.find(x => x.id === id) || TRACKS[0];
+    if (world && TRACK === t) return;
+    if (world) { scene.remove(world.group); world.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); }
+    TRACK = t; storeSet('raceTrack', t.id);
+    buildSamples();
+    world = buildTrack(scene);
+    const [sky, near, far] = SKIES[t.theme];
+    scene.background = new THREE.Color(sky); scene.fog = new THREE.Fog(sky, near, far);
+    camera.far = far + 200; camera.updateProjectionMatrix();
+    drawMapBase();
+}
 function init() {
     const wrap = document.getElementById('race-canvas-wrap'), canvas = document.createElement('canvas');
     try { renderer = new THREE.WebGLRenderer({ canvas, antialias: (window.devicePixelRatio || 1) < 2 }); } catch (e) { return false; }
@@ -631,9 +692,7 @@ function init() {
     scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x3d5a2a, 1.3));
     const sun = new THREE.DirectionalLight(0xfff2dd, 2.2); sun.position.set(100, 160, 60); scene.add(sun);
     camera = new THREE.PerspectiveCamera(60, 1, 0.5, 900);
-    buildSamples();
-    world = buildTrack(scene);
-    drawMapBase();
+    loadTrack(store('raceTrack', 'coast'));
     bindControls();
     new ResizeObserver(resize).observe(wrap);
     return true;

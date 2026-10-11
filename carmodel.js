@@ -32,7 +32,8 @@ export const ENGINES = {
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
 export const DEFAULT = { preset: 'hyper', ...PRESETS.hyper, paint: '#E10600', finish: 'metallic', rim: 'five', rimColour: 'silver', caliper: '#FFB300',
-    rimSize: 1, wing: 'gt', splitter: true, skirts: true, engine: 'v8', name: 'My Supercar' };
+    rimSize: 1, wing: 'gt', splitter: true, skirts: true, engine: 'v8', name: 'My Supercar',
+    livery: 'none', stripeColour: '#F4F6F8', twoTone: false, paint2: '#1B1F26', number: '', tag: '' };
 const STORE_KEY = 'builderDesign';
 export function loadDesign() {
     try { const d = JSON.parse(localStorage.getItem(STORE_KEY)); if (d && d.L) return { ...DEFAULT, ...d }; } catch (e) { /* ignore */ }
@@ -107,7 +108,8 @@ function profiles(p) {
 }
 
 // Build a closed tube from rings of points, with caps at both ends
-function loft(rings, closedEnds = true) {
+function loft(rings, closedEnds = true, withUV = false) {
+    if (withUV) return loftUV(rings);
     const K = rings[0].length, pos = [], idx = [];
     rings.forEach(r => r.forEach(v => pos.push(v.x, v.y, v.z)));
     for (let i = 0; i < rings.length - 1; i++) for (let k = 0; k < K; k++) {
@@ -124,12 +126,38 @@ function loft(rings, closedEnds = true) {
     g.setIndex(idx); g.computeVertexNormals();
     return g;
 }
+// Same as loft, with texture coordinates: u runs nose to tail, v runs around the body by distance, starting underneath
+// (0 = underneath, about 0.25 = right side, 0.5 = top, 0.75 = left side). The seam is hidden under the car, and the first
+// point of each ring is repeated so the texture doesn't smear there.
+function loftUV(rings) {
+    const K = rings[0].length, R = rings.length, pos = [], uv = [], idx = [];
+    rings.forEach((r, i) => {
+        const cum = [0];
+        for (let k = 1; k <= K; k++) cum.push(cum[k - 1] + r[k % K].distanceTo(r[k - 1]));
+        for (let k = 0; k <= K; k++) { const v = r[k % K]; pos.push(v.x, v.y, v.z); uv.push(i / (R - 1), cum[k] / cum[K]); }
+    });
+    const W = K + 1;
+    for (let i = 0; i < R - 1; i++) for (let k = 0; k < K; k++) {
+        const a = i * W + k, b = i * W + k + 1, c = (i + 1) * W + k, d = (i + 1) * W + k + 1;
+        idx.push(a, c, b, b, c, d);
+    }
+    for (const [ri, flip] of [[0, true], [R - 1, false]]) {
+        const centre = rings[ri].reduce((acc, v) => acc.add(v), new THREE.Vector3()).multiplyScalar(1 / K);
+        const ci = pos.length / 3; pos.push(centre.x, centre.y, centre.z); uv.push(ri ? 1 : 0, 0.5);
+        for (let k = 0; k < K; k++) { const a = ri * W + k, b = ri * W + k + 1; flip ? idx.push(ci, a, b) : idx.push(ci, b, a); }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx); g.computeVertexNormals();
+    return g;
+}
 function bodyGeometry(p, pr) {
     const N = 90, K = 56, rings = [];
     for (let i = 0; i <= N; i++) {
         const s = i / N, x = p.L / 2 - s * p.L, w = pr.width(s), ring = [];
         for (let k = 0; k < K; k++) {
-            const a = (k / K) * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a);
+            const a = (k / K) * Math.PI * 2 - Math.PI / 2, c = Math.cos(a), sn = Math.sin(a);   // start underneath
             const u = spow(c, 0.38), v = spow(sn, 0.5);       // a rounded square
             const yt = pr.topAt(s, u), yb = Math.min(yt - 0.03, pr.bottomAt(s, u)), mid = (yt + yb) / 2;
             const y = v >= 0 ? lerp(mid, yt, v) : lerp(mid, yb, -v);
@@ -137,7 +165,7 @@ function bodyGeometry(p, pr) {
         }
         rings.push(ring);
     }
-    return loft(rings);
+    return loft(rings, true, true);
 }
 function cabinGeometry(p, pr) {
     const N = 40, K = 28, rings = [];
@@ -198,15 +226,63 @@ function makeWheel(p, mats, front) {
 // =====================================================================
 //  MATERIALS AND THE WHOLE CAR
 // =====================================================================
-function paintMaterial(design) {
-    const f = FINISHES[design.finish];
-    return new THREE.MeshPhysicalMaterial({ color: design.paint, metalness: f.metalness, roughness: f.roughness, clearcoat: f.clearcoat, clearcoatRoughness: 0.08,
+export const LIVERIES = { none: 'Plain', twin: 'Twin stripes', single: 'Offset stripe', side: 'Side stripes', chequer: 'Chequered flag', lightning: 'Lightning' };
+const hasLivery = d => (d.livery && d.livery !== 'none') || d.twoTone || String(d.number || '').trim() || String(d.tag || '').trim();
+// The livery is painted onto a canvas that wraps around the body (see loftUV for which way is which)
+function liveryTexture(d) {
+    const W = 1024, H = 512, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d');
+    const Y = v => (1 - v) * H;                                   // the texture is flipped vertically
+    x.fillStyle = d.paint; x.fillRect(0, 0, W, H);
+    if (d.twoTone) { x.fillStyle = d.paint2; x.fillRect(0, Y(0.24), W, Y(0) - Y(0.24)); x.fillRect(0, Y(1), W, Y(0.76) - Y(1)); }   // lower half of each side
+    const sc = d.stripeColour;
+    const band = (v0, v1, u0 = 0, u1 = 1) => { x.fillRect(u0 * W, Y(v1), (u1 - u0) * W, Y(v0) - Y(v1)); };
+    x.fillStyle = sc;
+    if (d.livery === 'twin') { band(0.462, 0.49); band(0.51, 0.538); }
+    if (d.livery === 'single') { band(0.445, 0.5); }
+    if (d.livery === 'side') { band(0.3, 0.325, 0.04, 0.96); band(0.675, 0.7, 0.04, 0.96); }
+    if (d.livery === 'chequer') {
+        const sq = 18;
+        for (let i = 0; i < W * 0.16 / sq; i++) for (let j = 0; j < H / sq; j++) {
+            x.fillStyle = (i + j) % 2 ? '#111' : '#fff'; x.fillRect(W * 0.72 + i * sq, j * sq, sq, sq);
+        }
+    }
+    if (d.livery === 'lightning') {
+        for (const [vMid, dir] of [[0.3, 1], [0.7, -1]]) {
+            x.beginPath(); x.moveTo(0.08 * W, Y(vMid));
+            const pts = [[0.3, 0.05], [0.36, -0.03], [0.62, 0.04], [0.68, -0.04], [0.92, 0]];
+            pts.forEach(([u, dv]) => x.lineTo(u * W, Y(vMid + dv * dir)));
+            x.lineWidth = 14; x.strokeStyle = sc; x.lineJoin = 'miter'; x.stroke();
+        }
+    }
+    // race number roundels on both doors and the driver's tag, drawn so they read the right way round on each side
+    const pxU = W / d.L, pxV = H / (2 * d.W + 2 * (d.deck - d.ride) + 0.4);   // pixels per metre along and around the body
+    const num = String(d.number || '').trim().slice(0, 2), tag = String(d.tag || '').trim().slice(0, 14);
+    for (const side of ['right', 'left']) {
+        const v = side === 'right' ? 0.29 : 0.71, flipX = side === 'right' ? -1 : 1, flipY = side === 'right' ? 1 : -1;
+        const draw = (u, vv, fn) => { x.save(); x.translate(u * W, Y(vv)); x.scale(flipX, flipY * pxV / pxU); fn(); x.restore(); };
+        if (num) draw(0.5, v, () => {
+            x.fillStyle = '#F4F6F8'; x.beginPath(); x.arc(0, 0, 0.28 * pxU, 0, Math.PI * 2); x.fill();
+            x.fillStyle = '#111'; x.font = `900 ${0.34 * pxU}px Orbitron, Arial Black, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(num, 0, 0.02 * pxU);
+        });
+        if (tag) draw(0.74, v, () => {
+            x.fillStyle = sc === d.paint ? '#111' : sc; x.font = `800 ${0.16 * pxU}px "Exo 2", Arial, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(tag, 0, 0);
+        });
+    }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    return t;
+}
+function paintMaterial(design, plain = false) {
+    const f = FINISHES[design.finish], useMap = !plain && hasLivery(design);
+    return new THREE.MeshPhysicalMaterial({ color: useMap ? '#ffffff' : design.paint, map: useMap ? liveryTexture(design) : null,
+        metalness: f.metalness, roughness: f.roughness, clearcoat: f.clearcoat, clearcoatRoughness: 0.08,
         iridescence: f.iridescence, iridescenceIOR: 1.6, side: THREE.DoubleSide });
 }
 function buildMaterials(design) {
     const rc = RIM_COLOURS[design.rimColour];
     return {
         paint: paintMaterial(design),
+        paintPlain: paintMaterial(design, true),
         glass: new THREE.MeshPhysicalMaterial({ color: 0x0a0d12, metalness: 0.3, roughness: 0.06, clearcoat: 1, side: THREE.DoubleSide }),
         carbon: new THREE.MeshStandardMaterial({ color: 0x15171b, metalness: 0.4, roughness: 0.45 }),
         tyre: new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.9, side: THREE.DoubleSide }),
@@ -249,7 +325,7 @@ export function createCar(design) {
         sk.position.set(X(0.5), p.ride + 0.04, side * (pr.width(0.5) + 0.0)); car.add(sk);
     }
     if (p.wing === 'ducktail') {
-        const d = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.07, pr.width(0.95) * 1.9), mats.paint);
+        const d = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.07, pr.width(0.95) * 1.9), mats.paintPlain);
         d.position.set(X(0.95), pr.centre(0.95) + 0.03, 0); d.rotation.z = -0.25; car.add(d);
     }
     if (p.wing === 'gt' || p.wing === 'swan') {
@@ -266,7 +342,7 @@ export function createCar(design) {
             car.add(strut);
         }
     }
-    const dispose = () => { car.traverse(o => { if (o.geometry) o.geometry.dispose(); }); Object.values(mats).forEach(m => m.dispose()); };
+    const dispose = () => { car.traverse(o => { if (o.geometry) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); };
     return { group: car, mats, wheels, dispose };
 }
 // =====================================================================
@@ -286,3 +362,78 @@ export function carStats(design) {
     return { bhp: e.bhp, mph, z62: Math.round(z62 * 10) / 10, kg, handling: Math.max(10, handling), braking: Math.max(10, braking), engine: e };
 }
 
+
+// =====================================================================
+//  UNLOCKS: medals won in Race unlock extra parts in Build
+// =====================================================================
+// Points: gold 3, silver 2, bronze 1, counting your best medal on each track at each difficulty
+export const UNLOCKS = [
+    { pts: 1,  kind: 'finish',    value: 'pearl',     label: 'Pearl paint finish' },
+    { pts: 3,  kind: 'rim',       value: 'turbine',   label: 'Turbine rims' },
+    { pts: 5,  kind: 'wing',      value: 'swan',      label: 'Swan-neck wing' },
+    { pts: 8,  kind: 'finish',    value: 'chrome',    label: 'Chrome paint finish' },
+    { pts: 11, kind: 'livery',    value: 'chequer',   label: 'Chequered flag livery' },
+    { pts: 14, kind: 'rim',       value: 'disc',      label: 'Aero disc rims' },
+    { pts: 18, kind: 'rimColour', value: 'gold',      label: 'Gold rims' },
+    { pts: 22, kind: 'livery',    value: 'lightning', label: 'Lightning livery' }
+];
+export function medalPoints() {
+    let medals = {};
+    try { medals = JSON.parse(localStorage.getItem('raceMedals')) || {}; } catch (e) { /* none yet */ }
+    return Object.values(medals).reduce((sum, pos) => sum + ({ 1: 3, 2: 2, 3: 1 }[pos] || 0), 0);
+}
+// Is this option available? Things already on your car stay available.
+export function lockFor(kind, value, design) {
+    const u = UNLOCKS.find(x => x.kind === kind && x.value === value);
+    if (!u || medalPoints() >= u.pts) return null;
+    const current = { finish: design.finish, rim: design.rim, wing: design.wing, rimColour: design.rimColour, livery: design.livery }[kind];
+    return current === value ? null : u;
+}
+
+// =====================================================================
+//  SAVED CARS AND SHARE CODES
+// =====================================================================
+const CARS_KEY = 'builderCars';
+export function loadSavedCars() { try { return JSON.parse(localStorage.getItem(CARS_KEY)) || []; } catch (e) { return []; } }
+export function storeSavedCars(list) { try { localStorage.setItem(CARS_KEY, JSON.stringify(list)); } catch (e) { /* storage unavailable */ } }
+// A share code is the design's settings in a fixed order, as short text. No personal data, works offline.
+const CODE_KEYS = ['preset', 'L', 'W', 'nose', 'deck', 'roof', 'tail', 'cabin', 'fast', 'ride', 'wheel', 'paint', 'finish', 'rim', 'rimColour', 'caliper',
+    'wing', 'splitter', 'skirts', 'engine', 'name', 'livery', 'stripeColour', 'twoTone', 'paint2', 'number', 'tag'];
+export function encodeDesign(d) {
+    const arr = CODE_KEYS.map(k => {
+        const v = d[k];
+        if (typeof v === 'number') return Math.round(v * 1000) / 1000;
+        if (Array.isArray(v)) return v.map(n => Math.round(n * 1000) / 1000);
+        if (typeof v === 'boolean') return v ? 1 : 0;
+        return v;
+    });
+    const json = JSON.stringify(arr);
+    return 'SL1-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+export function decodeDesign(code) {
+    const m = String(code || '').trim().match(/^SL1-([A-Za-z0-9_-]+)$/);
+    if (!m) return null;
+    try {
+        let b = m[1].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
+        const arr = JSON.parse(decodeURIComponent(escape(atob(b))));
+        if (!Array.isArray(arr) || arr.length !== CODE_KEYS.length) return null;
+        const d = { ...DEFAULT };
+        const num = (v, lo, hi, def) => typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def;
+        const pickKey = (v, obj, def) => Object.prototype.hasOwnProperty.call(obj, v) ? v : def;
+        const colour = (v, def) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : def;
+        const raw = Object.fromEntries(CODE_KEYS.map((k, i) => [k, arr[i]]));
+        d.preset = typeof raw.preset === 'string' ? raw.preset.slice(0, 20) : 'custom';
+        d.L = num(raw.L, 4.0, 5.2, d.L); d.W = num(raw.W, 1.7, 2.1, d.W); d.nose = num(raw.nose, 0.38, 0.72, d.nose);
+        d.deck = num(raw.deck, 0.7, 0.95, d.deck); d.roof = num(raw.roof, 1.0, 1.35, d.roof); d.tail = num(raw.tail, 0.78, 1.05, d.tail);
+        d.cabin = Array.isArray(raw.cabin) && raw.cabin.length === 2 ? [num(raw.cabin[0], 0.2, 0.6, 0.3), num(raw.cabin[1], 0.5, 0.85, 0.62)] : d.cabin;
+        d.fast = num(raw.fast, 0, 1, d.fast); d.ride = num(raw.ride, 0.06, 0.2, d.ride); d.wheel = num(raw.wheel, 0.31, 0.38, d.wheel);
+        d.paint = colour(raw.paint, d.paint); d.finish = pickKey(raw.finish, FINISHES, d.finish); d.rim = pickKey(raw.rim, RIMS, d.rim);
+        d.rimColour = pickKey(raw.rimColour, RIM_COLOURS, d.rimColour); d.caliper = colour(raw.caliper, d.caliper); d.wing = pickKey(raw.wing, WINGS, d.wing);
+        d.splitter = !!raw.splitter; d.skirts = !!raw.skirts; d.engine = pickKey(raw.engine, ENGINES, d.engine);
+        d.name = typeof raw.name === 'string' ? raw.name.slice(0, 24) : d.name;
+        d.livery = typeof raw.livery === 'string' && ['none', 'twin', 'single', 'side', 'chequer', 'lightning'].includes(raw.livery) ? raw.livery : 'none';
+        d.stripeColour = colour(raw.stripeColour, d.stripeColour); d.twoTone = !!raw.twoTone; d.paint2 = colour(raw.paint2, d.paint2);
+        d.number = String(raw.number ?? '').replace(/[^0-9]/g, '').slice(0, 2); d.tag = String(raw.tag ?? '').slice(0, 14);
+        return d;
+    } catch (e) { return null; }
+}
