@@ -185,16 +185,22 @@ function bodyGeometry(p, pr) {
     return loft(rings, true, true);
 }
 function cabinGeometry(p, pr) {
-    const N = 40, K = 28, rings = [];
+    // The windows rise from the body's edge (the beltline), leaning in a little, to a flatter roof.
+    // The lower half of each ring is tucked down inside the body so the cabin grows out of it with no ledge.
+    const N = 48, K = 36, rings = [];
     for (let i = 0; i <= N; i++) {
         const s = lerp(pr.c0, pr.c1, i / N), x = p.L / 2 - s * p.L;
-        const yb = pr.centre(s) - 0.05, yt = Math.max(yb + 0.02, pr.roof(s));
-        const wb = pr.width(s) * pr.q.cabinWB, wt = pr.width(s) * pr.q.cabinWT, ring = [];
+        const f = pr.q.cabinWB, w = pr.width(s);
+        const yb = pr.topAt(s, f) - 0.015, yt = Math.max(yb + 0.015, pr.roof(s));
+        const wb = w * f, wt = w * pr.q.cabinWT, ring = [];
         for (let k = 0; k < K; k++) {
             const a = (k / K) * Math.PI * 2 - Math.PI / 2, c = Math.cos(a), sn = Math.sin(a);   // start underneath, like the body
-            const t = (sn + 1) / 2;                          // 0 at the bottom of the ring, 1 at the top
-            const y = lerp(yb, yt, Math.pow(t, 0.8));
-            ring.push(new THREE.Vector3(x, y, spow(c, 0.5) * lerp(wb, wt, t)));
+            if (sn >= 0) {
+                const rise = Math.pow(sn, pr.q.cabinStyle === 'bubble' ? 0.62 : 0.38);   // steep sides and flatter roof, or a rounder bubble
+                ring.push(new THREE.Vector3(x, yb + (yt - yb) * rise, spow(c, 0.7) * lerp(wb, wt, Math.pow(sn, 1.4))));
+            } else {
+                ring.push(new THREE.Vector3(x, yb - 0.14 * Math.pow(-sn, 0.5), c * wb * 0.98));   // hidden inside the body
+            }
         }
         rings.push(ring);
     }
@@ -210,15 +216,16 @@ function cabinTexture(d, pr) {
     x.fillStyle = style === 'glasshouse' ? d.paint : glass; x.fillRect(0, 0, W, H);
     if (style === 'glasshouse') {
         x.fillStyle = glass;
-        rect(0.03, rake + 0.02, 0.27, 0.73);                     // windscreen
+        // v: 0.25 = right beltline, 0.5 = middle of the roof, 0.75 = left beltline
+        rect(0.03, rake - 0.01, 0.262, 0.738);                   // windscreen
         const sideEnd = Math.min(0.9, roofEnd + 0.25);
-        rect(rake + 0.035, sideEnd, 0.15, 0.36);                 // right side windows
-        rect(rake + 0.035, sideEnd, 0.64, 0.85);                 // left side windows
-        rect(roofEnd + 0.08, 0.97, 0.36, 0.64);                  // rear window
+        rect(rake + 0.045, sideEnd, 0.262, 0.335);               // right side windows
+        rect(rake + 0.045, sideEnd, 0.665, 0.738);               // left side windows
+        rect(Math.max(roofEnd + 0.2, 0.72), 0.95, 0.36, 0.64);   // rear window
         const pillar = lerp(rake, sideEnd, 0.52);
-        x.fillStyle = d.paint; rect(pillar, pillar + 0.025, 0.1, 0.4); rect(pillar, pillar + 0.025, 0.6, 0.9);   // door pillars
+        x.fillStyle = d.paint; rect(pillar, pillar + 0.025, 0.2, 0.4); rect(pillar, pillar + 0.025, 0.6, 0.8);   // door pillars
     }
-    if (style === 'bubble') { x.fillStyle = d.paint; rect(rake * 0.9, 1, 0.43, 0.57); }   // painted roof spine
+    if (style === 'bubble') { x.fillStyle = d.paint; rect(rake * 0.9, 1, 0.45, 0.55); }   // painted roof spine
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     return t;
 }
@@ -347,7 +354,10 @@ export function createCar(design) {
     const p = design, pr = profiles(p);
     const car = new THREE.Group();
     const body = new THREE.Mesh(bodyGeometry(p, pr), mats.paint); car.add(body);
-    const cabinMat = new THREE.MeshPhysicalMaterial({ map: cabinTexture(p, pr), metalness: 0.4, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide });
+    // the cabin uses the same paint finish as the body, so the roof matches; the dark windows still shine through the clearcoat
+    const fin = FINISHES[p.finish] || FINISHES.gloss;
+    const cabinMat = new THREE.MeshPhysicalMaterial({ map: cabinTexture(p, pr), metalness: fin.metalness, roughness: Math.min(fin.roughness, 0.4), clearcoat: 1, clearcoatRoughness: 0.05,
+        iridescence: fin.iridescence, iridescenceIOR: 1.6, side: THREE.DoubleSide });
     mats.cabin = cabinMat;
     car.add(new THREE.Mesh(cabinGeometry(p, pr), cabinMat));
     const X = s => p.L / 2 - s * p.L;
@@ -403,13 +413,14 @@ export function createCar(design) {
         const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.3), mats.dark); mouth.position.set(X(ss) + 0.28, pr.centre(ss) + 0.012, 0); car.add(mouth);
     }
     if (q.scoop === 'roof') {
-        const s0 = lerp(pr.rakeEnd, pr.roofEnd, 0.35), s1 = Math.min(pr.roofEnd + 0.04, s0 + 0.6 / p.L);
+        const s0 = lerp(pr.rakeEnd, pr.roofEnd, 0.3), s1 = Math.min(pr.c1 - 0.02, s0 + 1.0 / p.L);
         const sh = new THREE.Shape(), len = (s1 - s0) * p.L, h0 = pr.roof(s0), h1 = pr.roof(s1);
-        sh.moveTo(0, h0 - 0.03); sh.lineTo(0, h0 + 0.1); sh.quadraticCurveTo(len * 0.5, h0 + 0.11, len, h1 + 0.015); sh.lineTo(len, h1 - 0.03); sh.lineTo(0, h0 - 0.03);
+        const hm = pr.roof(lerp(s0, s1, 0.5));
+        sh.moveTo(0, h0 - 0.04); sh.lineTo(0, h0 + 0.07); sh.quadraticCurveTo(len * 0.5, hm + 0.08, len, h1 + 0.01); sh.lineTo(len, h1 - 0.04); sh.quadraticCurveTo(len * 0.5, hm - 0.04, 0, h0 - 0.04);
         const g = new THREE.ExtrudeGeometry(sh, { depth: 0.28, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
         g.translate(0, 0, -0.14);
         const sc = new THREE.Mesh(g, mats.paintPlain); sc.rotation.y = Math.PI; sc.position.set(X(s0), 0, 0); car.add(sc);
-        const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.09, 0.22), mats.dark); mouth.position.set(X(s0) + 0.02, h0 + 0.06, 0); car.add(mouth);
+        const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.22), mats.dark); mouth.position.set(X(s0) + 0.02, h0 + 0.035, 0); car.add(mouth);
     }
     // exhausts
     if (q.exhaust === 'quad' || q.exhaust === 'twin') {

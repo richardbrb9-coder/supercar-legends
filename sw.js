@@ -1,4 +1,4 @@
-const CACHE_NAME = 'supercar-legends-v10'; // Bump this on every change so tablets pick up the new version
+const CACHE_NAME = 'supercar-legends-v11'; // Bump this on every change so tablets pick up the new version
 
 // The car list and picture credits, so every photo can be saved for offline use.
 importScripts('cars.js', 'credits.js', 'people-credits.js');
