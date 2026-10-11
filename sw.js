@@ -1,4 +1,4 @@
-const CACHE_NAME = 'supercar-legends-v4'; // Bump this on every change so tablets pick up the new version
+const CACHE_NAME = 'supercar-legends-v5'; // Bump this on every change so tablets pick up the new version
 
 // The car list and picture credits, so every photo can be saved for offline use.
 importScripts('cars.js', 'credits.js', 'people-credits.js');
@@ -43,12 +43,14 @@ self.addEventListener('install', (event) => {
     self.skipWaiting();
     event.waitUntil(
         caches.open(CACHE_NAME).then(async (cache) => {
-            await cache.addAll(CORE_FILES); // the app can't work without these, so install fails if they fail
+            // cache: 'reload' skips the browser's own short-term cache, so a new version never saves an older file
+            const fresh = (url) => new Request(url, { cache: 'reload' });
+            await cache.addAll(CORE_FILES.map(fresh)); // the app can't work without these, so install fails if they fail
             // Pictures and libraries are saved one by one, so a single missing file doesn't stop the install.
             // Any that fail (for example on a patchy connection) get two more tries.
             let todo = [...LIB_FILES, ...CAR_PICTURES];
             for (let attempt = 0; attempt < 3 && todo.length; attempt++) {
-                const results = await Promise.allSettled(todo.map((url) => cache.add(url)));
+                const results = await Promise.allSettled(todo.map((url) => cache.add(fresh(url))));
                 todo = todo.filter((url, i) => results[i].status === 'rejected');
             }
         })
