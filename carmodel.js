@@ -25,7 +25,13 @@ export const PRESETS = {
                 grille: 'none', lamps: 'pods', bumpers: false, scoop: 'roof', exhaust: 'quad',
                 style: { wing: 'none', splitter: true, skirts: true, rim: 'ten', rimColour: 'silver' } },
     longtail: { label: 'Longtail',        L: 5.10, W: 1.98, nose: 0.46, deck: 0.82, roof: 1.10, tail: 0.92, cabin: [0.27, 0.55], fast: 0.9,  ride: 0.09, wheel: 0.36 },
-    electric: { label: 'Electric',        L: 4.60, W: 1.98, nose: 0.56, deck: 0.86, roof: 1.18, tail: 0.94, cabin: [0.26, 0.74], fast: 0.7,  ride: 0.11, wheel: 0.36 }
+    // Inspired by the 2020s Croatian electric hypercar: wide and muscular, long bonnet with a big vent, slim swept LED lamps, big corner
+    // intakes, dark glass roof, large side scoops, a full-width light bar, ducktail and deep diffuser, and no exhausts
+    electric: { label: 'Electric',        L: 4.75, W: 1.99, nose: 0.48, deck: 0.82, roof: 1.21, tail: 0.98, cabin: [0.32, 0.72], fast: 0.75, ride: 0.11, wheel: 0.36,
+                noseW: 0.74, noseTip: 0.74, noseLift: 2.4, wbFrac: 0.578, axleShift: 0.01, round: 0.36, fenderH: 0.12, fenderReach: 2.4,
+                cabinStyle: 'canopy', cabinWB: 0.8, cabinWT: 0.56, grille: 'none', lamps: 'blade', bumpers: false, scoop: 'bonnetvent', exhaust: 'none',
+                mouth: false, sideIntake: true, rearGrille: true, cornerIntakes: true, tailBar: true, diffuser: true,
+                style: { wing: 'ducktail', splitter: true, skirts: true, rim: 'turbine', rimColour: 'black' } }
 };
 export const PAINTS = ['#E10600', '#FFB300', '#C6FF00', '#00B8D9', '#1E3A8A', '#7E57C2', '#F4F6F8', '#9AA3AF', '#1B1F26', '#0B0C0F', '#FF6D00', '#00A86B'];
 export const FINISHES = {
@@ -47,7 +53,7 @@ export const ENGINES = {
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
 export const SHAPE_DEFAULTS = { cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
-    grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false };
+    grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false, cornerIntakes: false, tailBar: false, diffuser: false };
 // Apply a body style: its shape, its details, and the parts that suit it
 export function applyPreset(design, key) {
     const { label, style, ...shape } = PRESETS[key];
@@ -405,6 +411,13 @@ export function createCar(design) {
             for (const [dx, dy, dz] of [[0.06, 0.01, -0.04], [-0.05, 0.035, 0.03]]) {
                 const l = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), mats.head); l.position.set(X(ls) + dx, y + dy, z + side * dz); car.add(l);
             }
+        } else if (q.lamps === 'blade') {   // slim swept LED blades on each front corner, in an L shape
+            const ls = 0.04, z = side * pr.width(ls) * 0.72, y = pr.topAt(ls, 0.72) + 0.005;
+            const housing = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.14), mats.lens); housing.position.set(X(ls) - 0.04, y - 0.01, z); housing.rotation.y = side * 0.45; housing.rotation.z = -0.28; car.add(housing);
+            const a = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 0.035), mats.head);
+            a.position.set(X(ls) - 0.04, y, z + side * 0.03); a.rotation.y = side * 0.45; a.rotation.z = -0.28; car.add(a);
+            const b = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.18), mats.head);
+            b.position.set(X(ls) + 0.12, y - 0.045, z - side * 0.05); b.rotation.z = -0.28; car.add(b);
         } else {
             const h = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.36), mats.head);
             h.position.set(X(0.045), pr.topAt(0.045, 0.62) - 0.02, side * pr.width(0.045) * 0.62); h.rotation.z = -0.3; car.add(h);
@@ -449,6 +462,23 @@ export function createCar(design) {
         const sc = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.24), mats.paintPlain); sc.position.set(X(ss) - 0.16, y + 0.01, 0); car.add(sc);
         const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.035, 0.2), mats.dark); mouth.position.set(X(ss) + 0.05, y + 0.02, 0); car.add(mouth);
     }
+    // a wide dark vent across the bonnet
+    if (q.scoop === 'bonnetvent') {
+        const ss = 0.11, w = pr.width(ss) * 0.9;
+        const v = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, w), mats.dark); v.position.set(X(ss), pr.centre(ss) + 0.005, 0); v.rotation.z = -0.18; car.add(v);
+        for (let i = -2; i <= 2; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.012), mats.carbon); fin.position.set(X(ss), pr.centre(ss) + 0.01, i * w / 5); fin.rotation.z = -0.18; car.add(fin); }
+    }
+    // big dark air intakes in the lower front corners
+    if (q.cornerIntakes) for (const side of [1, -1]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.2, 0.44), mats.intake);
+        m.position.set(X(0) + 0.01, pr.base(0) + 0.12, side * pr.width(0) * 0.56); m.rotation.y = side * 0.3; car.add(m);
+    }
+    // a deep diffuser under the tail, with fins
+    if (q.diffuser) {
+        const w = pr.width(1) * 1.5, y = pr.base(1) + 0.03;
+        const d = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, w), mats.carbon); d.position.set(X(1) - 0.02, y, 0); d.rotation.z = 0.22; car.add(d);
+        for (let i = -3; i <= 3; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.09, 0.015), mats.carbon); fin.position.set(X(1) - 0.04, y + 0.05, i * w / 7); car.add(fin); }
+    }
     // a low oval air intake in the nose
     if (q.mouth) {
         const m = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.03, 28), mats.dark);
@@ -457,7 +487,7 @@ export function createCar(design) {
     }
     // a big sweeping air intake on each side, behind the doors
     if (q.sideIntake) for (const side of [1, -1]) {
-        const s0 = 0.4, s1 = 0.69, yLo = pr.base(0.62) + 0.13, yHi = lerp(pr.base(0.62), pr.topAt(0.62, 1), 0.78);
+        const s0 = p.tailBar ? 0.5 : 0.4, s1 = p.tailBar ? 0.71 : 0.69, yLo = pr.base(0.62) + 0.13, yHi = lerp(pr.base(0.62), pr.topAt(0.62, 1), 0.78);
         const sh = new THREE.Shape();
         const len = (s1 - s0) * p.L;    // a sweep that starts low along the door and rises to a deep opening in front of the rear wheel
         sh.moveTo(0, yLo + 0.03); sh.quadraticCurveTo(len * 0.6, yLo + 0.08, len, yHi); sh.lineTo(len, yHi - 0.2); sh.quadraticCurveTo(len * 0.55, yLo + 0.01, len * 0.04, yLo); sh.lineTo(0, yLo + 0.03);
@@ -488,6 +518,10 @@ export function createCar(design) {
             const l = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.03, 16), mats.tail); l.rotation.z = Math.PI / 2;
             l.position.set(X(1) - 0.005, ty, side * pr.width(1) * k); car.add(l);
         }
+    } else if (p.tailBar) {             // a slim light bar right across the back, curling round the corners
+        const ty = lerp(pr.base(1), pr.centre(1), 0.82), wz = pr.width(0.99) * 1.82;
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.035, wz), mats.tail); bar.position.set(X(1) - 0.01, ty, 0); car.add(bar);
+        for (const side of [1, -1]) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.03), mats.tail); c.position.set(X(0.975), ty - 0.02, side * pr.width(0.97) * 0.97); c.rotation.z = 0.12; car.add(c); }
     } else {
         const tl = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, pr.width(0.99) * 1.7), mats.tail);
         tl.position.set(X(0.995) - 0.01, lerp(pr.base(0.99), pr.centre(0.99), 0.72), 0); car.add(tl);
@@ -576,7 +610,8 @@ const CODE_KEYS_1 = ['preset', 'L', 'W', 'nose', 'deck', 'roof', 'tail', 'cabin'
 // version 2 codes also carry the body-style details
 const CODE_KEYS_2 = [...CODE_KEYS_1, 'wbFrac', 'axleShift', 'round', 'fenderH', 'fenderReach', 'cabinStyle', 'cabinWB', 'cabinWT', 'grille', 'lamps', 'bumpers', 'scoop', 'exhaust'];
 // version 3 codes add the newer shape details
-const CODE_KEYS = [...CODE_KEYS_2, 'cross', 'crossB', 'crossW', 'noseW', 'noseTip', 'noseLift', 'mouth', 'sideIntake', 'rearGrille'];
+const CODE_KEYS_3 = [...CODE_KEYS_2, 'cross', 'crossB', 'crossW', 'noseW', 'noseTip', 'noseLift', 'mouth', 'sideIntake', 'rearGrille'];
+const CODE_KEYS = [...CODE_KEYS_3, 'cornerIntakes', 'tailBar', 'diffuser'];
 export function encodeDesign(d) {
     const arr = CODE_KEYS.map(k => {
         const v = d[k];
@@ -586,12 +621,12 @@ export function encodeDesign(d) {
         return v;
     });
     const json = JSON.stringify(arr);
-    return 'SL3-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'SL4-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export function decodeDesign(code) {
-    const m = String(code || '').trim().match(/^SL([123])-([A-Za-z0-9_-]+)$/);
+    const m = String(code || '').trim().match(/^SL([1234])-([A-Za-z0-9_-]+)$/);
     if (!m) return null;
-    const keys = m[1] === '1' ? CODE_KEYS_1 : m[1] === '2' ? CODE_KEYS_2 : CODE_KEYS;
+    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS }[m[1]];
     try {
         let b = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
         const arr = JSON.parse(decodeURIComponent(escape(atob(b))));
@@ -620,14 +655,15 @@ export function decodeDesign(code) {
             d.wbFrac = num(raw.wbFrac, 0.5, 0.65, 0.6); d.axleShift = num(raw.axleShift, -0.06, 0.06, 0); d.round = num(raw.round, 0.3, 0.7, 0.38);
             d.fenderH = num(raw.fenderH, 0, 0.25, 0.06); d.fenderReach = num(raw.fenderReach, 1.8, 3.5, 2.5);
             d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
-            d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods'], 'slim'); d.bumpers = !!raw.bumpers;
-            d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof', 'snorkel'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad'], 'none');
+            d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade'], 'slim'); d.bumpers = !!raw.bumpers;
+            d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof', 'snorkel', 'bonnetvent'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad'], 'none');
         }
-        if (m[1] === '3') {
+        if (m[1] >= '3') {
             d.cross = oneOf(raw.cross, ['flat', 'triple'], 'flat'); d.crossB = num(raw.crossB, 0, 0.12, 0.07); d.crossW = num(raw.crossW, 0, 0.15, 0.09);
             d.noseW = num(raw.noseW, 0.6, 0.95, 0.72); d.noseTip = num(raw.noseTip, 0.6, 1, 0.78); d.noseLift = num(raw.noseLift, 0.5, 3, 2.4);
             d.mouth = !!raw.mouth; d.sideIntake = !!raw.sideIntake; d.rearGrille = !!raw.rearGrille;
         }
+        if (m[1] === '4') { d.cornerIntakes = !!raw.cornerIntakes; d.tailBar = !!raw.tailBar; d.diffuser = !!raw.diffuser; }
         return d;
     } catch (e) { return null; }
 }

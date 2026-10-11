@@ -204,7 +204,7 @@ function onCars(action, id) {
     }
     if (action === 'loadCode') {
         const d = decodeDesign(document.getElementById('share-code-in').value);
-        if (!d) { toast("That code doesn't look right. It should start with SL3-, SL2- or SL1-", 2600); return; }
+        if (!d) { toast("That code doesn't look right. It should start with SL followed by a number", 2600); return; }
         setDesign(d); toast(`Loaded "${d.name}". Tap Save to keep it.`, 2600); return;
     }
     renderPanel();
