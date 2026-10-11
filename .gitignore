@@ -1,0 +1,11 @@
+# Mac and editor files
+.DS_Store
+.claude/
+
+# Picture tools and the original full-size downloads (the app uses the small WebP copies in car-images/)
+tools/
+raw-images/
+contact-sheet*
+
+# Notes for the next coding session
+HANDOVER.md

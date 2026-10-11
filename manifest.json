@@ -1,0 +1,16 @@
+{
+  "name": "Supercar Legends",
+  "short_name": "Supercars",
+  "description": "The story of supercars and hypercars from 1960 to today, for car fans aged 9 to 12.",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#111317",
+  "theme_color": "#111317",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

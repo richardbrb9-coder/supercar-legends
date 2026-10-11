@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Supercar Legends</title>
+    <meta name="description" content="The story of supercars and hypercars from 1960 to today, for car fans aged 9 to 12.">
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#111317">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="icon" href="icon-192.png" type="image/png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="topbar">
+        <button class="brand" data-screen="garage" aria-label="Supercar Legends home">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span class="brand-text">SUPERCAR<b>LEGENDS</b></span>
+        </button>
+        <nav id="main-nav">
+            <button class="nav-btn active" data-screen="garage">Garage</button>
+            <button class="nav-btn" data-screen="timeline">Timeline</button>
+            <button class="nav-btn" data-screen="records">Speed Records</button>
+            <button class="nav-btn" data-screen="trumps">Top Trumps</button>
+            <button class="nav-btn" data-screen="legends">Legends</button>
+            <button class="nav-btn" data-screen="motorsport">Motorsport</button>
+            <button class="nav-btn soon" data-screen="build">Build</button>
+            <button class="nav-btn soon" data-screen="race">Race</button>
+        </nav>
+        <button class="units-btn" id="units-btn" title="Switch between mph and km/h">MPH</button>
+    </header>
+
+    <main>
+        <!-- GARAGE -->
+        <section id="screen-garage" class="screen active">
+            <div class="screen-head">
+                <h1><span class="kicker">The Garage</span>Every legend, 1960 to today</h1>
+                <p class="subtitle" id="garage-subtitle"></p>
+            </div>
+            <div class="toolbar">
+                <input id="garage-search" class="search" type="search" placeholder="Search cars or makers" autocomplete="off" aria-label="Search cars">
+                <label class="select-wrap"><span>Maker</span><select id="garage-maker"></select></label>
+                <label class="select-wrap"><span>Country</span><select id="garage-country"></select></label>
+                <label class="select-wrap"><span>Sort</span>
+                    <select id="garage-sort">
+                        <option value="year">Oldest first</option>
+                        <option value="year-desc">Newest first</option>
+                        <option value="bhp">Most powerful</option>
+                        <option value="mph">Fastest</option>
+                        <option value="z62">Quickest 0–62</option>
+                        <option value="name">A to Z</option>
+                    </select>
+                </label>
+            </div>
+            <div class="chip-row" id="garage-decades"></div>
+            <div class="chip-row" id="garage-types"></div>
+            <div class="car-grid" id="garage-grid"></div>
+        </section>
+
+        <!-- TIMELINE -->
+        <section id="screen-timeline" class="screen">
+            <div class="screen-head">
+                <h1><span class="kicker">Timeline</span>Decade by decade</h1>
+                <p class="subtitle">Tap a decade to see how supercars changed.</p>
+            </div>
+            <div class="decade-bar" id="decade-bar"></div>
+            <div class="decade-panel" id="decade-panel"></div>
+        </section>
+
+        <!-- SPEED RECORDS -->
+        <section id="screen-records" class="screen">
+            <div class="screen-head">
+                <h1><span class="kicker">Speed Records</span>The fastest production car</h1>
+                <p class="subtitle">How the world's fastest road car got faster. Every record here was set on a closed track or a closed road by professional drivers.</p>
+            </div>
+            <div class="panel chart-panel"><div id="records-chart"></div></div>
+            <div class="records-cols">
+                <div class="panel"><h2>The record holders</h2><ol class="record-list" id="record-list"></ol></div>
+                <div class="panel"><h2>Famous runs that don't count</h2><p class="small">A record only counts if the car was a real production car and the run was done in both directions, so wind and slopes even out.</p><ul class="record-list" id="other-runs"></ul></div>
+            </div>
+        </section>
+
+        <!-- TOP TRUMPS -->
+        <section id="screen-trumps" class="screen">
+            <div class="screen-head">
+                <h1><span class="kicker">Game</span>Top Trumps Battle</h1>
+                <p class="subtitle">Pick your car's best stat. Higher power and top speed win. For 0–62 and weight, lower wins!</p>
+            </div>
+            <div class="trumps-score" id="trumps-score"></div>
+            <div class="trumps-table">
+                <div class="trumps-side"><div class="side-label">You</div><div id="trumps-player"></div></div>
+                <div class="trumps-mid"><div id="trumps-msg" class="trumps-msg"></div><button class="big-btn" id="trumps-next">Next round</button></div>
+                <div class="trumps-side"><div class="side-label">Computer</div><div id="trumps-cpu"></div></div>
+            </div>
+        </section>
+
+        <!-- COMING SOON SCREENS -->
+        <section id="screen-legends" class="screen"><div class="soon-panel" data-soon="legends"></div></section>
+        <section id="screen-motorsport" class="screen"><div class="soon-panel" data-soon="motorsport"></div></section>
+        <section id="screen-build" class="screen"><div class="soon-panel" data-soon="build"></div></section>
+        <section id="screen-race" class="screen"><div class="soon-panel" data-soon="race"></div></section>
+
+        <!-- CREDITS -->
+        <section id="screen-credits" class="screen">
+            <div class="screen-head">
+                <h1><span class="kicker">Credits</span>Thank you</h1>
+            </div>
+            <div class="panel credits-intro" id="credits-intro"></div>
+            <div class="credit-list" id="credit-list"></div>
+        </section>
+
+        <footer class="app-footer">
+            <button class="link-btn" data-screen="credits">Picture credits and disclaimer</button>
+        </footer>
+    </main>
+
+    <!-- CAR POP-UP -->
+    <div class="modal" id="car-modal" role="dialog" aria-modal="true" aria-label="Car details">
+        <div class="modal-card" id="modal-card">
+            <button class="close-btn" id="modal-close" aria-label="Close">✕</button>
+            <div class="modal-left">
+                <div class="trump-card big" id="modal-trump"></div>
+            </div>
+            <div class="modal-right">
+                <div class="modal-tags" id="modal-tags"></div>
+                <p class="modal-desc" id="modal-desc"></p>
+                <ul class="fact-list" id="modal-facts"></ul>
+                <div class="engine-line" id="modal-engine"></div>
+                <div class="modal-actions">
+                    <button class="act-btn" id="modal-speak">🔊 Read to me</button>
+                    <button class="act-btn ghost" id="modal-decade"></button>
+                </div>
+                <p class="small credit-line" id="modal-credit"></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" role="status"></div>
+
+    <script src="cars.js"></script>
+    <script src="history.js"></script>
+    <script src="credits.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
