@@ -11,7 +11,13 @@ export const PRESETS = {
                 cross: 'triple', crossB: 0.045, crossW: 0.085, noseW: 0.84, noseTip: 0.93, noseLift: 0.9, wbFrac: 0.545, axleShift: -0.035, round: 0.5, fenderH: 0.02, fenderReach: 3.2, cabinStyle: 'glasshouse', cabinWB: 0.9, cabinWT: 0.74,
                 grille: 'shield', lamps: 'round', bumpers: true, scoop: 'bonnet', exhaust: 'twin',
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'wire', rimColour: 'chrome' } },
-    wedge70:  { label: '70s wedge',       L: 4.20, W: 1.92, nose: 0.40, deck: 0.80, roof: 1.07, tail: 0.98, cabin: [0.36, 0.66], fast: 0.25, ride: 0.11, wheel: 0.33 },
+    // Inspired by the 1970s Italian rally wedge: very short and wide, sharp nose with bonnet louvres, wraparound visor windscreen,
+    // bulging arches, roof spoiler bar, tall flat tail with big round lamps, bronze wheels
+    wedge70:  { label: '70s wedge',       L: 3.71, W: 1.75, nose: 0.36, deck: 0.78, roof: 1.13, tail: 0.97, cabin: [0.33, 0.63], fast: 0.15, ride: 0.12, wheel: 0.33,
+                noseW: 0.62, noseW2: 0.82, noseTip: 0.45, noseLift: 3.0, wbFrac: 0.588, axleShift: 0.0, round: 0.32, fenderH: 0.12, fenderReach: 2.2,
+                cabinStyle: 'visor', cabinWB: 0.84, cabinWT: 0.66, grille: 'none', lamps: 'hidden', bumpers: false, scoop: 'louvres', exhaust: 'twin',
+                roofBar: true, tailBig: true,
+                style: { wing: 'none', splitter: false, skirts: false, rim: 'five', rimColour: 'bronze' } },
     // Inspired by the famous early-1990s British supercar: compact and smooth, cab-forward with a roof intake, lamps under covers,
     // a low nose intake, big side air intakes, a full-width mesh grille at the back and no fixed wing
     super90:  { label: '90s supercar',    L: 4.29, W: 1.82, nose: 0.46, deck: 0.80, roof: 1.14, tail: 0.97, cabin: [0.29, 0.83], fast: 0.95, ride: 0.12, wheel: 0.335,
@@ -24,7 +30,13 @@ export const PRESETS = {
                 wbFrac: 0.6, axleShift: 0.04, round: 0.42, fenderH: 0.16, fenderReach: 2.3, cabinStyle: 'bubble', cabinWB: 0.74, cabinWT: 0.46,
                 grille: 'none', lamps: 'pods', bumpers: false, scoop: 'roof', exhaust: 'quad',
                 style: { wing: 'none', splitter: true, skirts: true, rim: 'ten', rimColour: 'silver' } },
-    longtail: { label: 'Longtail',        L: 5.10, W: 1.98, nose: 0.46, deck: 0.82, roof: 1.10, tail: 0.92, cabin: [0.27, 0.55], fast: 0.9,  ride: 0.09, wheel: 0.36 },
+    // Inspired by the 2020s British streamliner: a teardrop with a very long tail tapering to a narrow tip, a long glass canopy,
+    // covers over the front wheels, slim lamps and a light bar at the tip of the tail
+    longtail: { label: 'Longtail',        L: 5.14, W: 1.99, nose: 0.44, deck: 0.78, roof: 1.12, tail: 0.78, cabin: [0.24, 0.68], fast: 1, ride: 0.1, wheel: 0.35,
+                noseW: 0.5, noseW2: 0.7, noseTip: 0.62, noseLift: 2.6, wbFrac: 0.545, axleShift: -0.07, round: 0.4, fenderH: 0.1, fenderReach: 2.4,
+                tailMid: 0.45, tailW: 0.24, cabinStyle: 'canopy', cabinWB: 0.78, cabinWT: 0.5, grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none',
+                tailBar: true, wheelCovers: true,
+                style: { wing: 'none', splitter: false, skirts: false, rim: 'ten', rimColour: 'silver' } },
     // Inspired by the 2020s Croatian electric hypercar: wide and muscular, long bonnet with a big vent, slim swept LED lamps, big corner
     // intakes, dark glass roof, large side scoops, a full-width light bar, ducktail and deep diffuser, and no exhausts
     electric: { label: 'Electric',        L: 4.75, W: 1.99, nose: 0.48, deck: 0.82, roof: 1.21, tail: 0.98, cabin: [0.32, 0.72], fast: 0.75, ride: 0.11, wheel: 0.36,
@@ -52,8 +64,8 @@ export const ENGINES = {
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
-export const SHAPE_DEFAULTS = { cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
-    grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false, cornerIntakes: false, tailBar: false, diffuser: false };
+export const SHAPE_DEFAULTS = { noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
+    grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false, cornerIntakes: false, tailBar: false, diffuser: false, roofBar: false, tailBig: false, tailMid: 0.96, tailW: 0.88, wheelCovers: false };
 // Apply a body style: its shape, its details, and the parts that suit it
 export function applyPreset(design, key) {
     const { label, style, ...shape } = PRESETS[key];
@@ -105,7 +117,7 @@ function profiles(p) {
     const frontAxle = 0.5 + q.axleShift - wb / 2 / p.L, rearAxle = 0.5 + q.axleShift + wb / 2 / p.L;
     // centre line of the body: bonnet, scuttle, rear deck
     const centre = curve([[0, p.nose * q.noseTip], [0.025, p.nose], [0.14, lerp(p.nose, p.deck, 0.45)], [c0, p.deck * 0.98], [c1, p.deck], [0.94, p.tail], [1, p.tail * 0.93]]);
-    const width = curve([[0, W2 * q.noseW], [0.05, W2 * Math.max(0.9, q.noseW + 0.08)], [frontAxle, W2 * 0.99], [0.45, W2 * 0.95], [rearAxle, W2], [0.95, W2 * 0.96], [1, W2 * 0.88]]);
+    const width = curve([[0, W2 * q.noseW], [0.05, W2 * Math.max(q.noseW2, q.noseW + 0.08)], [frontAxle, W2 * 0.99], [0.45, W2 * 0.95], [rearAxle, W2], [lerp(rearAxle, 0.95, 0.45), W2 * lerp(1, q.tailMid, 0.6)], [0.95, W2 * q.tailMid], [1, W2 * q.tailW]]);
     const archR = wheelR + 0.055;
     // how high the wheel arch reaches at this point (0 if not over a wheel)
     const arch = s => {
@@ -246,6 +258,13 @@ function cabinTexture(d, pr) {
         x.fillStyle = d.paint; rect(pillar, pillar + 0.025, 0.2, 0.4); rect(pillar, pillar + 0.025, 0.6, 0.8);   // door pillars
     }
     if (style === 'bubble') { x.fillStyle = d.paint; rect(rake * 0.9, 1, 0.45, 0.55); }   // painted roof spine
+    if (style === 'visor') {                                     // a curved windscreen wrapping round into the sides, like a helmet visor
+        x.fillStyle = glass;
+        x.beginPath(); x.moveTo(0.02 * W, Y(0.2)); x.lineTo(0.02 * W, Y(0.8));
+        x.quadraticCurveTo((rake + 0.25) * W, Y(0.8), (rake + 0.3) * W, Y(0.74)); x.lineTo((rake + 0.3) * W, Y(0.26));
+        x.quadraticCurveTo((rake + 0.25) * W, Y(0.2), 0.02 * W, Y(0.2)); x.fill();
+        rect(rake + 0.33, 0.7, 0.262, 0.33); rect(rake + 0.33, 0.7, 0.67, 0.738);   // small side windows
+    }
     if (style === 'tallglass') {                                 // big windscreen, tall side glass, painted roof and engine cover
         x.fillStyle = glass;
         rect(0.02, rake + 0.03, 0.255, 0.745);
@@ -371,6 +390,7 @@ function buildMaterials(design) {
         lens: new THREE.MeshPhysicalMaterial({ color: 0x1a2028, roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.45, depthWrite: false }),
         grille: new THREE.MeshStandardMaterial({ color: 0x15171b, metalness: 0.6, roughness: 0.4 }),
         intake: new THREE.MeshStandardMaterial({ color: 0x0b0c0f, roughness: 0.7, side: THREE.DoubleSide }),
+        amber: new THREE.MeshStandardMaterial({ color: 0xff8a00, emissive: 0xff6a00, emissiveIntensity: 0.6 }),
         head: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xdfeaff, emissiveIntensity: 1.2 }),
         tail: new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0xff1a10, emissiveIntensity: 1.4 })
     };
@@ -394,6 +414,11 @@ export function createCar(design) {
         w.position.set(X(s), p.wheel, side * (p.W / 2 - (front ? 0.16 : 0.15)));
         if (side < 0) w.rotation.y = Math.PI;
         w.userData = { front, side };
+        if (front && p.wheelCovers) {
+            // a smooth, slightly domed cover over the outside of the wheel (it turns with the steering but hides the spokes)
+            const cover = new THREE.Mesh(new THREE.CylinderGeometry(p.wheel * 0.7, p.wheel * 0.74, 0.03, 28), mats.paintPlain);
+            cover.rotation.x = Math.PI / 2; cover.position.z = 0.135; w.add(cover);
+        }
         car.add(w); wheels.push(w);
     }
     // lights
@@ -411,6 +436,11 @@ export function createCar(design) {
             for (const [dx, dy, dz] of [[0.06, 0.01, -0.04], [-0.05, 0.035, 0.03]]) {
                 const l = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), mats.head); l.position.set(X(ls) + dx, y + dy, z + side * dz); car.add(l);
             }
+        } else if (q.lamps === 'hidden') {  // closed pop-up lamps: a thin outline of the lid on each side of the nose
+            const ls = 0.07, z = side * pr.width(ls) * 0.6, y = pr.topAt(ls, 0.6) + 0.004;
+            const lid = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.006, 0.3), mats.dark); lid.position.set(X(ls), y, z); lid.rotation.z = -0.16; car.add(lid);
+            const inner = new THREE.Mesh(new THREE.BoxGeometry(0.235, 0.008, 0.275), mats.paintPlain); inner.position.set(X(ls), y + 0.002, z); inner.rotation.z = -0.16; car.add(inner);
+            const ind = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.035, 0.12), mats.amber); ind.position.set(X(0) + 0.005, pr.base(0) + 0.07, side * pr.width(0) * 0.62); car.add(ind);
         } else if (q.lamps === 'blade') {   // slim swept LED blades on each front corner, in an L shape
             const ls = 0.04, z = side * pr.width(ls) * 0.72, y = pr.topAt(ls, 0.72) + 0.005;
             const housing = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.14), mats.lens); housing.position.set(X(ls) - 0.04, y - 0.01, z); housing.rotation.y = side * 0.45; housing.rotation.z = -0.28; car.add(housing);
@@ -461,6 +491,17 @@ export function createCar(design) {
         const ss = lerp(pr.rakeEnd, pr.roofEnd, 0.12), y = pr.roof(ss);
         const sc = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.24), mats.paintPlain); sc.position.set(X(ss) - 0.16, y + 0.01, 0); car.add(sc);
         const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.035, 0.2), mats.dark); mouth.position.set(X(ss) + 0.05, y + 0.02, 0); car.add(mouth);
+    }
+    // rows of louvres on the bonnet, either side of the middle
+    if (q.scoop === 'louvres') for (const side of [1, -1]) for (let i = 0; i < 7; i++) {
+        const ss = 0.1 + i * 0.022, slat = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.012, pr.width(ss) * 0.42), mats.dark);
+        slat.position.set(X(ss), pr.topAt(ss, 0.4) + 0.004, side * pr.width(ss) * 0.36); slat.rotation.z = -0.15; car.add(slat);
+    }
+    // a spoiler bar across the back of the roof, on two struts
+    if (q.roofBar) {
+        const ss = pr.c1 - 0.02, y = pr.roof(lerp(pr.roofEnd, pr.c1, 0.3)) + 0.06, span = pr.width(ss) * 1.4;
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, span), mats.dark); bar.position.set(X(ss), y, 0); bar.rotation.z = 0.15; car.add(bar);
+        for (const side of [1, -1]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.09, 0.03), mats.dark); st.position.set(X(ss) + 0.02, y - 0.05, side * span * 0.42); car.add(st); }
     }
     // a wide dark vent across the bonnet
     if (q.scoop === 'bonnetvent') {
@@ -518,10 +559,18 @@ export function createCar(design) {
             const l = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.03, 16), mats.tail); l.rotation.z = Math.PI / 2;
             l.position.set(X(1) - 0.005, ty, side * pr.width(1) * k); car.add(l);
         }
+    } else if (p.tailBig) {             // one big round lamp on each side of a tall flat tail
+        const ty = lerp(pr.base(1), pr.centre(1), 0.6);
+        for (const side of [1, -1]) {
+            const z = side * pr.width(1) * 0.68;
+            const l = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.03, 24), mats.tail); l.rotation.z = Math.PI / 2; l.position.set(X(1) - 0.005, ty, z); car.add(l);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.014, 8, 24), mats.dark); ring.rotation.y = Math.PI / 2; ring.position.set(X(1) - 0.01, ty, z); car.add(ring);
+            const amber = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.034, 16), mats.amber); amber.rotation.z = Math.PI / 2; amber.position.set(X(1) - 0.01, ty, z); car.add(amber);
+        }
     } else if (p.tailBar) {             // a slim light bar right across the back, curling round the corners
         const ty = lerp(pr.base(1), pr.centre(1), 0.82), wz = pr.width(0.99) * 1.82;
         const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.035, wz), mats.tail); bar.position.set(X(1) - 0.01, ty, 0); car.add(bar);
-        for (const side of [1, -1]) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.03), mats.tail); c.position.set(X(0.975), ty - 0.02, side * pr.width(0.97) * 0.97); c.rotation.z = 0.12; car.add(c); }
+        if (pr.q.tailW > 0.5) for (const side of [1, -1]) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, 0.03), mats.tail); c.position.set(X(0.975), ty - 0.02, side * pr.width(0.97) * 0.97); c.rotation.z = 0.12; car.add(c); }
     } else {
         const tl = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, pr.width(0.99) * 1.7), mats.tail);
         tl.position.set(X(0.995) - 0.01, lerp(pr.base(0.99), pr.centre(0.99), 0.72), 0); car.add(tl);
@@ -611,7 +660,9 @@ const CODE_KEYS_1 = ['preset', 'L', 'W', 'nose', 'deck', 'roof', 'tail', 'cabin'
 const CODE_KEYS_2 = [...CODE_KEYS_1, 'wbFrac', 'axleShift', 'round', 'fenderH', 'fenderReach', 'cabinStyle', 'cabinWB', 'cabinWT', 'grille', 'lamps', 'bumpers', 'scoop', 'exhaust'];
 // version 3 codes add the newer shape details
 const CODE_KEYS_3 = [...CODE_KEYS_2, 'cross', 'crossB', 'crossW', 'noseW', 'noseTip', 'noseLift', 'mouth', 'sideIntake', 'rearGrille'];
-const CODE_KEYS = [...CODE_KEYS_3, 'cornerIntakes', 'tailBar', 'diffuser'];
+const CODE_KEYS_4 = [...CODE_KEYS_3, 'cornerIntakes', 'tailBar', 'diffuser'];
+const CODE_KEYS_5 = [...CODE_KEYS_4, 'roofBar', 'tailBig'];
+const CODE_KEYS = [...CODE_KEYS_5, 'tailMid', 'tailW', 'wheelCovers', 'noseW2'];
 export function encodeDesign(d) {
     const arr = CODE_KEYS.map(k => {
         const v = d[k];
@@ -621,12 +672,12 @@ export function encodeDesign(d) {
         return v;
     });
     const json = JSON.stringify(arr);
-    return 'SL4-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'SL6-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export function decodeDesign(code) {
-    const m = String(code || '').trim().match(/^SL([1234])-([A-Za-z0-9_-]+)$/);
+    const m = String(code || '').trim().match(/^SL([1-6])-([A-Za-z0-9_-]+)$/);
     if (!m) return null;
-    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS }[m[1]];
+    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS }[m[1]];
     try {
         let b = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
         const arr = JSON.parse(decodeURIComponent(escape(atob(b))));
@@ -654,16 +705,18 @@ export function decodeDesign(code) {
         if (m[1] !== '1') {
             d.wbFrac = num(raw.wbFrac, 0.5, 0.65, 0.6); d.axleShift = num(raw.axleShift, -0.06, 0.06, 0); d.round = num(raw.round, 0.3, 0.7, 0.38);
             d.fenderH = num(raw.fenderH, 0, 0.25, 0.06); d.fenderReach = num(raw.fenderReach, 1.8, 3.5, 2.5);
-            d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
-            d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade'], 'slim'); d.bumpers = !!raw.bumpers;
-            d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof', 'snorkel', 'bonnetvent'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad'], 'none');
+            d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass', 'visor'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
+            d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade', 'hidden'], 'slim'); d.bumpers = !!raw.bumpers;
+            d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof', 'snorkel', 'bonnetvent', 'louvres'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad'], 'none');
         }
         if (m[1] >= '3') {
             d.cross = oneOf(raw.cross, ['flat', 'triple'], 'flat'); d.crossB = num(raw.crossB, 0, 0.12, 0.07); d.crossW = num(raw.crossW, 0, 0.15, 0.09);
             d.noseW = num(raw.noseW, 0.6, 0.95, 0.72); d.noseTip = num(raw.noseTip, 0.6, 1, 0.78); d.noseLift = num(raw.noseLift, 0.5, 3, 2.4);
             d.mouth = !!raw.mouth; d.sideIntake = !!raw.sideIntake; d.rearGrille = !!raw.rearGrille;
         }
-        if (m[1] === '4') { d.cornerIntakes = !!raw.cornerIntakes; d.tailBar = !!raw.tailBar; d.diffuser = !!raw.diffuser; }
+        if (m[1] >= '4') { d.cornerIntakes = !!raw.cornerIntakes; d.tailBar = !!raw.tailBar; d.diffuser = !!raw.diffuser; }
+        if (m[1] >= '5') { d.roofBar = !!raw.roofBar; d.tailBig = !!raw.tailBig; }
+        if (m[1] >= '6') { d.tailMid = num(raw.tailMid, 0.4, 1, 0.96); d.tailW = num(raw.tailW, 0.3, 1, 0.88); d.wheelCovers = !!raw.wheelCovers; d.noseW2 = num(raw.noseW2, 0.6, 0.95, 0.9); }
         return d;
     } catch (e) { return null; }
 }
