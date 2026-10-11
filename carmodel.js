@@ -6,10 +6,18 @@ import * as THREE from './lib/three.module.min.js';
 //  DESIGN SETTINGS
 // =====================================================================
 export const PRESETS = {
-    gt60:     { label: '60s GT',          L: 4.45, W: 1.72, nose: 0.66, deck: 0.86, roof: 1.24, tail: 0.84, cabin: [0.50, 0.80], fast: 0.55, ride: 0.13, wheel: 0.33 },
+    // Inspired by the classic 1960s British grand tourer: long bonnet, rounded body, framed windows, chrome trim, wire wheels
+    gt60:     { label: '60s GT',          L: 4.57, W: 1.70, nose: 0.62, deck: 0.84, roof: 1.30, tail: 0.80, cabin: [0.46, 0.86], fast: 0.45, ride: 0.15, wheel: 0.34,
+                noseW: 0.84, noseTip: 0.93, noseLift: 0.9, wbFrac: 0.545, axleShift: -0.035, round: 0.5, fenderH: 0.02, fenderReach: 3.2, cabinStyle: 'glasshouse', cabinWB: 0.9, cabinWT: 0.74,
+                grille: 'shield', lamps: 'round', bumpers: true, scoop: 'bonnet', exhaust: 'twin',
+                style: { wing: 'none', splitter: false, skirts: false, rim: 'wire', rimColour: 'chrome' } },
     wedge70:  { label: '70s wedge',       L: 4.20, W: 1.92, nose: 0.40, deck: 0.80, roof: 1.07, tail: 0.98, cabin: [0.36, 0.66], fast: 0.25, ride: 0.11, wheel: 0.33 },
     super90:  { label: '90s supercar',    L: 4.40, W: 1.90, nose: 0.50, deck: 0.84, roof: 1.12, tail: 0.94, cabin: [0.33, 0.66], fast: 0.65, ride: 0.11, wheel: 0.34 },
-    hyper:    { label: 'Modern hypercar', L: 4.65, W: 2.02, nose: 0.46, deck: 0.80, roof: 1.12, tail: 0.98, cabin: [0.30, 0.62], fast: 0.85, ride: 0.09, wheel: 0.36 },
+    // Inspired by the Italian carbon-fibre hypercars of around 2000: low nose, big front wings, glass bubble canopy, roof scoop, quad exhaust
+    hyper:    { label: 'Modern hypercar', L: 4.45, W: 2.05, nose: 0.40, deck: 0.78, roof: 1.13, tail: 0.96, cabin: [0.29, 0.62], fast: 0.8, ride: 0.10, wheel: 0.36,
+                wbFrac: 0.6, axleShift: 0.04, round: 0.42, fenderH: 0.16, fenderReach: 2.3, cabinStyle: 'bubble', cabinWB: 0.74, cabinWT: 0.46,
+                grille: 'none', lamps: 'pods', bumpers: false, scoop: 'roof', exhaust: 'quad',
+                style: { wing: 'none', splitter: true, skirts: true, rim: 'ten', rimColour: 'silver' } },
     longtail: { label: 'Longtail',        L: 5.10, W: 1.98, nose: 0.46, deck: 0.82, roof: 1.10, tail: 0.92, cabin: [0.27, 0.55], fast: 0.9,  ride: 0.09, wheel: 0.36 },
     electric: { label: 'Electric',        L: 4.60, W: 1.98, nose: 0.56, deck: 0.86, roof: 1.18, tail: 0.94, cabin: [0.26, 0.74], fast: 0.7,  ride: 0.11, wheel: 0.36 }
 };
@@ -21,7 +29,7 @@ export const FINISHES = {
     matte:    { label: 'Matte',    metalness: 0.2,  roughness: 0.85, clearcoat: 0, iridescence: 0 },
     chrome:   { label: 'Chrome',   metalness: 1,    roughness: 0.06, clearcoat: 1, iridescence: 0 }
 };
-export const RIMS = { five: '5-spoke', ten: '10-spoke', mesh: 'Mesh', turbine: 'Turbine', disc: 'Aero disc' };
+export const RIMS = { five: '5-spoke', ten: '10-spoke', mesh: 'Mesh', wire: 'Wire', turbine: 'Turbine', disc: 'Aero disc' };
 export const RIM_COLOURS = { silver: '#C9CED6', black: '#16181C', gold: '#C9A227', bronze: '#8C5A2B', white: '#F4F6F8', chrome: 'chrome' };
 export const WINGS = { none: 'None', ducktail: 'Ducktail', gt: 'GT wing', swan: 'Swan-neck' };
 export const ENGINES = {
@@ -31,8 +39,16 @@ export const ENGINES = {
     hybrid: { label: 'Hybrid V8', bhp: 950,  kg: 350, awd: true,  note: 'V8 plus electric motors',     sound: 100 },
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
-export const DEFAULT = { preset: 'hyper', ...PRESETS.hyper, paint: '#E10600', finish: 'metallic', rim: 'five', rimColour: 'silver', caliper: '#FFB300',
-    rimSize: 1, wing: 'gt', splitter: true, skirts: true, engine: 'v8', name: 'My Supercar',
+// Shape and detail settings every design has (presets that don't mention one get these)
+export const SHAPE_DEFAULTS = { noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
+    grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none' };
+// Apply a body style: its shape, its details, and the parts that suit it
+export function applyPreset(design, key) {
+    const { label, style, ...shape } = PRESETS[key];
+    return Object.assign(design, SHAPE_DEFAULTS, shape, style || {}, { preset: key });
+}
+export const DEFAULT = { preset: 'hyper', ...SHAPE_DEFAULTS, ...(({ label, style, ...shape }) => shape)(PRESETS.hyper), ...PRESETS.hyper.style,
+    paint: '#E10600', finish: 'metallic', caliper: '#FFB300', rimSize: 1, engine: 'v8', name: 'My Supercar',
     livery: 'none', stripeColour: '#F4F6F8', twoTone: false, paint2: '#1B1F26', number: '', tag: '' };
 const STORE_KEY = 'builderDesign';
 export function loadDesign() {
@@ -72,11 +88,12 @@ const spow = (v, p) => Math.sign(v) * Math.pow(Math.abs(v), p);
 function profiles(p) {
     const [c0, c1] = p.cabin;
     const W2 = p.W / 2, wheelR = p.wheel;
-    const wb = p.L * 0.6;                                     // wheelbase
-    const frontAxle = 0.5 - wb / 2 / p.L, rearAxle = 0.5 + wb / 2 / p.L;
+    const q = { ...SHAPE_DEFAULTS, ...p };
+    const wb = p.L * q.wbFrac;                                // wheelbase
+    const frontAxle = 0.5 + q.axleShift - wb / 2 / p.L, rearAxle = 0.5 + q.axleShift + wb / 2 / p.L;
     // centre line of the body: bonnet, scuttle, rear deck
-    const centre = curve([[0, p.nose * 0.78], [0.025, p.nose], [0.14, lerp(p.nose, p.deck, 0.45)], [c0, p.deck * 0.98], [c1, p.deck], [0.94, p.tail], [1, p.tail * 0.93]]);
-    const width = curve([[0, W2 * 0.72], [0.05, W2 * 0.9], [frontAxle, W2 * 0.99], [0.45, W2 * 0.95], [rearAxle, W2], [0.95, W2 * 0.96], [1, W2 * 0.88]]);
+    const centre = curve([[0, p.nose * q.noseTip], [0.025, p.nose], [0.14, lerp(p.nose, p.deck, 0.45)], [c0, p.deck * 0.98], [c1, p.deck], [0.94, p.tail], [1, p.tail * 0.93]]);
+    const width = curve([[0, W2 * q.noseW], [0.05, W2 * Math.max(0.9, q.noseW + 0.08)], [frontAxle, W2 * 0.99], [0.45, W2 * 0.95], [rearAxle, W2], [0.95, W2 * 0.96], [1, W2 * 0.88]]);
     const archR = wheelR + 0.055;
     // how high the wheel arch reaches at this point (0 if not over a wheel)
     const arch = s => {
@@ -89,14 +106,14 @@ function profiles(p) {
     };
     // the wings rise over the wheels, smoothly, so the bonnet sits between them
     const fender = s => {
-        let y = 0; const x = s * p.L, reach = archR * 2.5;
+        let y = 0; const x = s * p.L, reach = archR * q.fenderReach;
         for (const ax of [frontAxle, rearAxle]) {
             const dx = Math.abs(x - ax * p.L);
-            if (dx < reach) { const t = 0.5 + 0.5 * Math.cos(Math.PI * dx / reach); y = Math.max(y, lerp(centre(s) + 0.03, wheelR + archR + 0.06, t)); }
+            if (dx < reach) { const t = 0.5 + 0.5 * Math.cos(Math.PI * dx / reach); y = Math.max(y, lerp(centre(s) + 0.03, wheelR + archR + q.fenderH, t)); }
         }
         return y;
     };
-    const base = s => p.ride + (s < 0.07 ? (0.07 - s) * 2.4 : 0) + (s > 0.9 ? (s - 0.9) * 2.2 : 0);
+    const base = s => p.ride + (s < 0.07 ? (0.07 - s) * q.noseLift : 0) + (s > 0.9 ? (s - 0.9) * 2.2 : 0);
     // the greenhouse (cabin): windscreen rises fast, the roof is flat, then it falls to the tail
     const rakeEnd = c0 + (c1 - c0) * 0.34, roofEnd = c0 + (c1 - c0) * lerp(0.62, 0.42, p.fast);
     const roof = curve([[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, 0.74)], [rakeEnd, p.roof], [roofEnd, p.roof * 0.995], [c1, p.deck]]);
@@ -104,12 +121,12 @@ function profiles(p) {
     // the height of the body surface across the car (u = -1 left side … 1 right side)
     const topAt = (s, u) => { const c = centre(s); return c + (shoulder(s) - c) * Math.pow(Math.abs(u), 3.2); };
     const bottomAt = (s, u) => { const b0 = base(s), a = arch(s), t = Math.min(1, Math.max(0, (Math.abs(u) - 0.5) / 0.16)); return b0 + Math.max(0, a - b0) * t * t * (3 - 2 * t); };
-    return { centre, width, arch, base, roof, topAt, bottomAt, top: centre, c0, c1, frontAxle, rearAxle, wheelR };
+    return { centre, width, arch, base, roof, topAt, bottomAt, top: centre, c0, c1, frontAxle, rearAxle, wheelR, rakeEnd, roofEnd, q };
 }
 
 // Build a closed tube from rings of points, with caps at both ends
-function loft(rings, closedEnds = true, withUV = false) {
-    if (withUV) return loftUV(rings);
+function loft(rings, closedEnds = true, withUV = false, byArc = true) {
+    if (withUV) return loftUV(rings, byArc);
     const K = rings[0].length, pos = [], idx = [];
     rings.forEach(r => r.forEach(v => pos.push(v.x, v.y, v.z)));
     for (let i = 0; i < rings.length - 1; i++) for (let k = 0; k < K; k++) {
@@ -129,12 +146,12 @@ function loft(rings, closedEnds = true, withUV = false) {
 // Same as loft, with texture coordinates: u runs nose to tail, v runs around the body by distance, starting underneath
 // (0 = underneath, about 0.25 = right side, 0.5 = top, 0.75 = left side). The seam is hidden under the car, and the first
 // point of each ring is repeated so the texture doesn't smear there.
-function loftUV(rings) {
+function loftUV(rings, byArc = true) {
     const K = rings[0].length, R = rings.length, pos = [], uv = [], idx = [];
     rings.forEach((r, i) => {
         const cum = [0];
         for (let k = 1; k <= K; k++) cum.push(cum[k - 1] + r[k % K].distanceTo(r[k - 1]));
-        for (let k = 0; k <= K; k++) { const v = r[k % K]; pos.push(v.x, v.y, v.z); uv.push(i / (R - 1), cum[k] / cum[K]); }
+        for (let k = 0; k <= K; k++) { const v = r[k % K]; pos.push(v.x, v.y, v.z); uv.push(i / (R - 1), byArc ? cum[k] / cum[K] : k / K); }
     });
     const W = K + 1;
     for (let i = 0; i < R - 1; i++) for (let k = 0; k < K; k++) {
@@ -158,7 +175,7 @@ function bodyGeometry(p, pr) {
         const s = i / N, x = p.L / 2 - s * p.L, w = pr.width(s), ring = [];
         for (let k = 0; k < K; k++) {
             const a = (k / K) * Math.PI * 2 - Math.PI / 2, c = Math.cos(a), sn = Math.sin(a);   // start underneath
-            const u = spow(c, 0.38), v = spow(sn, 0.5);       // a rounded square
+            const u = spow(c, pr.q.round), v = spow(sn, 0.5 + (pr.q.round - 0.38) * 0.6);   // a rounded square (rounder for older styles)
             const yt = pr.topAt(s, u), yb = Math.min(yt - 0.03, pr.bottomAt(s, u)), mid = (yt + yb) / 2;
             const y = v >= 0 ? lerp(mid, yt, v) : lerp(mid, yb, -v);
             ring.push(new THREE.Vector3(x, y, u * w * (1 - Math.max(0, v) * 0.06)));
@@ -172,16 +189,38 @@ function cabinGeometry(p, pr) {
     for (let i = 0; i <= N; i++) {
         const s = lerp(pr.c0, pr.c1, i / N), x = p.L / 2 - s * p.L;
         const yb = pr.centre(s) - 0.05, yt = Math.max(yb + 0.02, pr.roof(s));
-        const wb = pr.width(s) * 0.82, wt = pr.width(s) * 0.58, ring = [];
+        const wb = pr.width(s) * pr.q.cabinWB, wt = pr.width(s) * pr.q.cabinWT, ring = [];
         for (let k = 0; k < K; k++) {
-            const a = (k / K) * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a);
+            const a = (k / K) * Math.PI * 2 - Math.PI / 2, c = Math.cos(a), sn = Math.sin(a);   // start underneath, like the body
             const t = (sn + 1) / 2;                          // 0 at the bottom of the ring, 1 at the top
             const y = lerp(yb, yt, Math.pow(t, 0.8));
             ring.push(new THREE.Vector3(x, y, spow(c, 0.5) * lerp(wb, wt, t)));
         }
         rings.push(ring);
     }
-    return loft(rings);
+    return loft(rings, true, true, false);
+}
+// The cabin is painted with its windows: framed glasshouse (60s), glass bubble with a painted roof spine, or all-glass canopy
+function cabinTexture(d, pr) {
+    const W = 512, H = 256, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d'), Y = v => (1 - v) * H, glass = '#0b0f14';
+    const span = pr.c1 - pr.c0, rake = (pr.rakeEnd - pr.c0) / span, roofEnd = (pr.roofEnd - pr.c0) / span;
+    const rect = (u0, u1, v0, v1) => x.fillRect(u0 * W, Y(v1), (u1 - u0) * W, Y(v0) - Y(v1));
+    const style = pr.q.cabinStyle;
+    x.fillStyle = style === 'glasshouse' ? d.paint : glass; x.fillRect(0, 0, W, H);
+    if (style === 'glasshouse') {
+        x.fillStyle = glass;
+        rect(0.03, rake + 0.02, 0.27, 0.73);                     // windscreen
+        const sideEnd = Math.min(0.9, roofEnd + 0.25);
+        rect(rake + 0.035, sideEnd, 0.15, 0.36);                 // right side windows
+        rect(rake + 0.035, sideEnd, 0.64, 0.85);                 // left side windows
+        rect(roofEnd + 0.08, 0.97, 0.36, 0.64);                  // rear window
+        const pillar = lerp(rake, sideEnd, 0.52);
+        x.fillStyle = d.paint; rect(pillar, pillar + 0.025, 0.1, 0.4); rect(pillar, pillar + 0.025, 0.6, 0.9);   // door pillars
+    }
+    if (style === 'bubble') { x.fillStyle = d.paint; rect(rake * 0.9, 1, 0.43, 0.57); }   // painted roof spine
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    return t;
 }
 
 // =====================================================================
@@ -215,6 +254,10 @@ function makeWheel(p, mats, front) {
     if (p.rim === 'ten') spoke(10, rimR * 0.09);
     if (p.rim === 'mesh') { spoke(14, rimR * 0.05); const m = new THREE.Group(); face.add(m); spoke(14, rimR * 0.05, 0.5); }
     if (p.rim === 'turbine') spoke(12, rimR * 0.16, 0.6, 0.02);
+    if (p.rim === 'wire') {                 // many thin crossed spokes and a central spinner
+        spoke(24, rimR * 0.022, 0.18, 0.01); spoke(24, rimR * 0.022, -0.18, 0.01);
+        for (const r of [0, Math.PI / 2]) { const ear = new THREE.Mesh(new THREE.BoxGeometry(rimR * 0.5, rimR * 0.08, 0.04), mats.rim); ear.rotation.z = r + 0.4; ear.position.z = 0.03; face.add(ear); }
+    }
     if (p.rim === 'disc') {
         const d = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.98, rimR * 0.98, 0.03, 32), mats.rim);
         d.rotation.x = Math.PI / 2; face.add(d);
@@ -291,6 +334,9 @@ function buildMaterials(design) {
         brake: new THREE.MeshStandardMaterial({ color: 0x5a5f68, metalness: 0.9, roughness: 0.4 }),
         caliper: new THREE.MeshStandardMaterial({ color: design.caliper, roughness: 0.4 }),
         dark: new THREE.MeshStandardMaterial({ color: 0x0b0c0f, roughness: 0.6 }),
+        chrome: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.08 }),
+        lens: new THREE.MeshPhysicalMaterial({ color: 0x1a2028, roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.45, depthWrite: false }),
+        grille: new THREE.MeshStandardMaterial({ color: 0x15171b, metalness: 0.6, roughness: 0.4 }),
         head: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xdfeaff, emissiveIntensity: 1.2 }),
         tail: new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0xff1a10, emissiveIntensity: 1.4 })
     };
@@ -301,7 +347,9 @@ export function createCar(design) {
     const p = design, pr = profiles(p);
     const car = new THREE.Group();
     const body = new THREE.Mesh(bodyGeometry(p, pr), mats.paint); car.add(body);
-    car.add(new THREE.Mesh(cabinGeometry(p, pr), mats.glass));
+    const cabinMat = new THREE.MeshPhysicalMaterial({ map: cabinTexture(p, pr), metalness: 0.4, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide });
+    mats.cabin = cabinMat;
+    car.add(new THREE.Mesh(cabinGeometry(p, pr), cabinMat));
     const X = s => p.L / 2 - s * p.L;
     // wheels
     for (const [s, front] of [[pr.frontAxle, true], [pr.rearAxle, false]]) for (const side of [1, -1]) {
@@ -312,14 +360,79 @@ export function createCar(design) {
         car.add(w); wheels.push(w);
     }
     // lights
+    const q = pr.q;
     for (const side of [1, -1]) {
-        const h = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.36), mats.head);
-        h.position.set(X(0.045), pr.topAt(0.045, 0.62) - 0.02, side * pr.width(0.045) * 0.62); h.rotation.z = -0.3; car.add(h);
+        if (q.lamps === 'round') {          // round lamps in the front corners, behind glass covers
+            const z = side * pr.width(0) * 0.66, y = lerp(pr.base(0), pr.topAt(0, 0.66), 0.62);
+            const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.04, 20), mats.head); lamp.rotation.z = Math.PI / 2;
+            lamp.position.set(X(0) + 0.01, y, z); car.add(lamp);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.014, 8, 24), mats.chrome); ring.rotation.y = Math.PI / 2; ring.position.set(X(0) + 0.03, y, z); car.add(ring);
+        } else if (q.lamps === 'pods') {    // two stacked lamps in a dark teardrop pod on each front wing
+            const ls = 0.05, z = side * pr.width(ls) * 0.66, y = pr.topAt(ls, 0.66) - 0.04;
+            const pod = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), mats.lens); pod.scale.set(0.2, 0.08, 0.14);
+            pod.position.set(X(ls), y, z); pod.rotation.z = -0.35; pod.rotation.y = side * 0.35; car.add(pod);
+            for (const [dx, dy, dz] of [[0.06, 0.01, -0.04], [-0.05, 0.035, 0.03]]) {
+                const l = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), mats.head); l.position.set(X(ls) + dx, y + dy, z + side * dz); car.add(l);
+            }
+        } else {
+            const h = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.36), mats.head);
+            h.position.set(X(0.045), pr.topAt(0.045, 0.62) - 0.02, side * pr.width(0.045) * 0.62); h.rotation.z = -0.3; car.add(h);
+        }
     }
-    const tl = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, pr.width(0.99) * 1.7), mats.tail);
-    tl.position.set(X(0.995) - 0.01, lerp(pr.base(0.99), pr.centre(0.99), 0.72), 0); car.add(tl);
+    // grille: a wide shield shape on the nose
+    if (q.grille === 'shield') {
+        const gw = pr.width(0) * 0.42, gh = (pr.centre(0) - pr.base(0)) * 0.62, sh = new THREE.Shape();
+        sh.moveTo(-gw, 0); sh.lineTo(gw, 0); sh.quadraticCurveTo(gw * 1.02, gh * 0.75, gw * 0.55, gh); sh.quadraticCurveTo(0, gh * 1.18, -gw * 0.55, gh); sh.quadraticCurveTo(-gw * 1.02, gh * 0.75, -gw, 0);
+        const gy = pr.base(0) + 0.05;
+        const make = (shape, mat, depth, dx) => { const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false }); g.rotateY(Math.PI / 2); const m = new THREE.Mesh(g, mat); m.position.set(X(0) + dx, gy, 0); car.add(m); return m; };
+        make(sh, mats.chrome, 0.02, -0.005);
+        const inner = make(sh, mats.grille, 0.02, 0.006); inner.scale.set(1, 0.86, 0.9); inner.position.y += gh * 0.06;
+        for (let i = 1; i < 6; i++) { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.008, gw * 1.75), mats.chrome); bar.position.set(X(0) + 0.03, gy + gh * i / 6.5, 0); car.add(bar); }
+    }
+    // chrome bumpers with overriders
+    if (q.bumpers) for (const [s0, dir] of [[0, 1], [1, -1]]) {
+        const y = pr.base(s0) + 0.03, wz = pr.width(s0) * 1.85;
+        const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, wz, 10), mats.chrome); bar.rotation.x = Math.PI / 2;
+        bar.position.set(X(s0) + dir * 0.04, y, 0); car.add(bar);
+        for (const side of [1, -1]) { const ov = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.2, 10), mats.chrome); ov.position.set(X(s0) + dir * 0.05, y + 0.07, side * wz * 0.3); car.add(ov); }
+    }
+    // scoops: on the bonnet (60s) or on the roof (hypercar)
+    if (q.scoop === 'bonnet') {
+        const ss = 0.17, sc = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), mats.paintPlain);
+        sc.scale.set(0.3, 0.05, 0.2); sc.position.set(X(ss), pr.centre(ss) - 0.01, 0); car.add(sc);
+        const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.03, 0.3), mats.dark); mouth.position.set(X(ss) + 0.28, pr.centre(ss) + 0.012, 0); car.add(mouth);
+    }
+    if (q.scoop === 'roof') {
+        const s0 = lerp(pr.rakeEnd, pr.roofEnd, 0.35), s1 = Math.min(pr.roofEnd + 0.04, s0 + 0.6 / p.L);
+        const sh = new THREE.Shape(), len = (s1 - s0) * p.L, h0 = pr.roof(s0), h1 = pr.roof(s1);
+        sh.moveTo(0, h0 - 0.03); sh.lineTo(0, h0 + 0.1); sh.quadraticCurveTo(len * 0.5, h0 + 0.11, len, h1 + 0.015); sh.lineTo(len, h1 - 0.03); sh.lineTo(0, h0 - 0.03);
+        const g = new THREE.ExtrudeGeometry(sh, { depth: 0.28, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
+        g.translate(0, 0, -0.14);
+        const sc = new THREE.Mesh(g, mats.paintPlain); sc.rotation.y = Math.PI; sc.position.set(X(s0), 0, 0); car.add(sc);
+        const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.09, 0.22), mats.dark); mouth.position.set(X(s0) + 0.02, h0 + 0.06, 0); car.add(mouth);
+    }
+    // exhausts
+    if (q.exhaust === 'quad' || q.exhaust === 'twin') {
+        const y0 = lerp(pr.base(0.99), pr.centre(0.99), q.exhaust === 'quad' ? 0.45 : 0.15);
+        const pipes = q.exhaust === 'quad' ? [[0.065, 0.065], [-0.065, 0.065], [0.065, -0.065], [-0.065, -0.065]] : [[0.32, 0], [-0.32, 0]];
+        if (q.exhaust === 'quad') { const surround = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 24), mats.dark); surround.rotation.z = Math.PI / 2; surround.position.set(X(1) - 0.005, y0, 0); car.add(surround); }
+        for (const [dz, dy] of pipes) {
+            const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.14, 14, 1, true), mats.chrome); pipe.rotation.z = Math.PI / 2;
+            pipe.position.set(X(1) - 0.02, y0 + dy, dz); car.add(pipe);
+        }
+    }
+    if (p.lamps === 'round' || p.lamps === 'pods') {   // classic round tail lamps, two each side
+        const ty = lerp(pr.base(1), pr.centre(1), 0.7);
+        for (const side of [1, -1]) for (const k of [0.62, 0.82]) {
+            const l = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.03, 16), mats.tail); l.rotation.z = Math.PI / 2;
+            l.position.set(X(1) - 0.005, ty, side * pr.width(1) * k); car.add(l);
+        }
+    } else {
+        const tl = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, pr.width(0.99) * 1.7), mats.tail);
+        tl.position.set(X(0.995) - 0.01, lerp(pr.base(0.99), pr.centre(0.99), 0.72), 0); car.add(tl);
+    }
     // aero
-    if (p.splitter) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.025, p.W * 0.86), mats.carbon); sp.position.set(X(0.02), p.ride + 0.06, 0); car.add(sp); }
+    if (p.splitter) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.025, p.W * 0.86), mats.carbon); sp.position.set(X(0.02) - 0.12, pr.base(0.03) + 0.01, 0); car.add(sp); }
     if (p.skirts) for (const side of [1, -1]) {
         const sk = new THREE.Mesh(new THREE.BoxGeometry(p.L * 0.3, 0.06, 0.05), mats.carbon);
         sk.position.set(X(0.5), p.ride + 0.04, side * (pr.width(0.5) + 0.0)); car.add(sk);
@@ -397,8 +510,10 @@ const CARS_KEY = 'builderCars';
 export function loadSavedCars() { try { return JSON.parse(localStorage.getItem(CARS_KEY)) || []; } catch (e) { return []; } }
 export function storeSavedCars(list) { try { localStorage.setItem(CARS_KEY, JSON.stringify(list)); } catch (e) { /* storage unavailable */ } }
 // A share code is the design's settings in a fixed order, as short text. No personal data, works offline.
-const CODE_KEYS = ['preset', 'L', 'W', 'nose', 'deck', 'roof', 'tail', 'cabin', 'fast', 'ride', 'wheel', 'paint', 'finish', 'rim', 'rimColour', 'caliper',
+const CODE_KEYS_1 = ['preset', 'L', 'W', 'nose', 'deck', 'roof', 'tail', 'cabin', 'fast', 'ride', 'wheel', 'paint', 'finish', 'rim', 'rimColour', 'caliper',
     'wing', 'splitter', 'skirts', 'engine', 'name', 'livery', 'stripeColour', 'twoTone', 'paint2', 'number', 'tag'];
+// version 2 codes also carry the body-style details
+const CODE_KEYS = [...CODE_KEYS_1, 'wbFrac', 'axleShift', 'round', 'fenderH', 'fenderReach', 'cabinStyle', 'cabinWB', 'cabinWT', 'grille', 'lamps', 'bumpers', 'scoop', 'exhaust'];
 export function encodeDesign(d) {
     const arr = CODE_KEYS.map(k => {
         const v = d[k];
@@ -408,20 +523,21 @@ export function encodeDesign(d) {
         return v;
     });
     const json = JSON.stringify(arr);
-    return 'SL1-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'SL2-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export function decodeDesign(code) {
-    const m = String(code || '').trim().match(/^SL1-([A-Za-z0-9_-]+)$/);
+    const m = String(code || '').trim().match(/^SL([12])-([A-Za-z0-9_-]+)$/);
     if (!m) return null;
+    const keys = m[1] === '1' ? CODE_KEYS_1 : CODE_KEYS;
     try {
-        let b = m[1].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
+        let b = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
         const arr = JSON.parse(decodeURIComponent(escape(atob(b))));
-        if (!Array.isArray(arr) || arr.length !== CODE_KEYS.length) return null;
+        if (!Array.isArray(arr) || arr.length !== keys.length) return null;
         const d = { ...DEFAULT };
         const num = (v, lo, hi, def) => typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def;
         const pickKey = (v, obj, def) => Object.prototype.hasOwnProperty.call(obj, v) ? v : def;
         const colour = (v, def) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : def;
-        const raw = Object.fromEntries(CODE_KEYS.map((k, i) => [k, arr[i]]));
+        const raw = Object.fromEntries(keys.map((k, i) => [k, arr[i]]));
         d.preset = typeof raw.preset === 'string' ? raw.preset.slice(0, 20) : 'custom';
         d.L = num(raw.L, 4.0, 5.2, d.L); d.W = num(raw.W, 1.7, 2.1, d.W); d.nose = num(raw.nose, 0.38, 0.72, d.nose);
         d.deck = num(raw.deck, 0.7, 0.95, d.deck); d.roof = num(raw.roof, 1.0, 1.35, d.roof); d.tail = num(raw.tail, 0.78, 1.05, d.tail);
@@ -434,6 +550,16 @@ export function decodeDesign(code) {
         d.livery = typeof raw.livery === 'string' && ['none', 'twin', 'single', 'side', 'chequer', 'lightning'].includes(raw.livery) ? raw.livery : 'none';
         d.stripeColour = colour(raw.stripeColour, d.stripeColour); d.twoTone = !!raw.twoTone; d.paint2 = colour(raw.paint2, d.paint2);
         d.number = String(raw.number ?? '').replace(/[^0-9]/g, '').slice(0, 2); d.tag = String(raw.tag ?? '').slice(0, 14);
+        // body-style details (version 2 codes); older codes get the plain defaults
+        const oneOf = (v, list, def) => list.includes(v) ? v : def;
+        Object.assign(d, SHAPE_DEFAULTS);
+        if (m[1] === '2') {
+            d.wbFrac = num(raw.wbFrac, 0.5, 0.65, 0.6); d.axleShift = num(raw.axleShift, -0.06, 0.06, 0); d.round = num(raw.round, 0.3, 0.7, 0.38);
+            d.fenderH = num(raw.fenderH, 0, 0.25, 0.06); d.fenderReach = num(raw.fenderReach, 1.8, 3.5, 2.5);
+            d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
+            d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods'], 'slim'); d.bumpers = !!raw.bumpers;
+            d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad'], 'none');
+        }
         return d;
     } catch (e) { return null; }
 }

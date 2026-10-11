@@ -323,16 +323,6 @@ button.stat:active { transform: scale(.98); }
 .oc-num { position: absolute; left: 8px; top: 8px; width: 44px; height: 44px; display: grid; place-items: center; background: var(--amber); color: #111; font-family: var(--display); font-weight: 900; font-size: 1.4rem; clip-path: polygon(20% 0, 100% 0, 80% 100%, 0 100%); }
 .order-card h3 { font-size: .98rem; margin: 10px 8px 2px; line-height: 1.2; }
 .oc-year { font-family: var(--display); font-weight: 900; color: var(--amber); }
-.my-car-photo { display: grid; place-items: center; background: radial-gradient(circle at 50% 60%, var(--tc), #111317 75%); }
-.my-car-label { font-family: var(--display); font-weight: 900; font-size: .9rem; letter-spacing: .08em; text-shadow: 0 2px 6px rgba(0,0,0,.6); z-index: 1; }
-.drag-stage canvas { width: 100%; height: auto; display: block; background: #111317; border: 1px solid var(--line); }
-.drag-controls { display: flex; gap: 14px; align-items: center; margin-top: 12px; flex-wrap: wrap; }
-.drag-readout { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 48px; }
-.drag-msg { width: 100%; font-family: var(--head); font-size: 1.2rem; color: var(--lime); }
-.drag-msg.lose { color: var(--red-2); }
-.drag-btn { width: 200px; height: 110px; border: 0; background: radial-gradient(circle at 50% 35%, #FF3B30, #A00400); color: #fff; font-family: var(--display); font-weight: 900; font-size: 1.6rem; letter-spacing: .08em;
-            clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%); touch-action: none; user-select: none; -webkit-user-select: none; }
-.drag-btn:active { transform: scale(.96); filter: brightness(1.2); }
 
 @media (max-width: 900px) {
     .story-tabs { grid-template-columns: repeat(3, 1fr); }
@@ -346,8 +336,7 @@ button.stat:active { transform: scale(.98); }
     .chapter { grid-template-columns: 40px 1fr; padding: 12px; gap: 10px; }
     .ch-num { font-size: 1.3rem; }
     .answer-grid { grid-template-columns: 1fr; }
-    .drag-btn { width: 100%; height: 90px; }
-    .mini-car-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .mini-car-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 /* ---------- Build (3D garage) ---------- */
 .build-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; margin-bottom: 12px; }

@@ -1,7 +1,7 @@
 // Supercar Legends: racing. Loaded only when the Race screen first opens.
 // Arcade driving, not a simulator. Your car is the one you designed in the Build screen.
 import * as THREE from './lib/three.module.min.js';
-import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints } from './carmodel.js';
+import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
 
 // =====================================================================
 //  THE TRACK (a closed spline; everything else is built along it)
@@ -196,7 +196,8 @@ function rivalDesign(i) {
     const keys = Object.keys(PRESETS), preset = keys[(i * 2 + 1 + Math.floor(Math.random() * 2)) % keys.length];
     const paint = PAINTS.filter(c => c !== loadDesign().paint)[(i * 3 + Math.floor(Math.random() * 3)) % 10];
     const engines = Object.keys(ENGINES), rims = Object.keys(RIMS);
-    return { ...DEFAULT, ...PRESETS[preset], preset, paint, finish: ['gloss', 'metallic', 'pearl'][i % 3], engine: engines[(i + 1) % engines.length],
+    const d = applyPreset({ ...DEFAULT }, preset);
+    return { ...d, paint, finish: ['gloss', 'metallic', 'pearl'][i % 3], engine: engines[(i + 1) % engines.length],
              rim: rims[(i * 2) % rims.length], rimColour: ['silver', 'black', 'gold'][i % 3], wing: ['gt', 'ducktail', 'swan'][i % 3] };
 }
 

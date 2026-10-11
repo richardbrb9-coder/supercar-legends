@@ -3,7 +3,7 @@ import * as THREE from './lib/three.module.min.js';
 import { OrbitControls } from './lib/addons/OrbitControls.js';
 import { RoomEnvironment } from './lib/addons/RoomEnvironment.js';
 import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, LIVERIES, UNLOCKS, loadDesign, saveDesign as saveDesignTo, createCar, carStats,
-    medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign } from './carmodel.js';
+    medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign, applyPreset } from './carmodel.js';
 
 // =====================================================================
 //  SCENE
@@ -129,7 +129,7 @@ function renderPanel() {
             <p class="small">Send this code to a friend so they can load your design. It only contains the car's settings.</p>
             <div class="opts"><button class="opt" data-cars="code">Make share code</button></div>
             ${shareCode ? `<div class="code-row"><input type="text" readonly value="${esc(shareCode)}" id="share-code-out"><button class="opt" data-cars="copy">Copy</button></div>` : ''}
-            <div class="code-row"><input type="text" placeholder="Paste a friend's code (starts SL1-)" id="share-code-in"><button class="opt" data-cars="loadCode">Load</button></div>
+            <div class="code-row"><input type="text" placeholder="Paste a friend's code (starts SL)" id="share-code-in"><button class="opt" data-cars="loadCode">Load</button></div>
             <p class="b-label">Unlocks</p><p class="small">You have ${pts} medal point${pts === 1 ? '' : 's'} from racing.${next ? ` Next: <b>${next.label}</b> at ${next.pts} points.` : ' Everything is unlocked!'}</p>
             <ul class="unlock-list">${UNLOCKS.map(u => `<li class="${pts >= u.pts ? 'got' : ''}">${pts >= u.pts ? '✓' : '🔒'} ${u.label} <span>${u.pts} pts</span></li>`).join('')}</ul>`;
     }
@@ -204,7 +204,7 @@ function onCars(action, id) {
     }
     if (action === 'loadCode') {
         const d = decodeDesign(document.getElementById('share-code-in').value);
-        if (!d) { toast("That code doesn't look right. It should start with SL1-", 2600); return; }
+        if (!d) { toast("That code doesn't look right. It should start with SL2- or SL1-", 2600); return; }
         setDesign(d); toast(`Loaded "${d.name}". Tap Save to keep it.`, 2600); return;
     }
     renderPanel();
@@ -214,7 +214,7 @@ function onPanelClick(e) {
     const d = b.dataset;
     if (d.btab) { panelTab = d.btab; renderPanel(); return; }
     if (d.cars) { onCars(d.cars, d.id); return; }
-    if (d.preset) { Object.assign(design, PRESETS[d.preset], { preset: d.preset }); renderPanel(); changed(); return; }
+    if (d.preset) { applyPreset(design, d.preset); renderPanel(); changed(); return; }
     if (d.rim) { if (lockedToast('rim', d.rim)) return; design.rim = d.rim; }
     else if (d.rimcol) { if (lockedToast('rimColour', d.rimcol)) return; design.rimColour = d.rimcol; }
     else if (d.caliper) design.caliper = d.caliper;
