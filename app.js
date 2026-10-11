@@ -128,24 +128,30 @@ function toast(msg, ms = 1800) {
 //  NAVIGATION
 // =====================================================================
 let currentScreen = 'garage';
+// Other files (stories.js, games.js) add what happens when a screen opens or closes
+const SCREEN_ENTER = {}, SCREEN_LEAVE = [];
+const GAME_SCREENS = ['games', 'trumps', 'guess', 'quiz', 'order', 'drag'];
 function switchScreen(screenId) {
+    const navId = GAME_SCREENS.includes(screenId) ? 'games' : screenId;
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === `screen-${screenId}`));
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === screenId));
-    const btn = document.querySelector(`.nav-btn[data-screen="${screenId}"]`);
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === navId));
+    const btn = document.querySelector(`.nav-btn[data-screen="${navId}"]`);
     if (btn) btn.scrollIntoView({ inline: 'nearest', block: 'nearest' });
     currentScreen = screenId;
     stopSpeaking(); closeModal();
+    SCREEN_LEAVE.forEach(fn => fn(screenId));
     window.scrollTo({ top: 0 });
     if (screenId === 'timeline') renderTimeline();
     if (screenId === 'records') renderRecords();
     if (screenId === 'trumps' && !TT) trumpsNewGame();
     if (screenId === 'credits') renderCredits();
+    if (SCREEN_ENTER[screenId]) SCREEN_ENTER[screenId]();
 }
 document.addEventListener('click', e => {
     const nav = e.target.closest('[data-screen]');
     if (nav) { switchScreen(nav.dataset.screen); return; }
     const card = e.target.closest('.car-card, [data-car]');
-    if (card) openModal(carById[card.dataset.id || card.dataset.car]);
+    if (card && !card.closest('.no-open')) openModal(carById[card.dataset.id || card.dataset.car]);
 });
 document.getElementById('units-btn').onclick = () => {
     units = units === 'mph' ? 'kmh' : 'mph'; storageSet('units', units); updateUnitsButton();
@@ -457,8 +463,6 @@ document.getElementById('trumps-next').onclick = trumpsNextRound;
 //  COMING SOON
 // =====================================================================
 const SOON = {
-    legends: ['Legends', 'The people behind the cars: Enzo Ferrari, Ferruccio Lamborghini, Colin Chapman, Eric Broadley, Roy Lunn, Carroll Shelby, Gordon Murray, Horacio Pagani, Christian von Koenigsegg, Mate Rimac and more.'],
-    motorsport: ['Motorsport', 'How racing created supercars: Ford v Ferrari at Le Mans, Colin Chapman and Lotus, homologation specials, Formula 1 ideas on the road, and the battles for lap and speed records.'],
     build: ['Build your own supercar', 'A 3D garage where you design your own car: body shape, wings, wheels, paint, liveries and engine. Then save it and share it with a code.'],
     race: ['Race', 'Race the cars you build on tracks made in the app, against the computer or your own ghost lap.']
 };
@@ -474,7 +478,7 @@ function renderCredits() {
     const n = Object.keys(CREDITS).length;
     document.getElementById('credits-intro').innerHTML = `
         <p><b>Supercar Legends is not connected to, or endorsed by, any car company.</b> Car names are used only as facts about history. The app shows no car-maker logos, and cars you build in the app are your own designs.</p>
-        <p><b>Photos:</b> ${n} free-licence photos from <a href="https://commons.wikimedia.org" target="_blank" rel="noopener">Wikimedia Commons</a>. Thank you to every photographer below. Tap a name to see the original.</p>
+        <p><b>Photos:</b> ${n + Object.keys(typeof PEOPLE_CREDITS !== 'undefined' ? PEOPLE_CREDITS : {}).length} free-licence photos from <a href="https://commons.wikimedia.org" target="_blank" rel="noopener">Wikimedia Commons</a>. Thank you to every photographer below. Tap a name to see the original.</p>
         <p><b>Facts:</b> figures are the makers' claims where there are any, checked against Wikipedia and other sources in October 2026. Different sources sometimes give different numbers.</p>
         <p><b>Fonts:</b> Orbitron, Russo One and Exo 2, all under the SIL Open Font Licence, saved inside the app. <b>3D:</b> three.js (MIT licence), for the builder that's coming soon.</p>`;
     document.getElementById('credit-list').innerHTML = cars.filter(c => CREDITS[c.id]).sort(SORTS.name).map(c => {

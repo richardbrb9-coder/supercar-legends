@@ -1,7 +1,7 @@
-const CACHE_NAME = 'supercar-legends-v1'; // Bump this on every change so tablets pick up the new version
+const CACHE_NAME = 'supercar-legends-v2'; // Bump this on every change so tablets pick up the new version
 
 // The car list and picture credits, so every photo can be saved for offline use.
-importScripts('cars.js', 'credits.js');
+importScripts('cars.js', 'credits.js', 'people-credits.js');
 
 // Everything is stored inside the app (no CDNs), and all addresses are relative so it works in a GitHub Pages subfolder.
 const CORE_FILES = [
@@ -11,6 +11,11 @@ const CORE_FILES = [
     './app.js',
     './cars.js',
     './history.js',
+    './people.js',
+    './people-credits.js',
+    './motorsport.js',
+    './stories.js',
+    './games.js',
     './credits.js',
     './manifest.json',
     './icon-192.png',
@@ -30,7 +35,8 @@ const LIB_FILES = [
     './lib/addons/OrbitControls.js',
     './lib/addons/RoomEnvironment.js'
 ];
-const CAR_PICTURES = Object.keys(IMAGE_CREDITS).map((id) => `./car-images/${id}.webp`);
+const CAR_PICTURES = Object.keys(IMAGE_CREDITS).map((id) => `./car-images/${id}.webp`)
+    .concat(Object.keys(PEOPLE_CREDITS).map((id) => `./people-images/${id}.webp`));
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();

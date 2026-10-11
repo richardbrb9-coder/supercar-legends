@@ -24,9 +24,9 @@
             <button class="nav-btn active" data-screen="garage">Garage</button>
             <button class="nav-btn" data-screen="timeline">Timeline</button>
             <button class="nav-btn" data-screen="records">Speed Records</button>
-            <button class="nav-btn" data-screen="trumps">Top Trumps</button>
             <button class="nav-btn" data-screen="legends">Legends</button>
             <button class="nav-btn" data-screen="motorsport">Motorsport</button>
+            <button class="nav-btn" data-screen="games">Games</button>
             <button class="nav-btn soon" data-screen="build">Build</button>
             <button class="nav-btn soon" data-screen="race">Race</button>
         </nav>
@@ -83,8 +83,37 @@
             </div>
         </section>
 
+        <!-- LEGENDS -->
+        <section id="screen-legends" class="screen">
+            <div class="screen-head">
+                <h1><span class="kicker">Legends</span>The people behind the cars</h1>
+                <p class="subtitle">Founders, engineers, designers and drivers. Tap a person to read their story and see their cars.</p>
+            </div>
+            <div class="people-grid" id="people-grid"></div>
+        </section>
+
+        <!-- MOTORSPORT -->
+        <section id="screen-motorsport" class="screen">
+            <div class="screen-head">
+                <h1><span class="kicker">Motorsport</span>How racing created supercars</h1>
+                <p class="subtitle">Six true stories from the racetrack, and the road cars they led to.</p>
+            </div>
+            <div class="story-tabs" id="story-tabs"></div>
+            <article class="story" id="story"></article>
+        </section>
+
+        <!-- GAMES HUB -->
+        <section id="screen-games" class="screen">
+            <div class="screen-head">
+                <h1><span class="kicker">Games</span>Pick a challenge</h1>
+                <p class="subtitle">Every game uses the real cars and real numbers from the Garage.</p>
+            </div>
+            <div class="game-tiles" id="game-tiles"></div>
+        </section>
+
         <!-- TOP TRUMPS -->
-        <section id="screen-trumps" class="screen">
+        <section id="screen-trumps" class="screen game-screen">
+            <div class="game-tabs"></div>
             <div class="screen-head">
                 <h1><span class="kicker">Game</span>Top Trumps Battle</h1>
                 <p class="subtitle">Pick your car's best stat. Higher power and top speed win. For 0–62 and weight, lower wins!</p>
@@ -97,9 +126,72 @@
             </div>
         </section>
 
+        <!-- GUESS THE CAR -->
+        <section id="screen-guess" class="screen game-screen">
+            <div class="game-tabs"></div>
+            <div class="screen-head">
+                <h1><span class="kicker">Game</span>Guess the Car</h1>
+                <p class="subtitle">The photo starts zoomed right in. Every wrong guess or extra clue zooms out a bit more. Fewer clues means more points!</p>
+            </div>
+            <div class="guess-layout">
+                <div>
+                    <div class="guess-photo" id="guess-photo"></div>
+                    <div class="guess-status" id="guess-status"></div>
+                </div>
+                <div>
+                    <ul class="fact-list" id="guess-clues"></ul>
+                    <div class="answer-grid" id="guess-choices"></div>
+                    <div class="game-actions"><button class="act-btn ghost" id="guess-clue-btn">Give me a clue</button><button class="big-btn" id="guess-next" hidden>Next car</button></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- QUIZ -->
+        <section id="screen-quiz" class="screen game-screen">
+            <div class="game-tabs"></div>
+            <div class="screen-head">
+                <h1><span class="kicker">Game</span>Supercar Quiz</h1>
+                <p class="subtitle">Ten questions. How many can you get right?</p>
+            </div>
+            <div class="panel quiz-panel">
+                <div class="quiz-progress" id="quiz-progress"></div>
+                <h2 class="quiz-q" id="quiz-q"></h2>
+                <div class="answer-grid" id="quiz-answers"></div>
+                <p class="quiz-feedback" id="quiz-feedback"></p>
+                <div class="game-actions"><button class="big-btn" id="quiz-next" hidden>Next question</button></div>
+            </div>
+        </section>
+
+        <!-- TIMELINE ORDER -->
+        <section id="screen-order" class="screen game-screen">
+            <div class="game-tabs"></div>
+            <div class="screen-head">
+                <h1><span class="kicker">Game</span>Timeline Order</h1>
+                <p class="subtitle">Tap the cars in order, from the oldest to the newest. Tap a numbered car again to undo.</p>
+            </div>
+            <div class="order-grid" id="order-grid"></div>
+            <p class="quiz-feedback" id="order-feedback"></p>
+            <div class="game-actions"><button class="big-btn" id="order-check">Check my order</button><button class="big-btn" id="order-next" hidden>Play again</button></div>
+        </section>
+
+        <!-- DRAG RACE -->
+        <section id="screen-drag" class="screen game-screen">
+            <div class="game-tabs"></div>
+            <div class="screen-head">
+                <h1><span class="kicker">Game</span>Drag Race</h1>
+                <p class="subtitle">A quarter-mile race (402 metres). Launch when the lights go out, then shift gear when the needle is in the green.</p>
+            </div>
+            <div id="drag-pick" class="drag-pick"></div>
+            <div class="drag-stage" id="drag-stage" hidden>
+                <canvas id="drag-canvas" width="1200" height="420"></canvas>
+                <div class="drag-controls">
+                    <div class="drag-readout" id="drag-readout"></div>
+                    <button class="drag-btn" id="drag-btn">GO</button>
+                </div>
+            </div>
+        </section>
+
         <!-- COMING SOON SCREENS -->
-        <section id="screen-legends" class="screen"><div class="soon-panel" data-soon="legends"></div></section>
-        <section id="screen-motorsport" class="screen"><div class="soon-panel" data-soon="motorsport"></div></section>
         <section id="screen-build" class="screen"><div class="soon-panel" data-soon="build"></div></section>
         <section id="screen-race" class="screen"><div class="soon-panel" data-soon="race"></div></section>
 
@@ -129,6 +221,7 @@
                 <p class="modal-desc" id="modal-desc"></p>
                 <ul class="fact-list" id="modal-facts"></ul>
                 <div class="engine-line" id="modal-engine"></div>
+                <div class="modal-links" id="modal-links"></div>
                 <div class="modal-actions">
                     <button class="act-btn" id="modal-speak">🔊 Read to me</button>
                     <button class="act-btn ghost" id="modal-decade"></button>
@@ -138,11 +231,34 @@
         </div>
     </div>
 
+    <!-- PERSON POP-UP -->
+    <div class="modal" id="person-modal" role="dialog" aria-modal="true" aria-label="Person details">
+        <div class="modal-card person-card">
+            <button class="close-btn" id="person-close" aria-label="Close">✕</button>
+            <div class="modal-left"><div class="person-photo" id="person-photo"></div><p class="small credit-line" id="person-credit"></p></div>
+            <div class="modal-right">
+                <span class="kicker" id="person-role"></span>
+                <h2 class="person-name" id="person-name"></h2>
+                <div class="modal-tags" id="person-tags"></div>
+                <p class="modal-desc" id="person-story"></p>
+                <ul class="fact-list" id="person-fact"></ul>
+                <div class="modal-actions"><button class="act-btn" id="person-speak">🔊 Read to me</button></div>
+                <p class="section-label">Their cars</p>
+                <div class="mini-car-row" id="person-cars"></div>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" role="status"></div>
 
     <script src="cars.js"></script>
     <script src="history.js"></script>
     <script src="credits.js"></script>
+    <script src="people.js"></script>
+    <script src="people-credits.js"></script>
+    <script src="motorsport.js"></script>
     <script src="app.js"></script>
+    <script src="stories.js"></script>
+    <script src="games.js"></script>
 </body>
 </html>

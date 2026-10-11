@@ -9,8 +9,10 @@ Made to work offline on an Android tablet, an iPhone or a laptop.
 - **Garage:** 133 cars as Top Trumps-style cards, with filters by decade, type, maker and country, search and sorting.
 - **Timeline:** the 1960s to the 2020s, with each decade's key cars, speed record and motorsport moment.
 - **Speed Records:** how the fastest production car got faster, as a chart.
-- **Top Trumps Battle:** play against the computer with the real cars.
-- **Coming next:** Legends, Motorsport stories, more games, a 3D car builder and racing.
+- **Legends:** 25 founders, engineers, designers and drivers, linked to their cars.
+- **Motorsport:** six true stories, from Ford v Ferrari to the Nürburgring lap-time battles.
+- **Games:** Top Trumps Battle, Guess the Car, Supercar Quiz, Timeline Order and Drag Race.
+- **Coming next:** a 3D car builder, then racing the cars you build.
 
 ## Install on a tablet or phone
 Open the link once while online so everything is saved, then:
