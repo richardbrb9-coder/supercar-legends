@@ -23,7 +23,19 @@ function personPlaceholder(p) {
     </svg>`;
     return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
-const personImg = p => `<img src="${PCREDITS[p.id] ? `people-images/${p.id}.webp` : personPlaceholder(p)}" alt="${escapeHtml(p.name)}" loading="lazy" draggable="false">`;
+// People with no free-licence photo are shown with their most famous car instead (never a made-up face)
+const STAND_IN_CAR = { eric_broadley: 'Lola Mk6', roy_lunn: 'Ford GT40', david_brown: 'Aston Martin DB5', lee_noble: 'Noble M12', klaas_zwart: 'Ascari KZ1' };
+function standInCar(p) {
+    if (PCREDITS[p.id]) return null;
+    const c = carByName[STAND_IN_CAR[p.id]] || p.cars.find(c => CREDITS[c.id]);
+    return c && CREDITS[c.id] ? c : null;
+}
+const personImg = p => {
+    if (PCREDITS[p.id]) return `<img src="people-images/${p.id}.webp" alt="${escapeHtml(p.name)}" loading="lazy" draggable="false">`;
+    const c = standInCar(p);
+    if (c) return `<img src="car-images/${c.id}.webp" alt="${escapeHtml(c.name)}" loading="lazy" draggable="false" class="standin"><span class="standin-label">No photo yet · ${escapeHtml(c.name)}</span>`;
+    return `<img src="${personPlaceholder(p)}" alt="${escapeHtml(p.name)}" loading="lazy" draggable="false">`;
+};
 
 // =====================================================================
 //  LEGENDS
@@ -46,7 +58,10 @@ function openPerson(p) {
     modalPerson = p;
     document.getElementById('person-photo').innerHTML = personImg(p);
     const cr = PCREDITS[p.id];
-    document.getElementById('person-credit').innerHTML = cr ? `📷 ${escapeHtml(cr.author)} · ${licenceLink(cr.license)} · Wikimedia Commons` : 'No free-licence photo of this person exists yet, so this is a drawn silhouette.';
+    const sc = standInCar(p), scr = sc && CREDITS[sc.id];
+    document.getElementById('person-credit').innerHTML = cr ? `📷 ${escapeHtml(cr.author)} · ${licenceLink(cr.license)} · Wikimedia Commons`
+        : scr ? `No free-licence photo of ${escapeHtml(p.name)} exists yet, so this shows the ${escapeHtml(sc.name)} instead. 📷 ${escapeHtml(scr.author)} · ${licenceLink(scr.license)} · Wikimedia Commons`
+        : 'No free-licence photo of this person exists yet, so this is a drawn silhouette.';
     document.getElementById('person-role').textContent = p.role;
     document.getElementById('person-name').textContent = p.name;
     document.getElementById('person-tags').innerHTML = `<span class="tag">${p.nation}</span>${lifeText(p) ? `<span class="tag">${lifeText(p)}</span>` : ''}`;

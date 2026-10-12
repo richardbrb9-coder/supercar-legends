@@ -248,6 +248,9 @@ button.stat:active { transform: scale(.98); }
 .person-tile:hover { transform: translateY(-3px); filter: brightness(1.08); }
 .pt-photo { aspect-ratio: 4 / 3; overflow: hidden; background: #0B0C0F; }
 .pt-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 25%; filter: grayscale(.25) contrast(1.05); display: block; }
+.pt-photo, .person-photo { position: relative; }
+.pt-photo img.standin, .person-photo img.standin { filter: none; object-position: center; }
+.standin-label { position: absolute; left: 0; right: 0; bottom: 0; padding: 5px 8px; background: rgba(10,11,14,.78); font-size: .68rem; font-weight: 700; letter-spacing: .04em; color: var(--muted); }
 .pt-body { padding: 10px 12px 14px; }
 .pt-role { font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; color: var(--red-2); font-weight: 800; }
 .pt-body h3 { font-size: 1.05rem; margin: 3px 0 4px; line-height: 1.2; }
