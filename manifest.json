@@ -2,7 +2,7 @@
   "name": "Supercar Legends",
   "short_name": "Supercars",
   "description": "The story of supercars and hypercars from 1960 to today, for car fans aged 9 to 12.",
-  "id": "./",
+  "id": "/supercar-legends/",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",
