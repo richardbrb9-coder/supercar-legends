@@ -37,6 +37,12 @@ const PEOPLE_CREDITS = {
   "license": "Public domain",
   "url": "https://commons.wikimedia.org/wiki/File:Enzo_Ferrari_Monza_1967.jpg"
  },
+ "ferdinand_pi_ch": {
+  "file": "Ferdinand Piech by Stuart Mentiply.jpg",
+  "author": "Stuart Mentiply",
+  "license": "GFDL 1.2",
+  "url": "https://commons.wikimedia.org/wiki/File:Ferdinand_Piech_by_Stuart_Mentiply.jpg"
+ },
  "ferruccio_lamborghini": {
   "file": "Ferruccio_Lamborghini.jpg",
   "author": "Unknown",

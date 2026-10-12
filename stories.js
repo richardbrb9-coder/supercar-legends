@@ -8,6 +8,8 @@ const personById = Object.fromEntries(people.map(p => [p.id, p]));
 const personByName = Object.fromEntries(people.map(p => [p.name, p]));
 const peopleForCar = c => people.filter(p => p.cars.includes(c));
 const storiesForCar = c => MOTORSPORT_STORIES.filter(s => s.cars.includes(c.name));
+// The GFDL asks for its text to come with the photo, so it's saved in the app and linked here
+const licenceLink = l => /^GFDL/i.test(l) ? `<a href="licences/fdl-1.2.txt" target="_blank">${escapeHtml(l)}</a>` : escapeHtml(l);
 const lifeText = p => p.born ? (p.died ? `${p.born}–${p.died}` : `Born ${p.born}`) : '';
 
 // A styled silhouette for people with no free photo (never a made-up face)
@@ -44,7 +46,7 @@ function openPerson(p) {
     modalPerson = p;
     document.getElementById('person-photo').innerHTML = personImg(p);
     const cr = PCREDITS[p.id];
-    document.getElementById('person-credit').textContent = cr ? `📷 ${cr.author} · ${cr.license} · Wikimedia Commons` : 'No free photo found, so this is a drawn silhouette.';
+    document.getElementById('person-credit').innerHTML = cr ? `📷 ${escapeHtml(cr.author)} · ${licenceLink(cr.license)} · Wikimedia Commons` : 'No free-licence photo of this person exists yet, so this is a drawn silhouette.';
     document.getElementById('person-role').textContent = p.role;
     document.getElementById('person-name').textContent = p.name;
     document.getElementById('person-tags').innerHTML = `<span class="tag">${p.nation}</span>${lifeText(p) ? `<span class="tag">${lifeText(p)}</span>` : ''}`;
@@ -120,6 +122,6 @@ renderCredits = function () {
     document.getElementById('credit-list').insertAdjacentHTML('beforeend', people.filter(p => PCREDITS[p.id]).map(p => {
         const cr = PCREDITS[p.id];
         return `<div class="credit-item"><img src="people-images/${p.id}.webp" alt="" loading="lazy"><div><b>${escapeHtml(p.name)}</b>
-            <a href="${escapeHtml(cr.url)}" target="_blank" rel="noopener">${escapeHtml(cr.author)}</a> · ${escapeHtml(cr.license)}</div></div>`;
+            <a href="${escapeHtml(cr.url)}" target="_blank" rel="noopener">${escapeHtml(cr.author)}</a> · ${licenceLink(cr.license)}</div></div>`;
     }).join(''));
 };
