@@ -49,6 +49,16 @@ function buildSamples() {
     samples.forEach((s, i) => { s.ks = k2[i]; s.line = Math.sign(k2[i]) * Math.min(HW * 0.6, Math.abs(k2[i]) * 900); });
 }
 const sampleAt = d => samples[((Math.floor(d / trackLen * N) % N) + N) % N];
+// A smooth point along the track: blends between the two nearest samples so cars glide instead of stepping
+const wrapAngle = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
+function pathAt(d, extraOffset = 0, lineScale = 0.9) {
+    const f = ((d / trackLen * N) % N + N) % N, i = Math.floor(f), t = f - i;
+    const a = samples[i], b = samples[(i + 1) % N];
+    const nx = a.n.x + (b.n.x - a.n.x) * t, nz = a.n.z + (b.n.z - a.n.z) * t;
+    const off = (a.line + (b.line - a.line) * t) * lineScale + extraOffset;
+    return { x: a.p.x + (b.p.x - a.p.x) * t + nx * off, z: a.p.z + (b.p.z - a.p.z) * t + nz * off,
+             heading: a.heading + wrapAngle(b.heading - a.heading) * t };
+}
 
 // A canvas texture: asphalt with a little grain
 function asphaltTexture() {
@@ -90,6 +100,20 @@ function buildTrack(scene) {
     const tex = asphaltTexture(); tex.repeat.set(1, 1);
     const road = ribbon(HW, -HW, 0.02, 0.02, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }), 1 / 16);
     group.add(road);
+    // a dashed white line down the middle, splitting the road into two lanes
+    {
+        const pos = [], idx = [], dash = 4, gap = 5, hw = 0.13;
+        for (let d = 0; d < trackLen - dash; d += dash + gap) {
+            for (let k = 0; k <= 4; k++) {
+                const p = pathAt(d + dash * k / 4, 0, 0), nx = Math.sin(p.heading), nz = Math.cos(p.heading);
+                pos.push(p.x + nx * hw, 0.035, p.z + nz * hw, p.x - nx * hw, 0.035, p.z - nz * hw);
+            }
+            const b = pos.length / 3 - 10;
+            for (let k = 0; k < 4; k++) { const a = b + k * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+        }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+        group.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xf2f2f2, side: THREE.DoubleSide })));
+    }
     // kerbs on the corners: red and white blocks
     const kerbMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
     const kerbCol = i => Math.abs(samples[i].ks) < 0.004 ? (city ? [0.07, 0.078, 0.095] : [0.047, 0.196, 0.043]) : (Math.floor(i / 6) % 2 ? [0.92, 0.92, 0.92] : [0.86, 0.04, 0.02]);
@@ -135,20 +159,7 @@ function buildTrack(scene) {
         st.position.copy(s.p).addScaledVector(s.n, side * (HW + RUNOFF + 9)); st.rotation.y = s.heading; group.add(st);
     }
     const nearTrack = (x, z) => { let near = Infinity; for (let i = 0; i < N; i += 5) near = Math.min(near, (samples[i].p.x - x) ** 2 + (samples[i].p.z - z) ** 2); return Math.sqrt(near); };
-    // city: blocks of buildings just outside the walls
-    if (city) {
-        const MAXB = 420, blocks = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ roughness: 0.8, flatShading: true }), MAXB);
-        const palette = [0x8a8f98, 0x6d7480, 0xb7aa96, 0x9c6b52, 0x5c6f82, 0xc9c4ba, 0x3f4650].map(c => new THREE.Color(c));
-        const mb = new THREE.Matrix4(); let nb = 0;
-        for (let i = 0; i < N && nb < MAXB; i += 14) for (const side of [1, -1]) {
-            const s = samples[i], w = 14 + Math.random() * 12, dpt = 14 + Math.random() * 10, h = 12 + Math.random() * 38;
-            const off = side * (HW + RUNOFF + 9 + dpt / 2), x = s.p.x + s.n.x * off, z = s.p.z + s.n.z * off;
-            if (nearTrack(x, z) < HW + RUNOFF + 8 + dpt / 2) continue;
-            mb.compose(new THREE.Vector3(x, h / 2, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), s.heading), new THREE.Vector3(w, h, dpt));
-            blocks.setMatrixAt(nb, mb); blocks.setColorAt(nb, palette[Math.floor(Math.random() * palette.length)]); nb++;
-        }
-        blocks.count = nb; group.add(blocks);
-    }
+    if (city) buildCity(group, nearTrack);
     // trees: two instanced meshes, kept away from the track
     const TREES = city ? 0 : TRACK.theme === 'forest' ? 900 : 320;
     const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.5, 3, 6), new THREE.MeshStandardMaterial({ color: 0x5b3a1e }), Math.max(1, TREES));
@@ -357,11 +368,13 @@ function driveRival(r, dt) {
     a -= 0.25;
     r.v = Math.max(0, r.v + a * dt);
     r.d += r.v * dt;
-    const s = sampleAt(r.d), offset = s.line * 0.9 + r.lineOffset;
-    r.x = s.p.x + s.n.x * offset; r.z = s.p.z + s.n.z * offset;
-    let dh = s.heading - r.heading; while (dh > Math.PI) dh -= Math.PI * 2; while (dh < -Math.PI) dh += Math.PI * 2;
-    r.heading += dh * Math.min(1, dt * 6);
-    r.steer = Math.max(-0.4, Math.min(0.4, dh * 3));
+    // follow the racing line smoothly; the car points along its own path (from here to a little ahead)
+    const here = pathAt(r.d, r.lineOffset), ahead = pathAt(r.d + 3, r.lineOffset);
+    r.x = here.x; r.z = here.z;
+    const want = Math.atan2(-(ahead.z - here.z), ahead.x - here.x);
+    const dh = wrapAngle(want - r.heading);
+    r.heading += dh * Math.min(1, dt * 12);
+    r.steer += (Math.max(-0.4, Math.min(0.4, dh * 6 + wrapAngle(pathAt(r.d + 10, r.lineOffset).heading - want) * 2)) - r.steer) * Math.min(1, dt * 6);
     const prevIdx = r.idx; r.idx = ((Math.floor(r.d / trackLen * N) % N) + N) % N;
     if (go) lapCrossing(r, prevIdx);
 }
@@ -668,6 +681,151 @@ function resize() {
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
 }
 const escapeHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// =====================================================================
+//  CITY DETAILS: buildings with windows, street lamps, traffic lights, signs, zebra crossings
+// =====================================================================
+function canvasTex(w, h, draw) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+// one window bay (4 m wide, 3.5 m tall) that repeats over every wall; the wall is white so each building's colour shows through
+function windowTexture() {
+    const t = canvasTex(128, 112, (x, w, h) => {
+        x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h);
+        x.fillStyle = '#c8c8c8'; x.fillRect(0, h - 8, w, 8);                       // floor line
+        const lit = Math.random() < 0.3;
+        const g = x.createLinearGradient(0, 22, 0, 82);
+        g.addColorStop(0, lit ? '#ffe7a3' : '#3c5872'); g.addColorStop(1, lit ? '#f4c86a' : '#1c2b3a');
+        x.fillStyle = g; x.fillRect(22, 22, 84, 62);
+        x.fillStyle = '#e8e8e8'; x.fillRect(62, 22, 4, 62);                        // window frame
+    });
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+}
+function buildCity(group, nearTrack) {
+    const BAY_W = 4, BAY_H = 3.5;
+    const palette = [0x8a8f98, 0x6d7480, 0xb7aa96, 0x9c6b52, 0x5c6f82, 0xc9c4ba, 0x7d5b4a, 0xa49a8a].map(c => new THREE.Color(c));
+    const pos = [], nor = [], uv = [], col = [], idx = [];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), nm = new THREE.Matrix3();
+    for (let i = 0; i < N; i += 14) for (const side of [1, -1]) {
+        const s = samples[i], w = 14 + Math.random() * 12, dpt = 14 + Math.random() * 10, h = BAY_H * Math.round(4 + Math.random() * 10);
+        const off = side * (HW + RUNOFF + 9 + dpt / 2), x = s.p.x + s.n.x * off, z = s.p.z + s.n.z * off;
+        if (nearTrack(x, z) < HW + RUNOFF + 8 + dpt / 2) continue;
+        const box = new THREE.BoxGeometry(w, h, dpt);
+        m.compose(new THREE.Vector3(x, h / 2, z), q.setFromAxisAngle(up, s.heading), new THREE.Vector3(1, 1, 1)); nm.getNormalMatrix(m);
+        const P = box.attributes.position, Nn = box.attributes.normal, U = box.attributes.uv, base = pos.length / 3, c = palette[Math.floor(Math.random() * palette.length)];
+        for (let v = 0; v < P.count; v++) {
+            const p = new THREE.Vector3().fromBufferAttribute(P, v).applyMatrix4(m), n = new THREE.Vector3().fromBufferAttribute(Nn, v).applyMatrix3(nm).normalize();
+            pos.push(p.x, p.y, p.z); nor.push(n.x, n.y, n.z); col.push(c.r, c.g, c.b);
+            const face = Math.floor(v / 4);           // BoxGeometry faces: +x, -x, +y, -y, +z, -z (4 points each)
+            if (face === 2 || face === 3) uv.push(0.02, 0.02);                          // roof: plain wall colour
+            else uv.push(U.getX(v) * (face < 2 ? dpt : w) / BAY_W, U.getY(v) * h / BAY_H);
+        }
+        box.index.array.forEach(k => idx.push(base + k));
+        box.dispose();
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
+    group.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: windowTexture(), vertexColors: true, roughness: 0.75 })));
+
+    // pavement props sit between the barrier and the buildings
+    const kerbside = HW + RUNOFF + 2.5;
+    const steel = new THREE.MeshStandardMaterial({ color: 0x3a3f48, metalness: 0.6, roughness: 0.4 });
+    const place = (obj, d, side, back = 0) => {
+        const p = pathAt(d, 0, 0), nx = Math.sin(p.heading), nz = Math.cos(p.heading);
+        obj.position.set(p.x + nx * side * (kerbside + back), 0, p.z + nz * side * (kerbside + back));
+        obj.rotation.y = p.heading + (side > 0 ? 0 : Math.PI);    // so "forward" (local -z) faces the road
+        group.add(obj); return obj;
+    };
+    // corners: where the track turns most sharply
+    const corners = [];
+    for (let i = 0; i < N; i++) {
+        const k = Math.abs(samples[i].ks); if (k < 0.012) continue;
+        let peak = true; for (let j = -40; j <= 40 && peak; j++) if (Math.abs(samples[(i + j + N) % N].ks) > k) peak = false;
+        if (peak && !corners.some(c => Math.abs(c - i) < 40 || Math.abs(c - i) > N - 40)) corners.push(i);
+    }
+    // the outside of a corner is the side away from where the curve bends
+    const outsideSide = i => Math.sign(samples[i].ks) > 0 ? -1 : 1;
+    const insideCheck = (d, side) => { const p = pathAt(d, 0, 0), nx = Math.sin(p.heading), nz = Math.cos(p.heading); return nearTrack(p.x + nx * side * (kerbside + 1), p.z + nz * side * (kerbside + 1)) > HW + RUNOFF + 0.5; };
+
+    // street lamps every 32 m on both sides (instanced: pole, arm, lamp)
+    const lampSpots = [];
+    for (let d = 16; d < trackLen; d += 32) for (const side of [1, -1]) if (insideCheck(d, side)) lampSpots.push([d, side]);
+    const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.16, 7, 8), steel, lampSpots.length);
+    const arms = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.12, 2.2), steel, lampSpots.length);
+    const heads = new THREE.InstancedMesh(new THREE.BoxGeometry(0.5, 0.18, 0.9), new THREE.MeshStandardMaterial({ color: 0xfff3d0, emissive: 0xffe9b0, emissiveIntensity: 0.8 }), lampSpots.length);
+    const tmp = new THREE.Object3D();
+    lampSpots.forEach(([d, side], n) => {
+        const holder = new THREE.Object3D(); place(holder, d, side); group.remove(holder); holder.updateMatrix();
+        const set = (mesh, y, zOff) => { tmp.position.set(0, y, zOff); tmp.rotation.set(0, 0, 0); tmp.updateMatrix(); mesh.setMatrixAt(n, new THREE.Matrix4().multiplyMatrices(holder.matrix, tmp.matrix)); };
+        set(poles, 3.5, 0); set(arms, 7, -1.0); set(heads, 6.85, -2.0);
+    });
+    group.add(poles, arms, heads);
+
+    // traffic lights before each corner, on both sides
+    const housing = new THREE.MeshStandardMaterial({ color: 0x15171b, roughness: 0.6 });
+    const lampMat = { r: new THREE.MeshStandardMaterial({ color: 0x330000, emissive: 0xff2010, emissiveIntensity: 1.6 }),
+                      a: new THREE.MeshStandardMaterial({ color: 0x221500, emissive: 0xff9a00, emissiveIntensity: 0.15 }),
+                      g: new THREE.MeshStandardMaterial({ color: 0x002200, emissive: 0x20ff60, emissiveIntensity: 0.15 }) };
+    corners.forEach((ci, n) => {
+        for (const side of [1, -1]) {
+            const d = samples[ci].d - 26; if (!insideCheck(d, side)) continue;
+            const tl = new THREE.Group();
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 4.4, 8), steel); pole.position.y = 2.2; tl.add(pole);
+            const box = new THREE.Mesh(new THREE.BoxGeometry(0.7, 2.0, 0.5), housing); box.position.y = 5.2; tl.add(box);
+            // alternate colours so the street looks alive
+            const on = ['r', 'g', 'a'][(n + (side > 0 ? 0 : 1)) % 3];
+            [['r', 5.85], ['a', 5.2], ['g', 4.55]].forEach(([k, y]) => {
+                const m2 = k === on ? lampMat[k] : new THREE.MeshStandardMaterial({ color: 0x222428 });
+                const l = new THREE.Mesh(new THREE.CircleGeometry(0.24, 16), m2); l.position.set(0, y, -0.26); l.rotation.y = Math.PI; tl.add(l);
+            });
+            place(tl, d, side, -1.2);
+            tl.rotation.y += Math.PI / 2 * side;           // face the oncoming cars
+        }
+    });
+    // chevron boards on the outside of each corner
+    const chevTex = canvasTex(256, 64, (x, w, h) => {
+        x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h); x.fillStyle = '#111111';
+        for (let i = 0; i < 4; i++) { const cx = 30 + i * 62; x.beginPath(); x.moveTo(cx, 6); x.lineTo(cx + 24, 32); x.lineTo(cx, 58); x.lineTo(cx + 14, 58); x.lineTo(cx + 38, 32); x.lineTo(cx + 14, 6); x.fill(); }
+    });
+    corners.forEach(ci => {
+        const side = outsideSide(ci);
+        for (const dd of [-10, 0, 10]) {
+            const d = samples[ci].d + dd; if (!insideCheck(d, side)) continue;
+            const sign = new THREE.Group();
+            const board = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.6), new THREE.MeshBasicMaterial({ map: chevTex, side: THREE.DoubleSide }));
+            board.position.y = 1.9; if (Math.sign(samples[ci].ks) > 0) board.scale.x = -1; sign.add(board);
+            for (const px of [-0.9, 0.9]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.9, 0.08), steel); p.position.set(px, 0.95, 0); sign.add(p); }
+            place(sign, d, side, -2.4);
+        }
+    });
+    // road signs on the straights: speed limit, keep left, street name
+    const signTex = [
+        canvasTex(128, 128, (x) => { x.fillStyle = '#fff'; x.beginPath(); x.arc(64, 64, 60, 0, 7); x.fill(); x.lineWidth = 14; x.strokeStyle = '#d00'; x.beginPath(); x.arc(64, 64, 52, 0, 7); x.stroke(); x.fillStyle = '#111'; x.font = '900 58px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('30', 64, 68); }),
+        canvasTex(128, 128, (x) => { x.fillStyle = '#1652b8'; x.beginPath(); x.arc(64, 64, 60, 0, 7); x.fill(); x.strokeStyle = '#fff'; x.lineWidth = 12; x.beginPath(); x.moveTo(84, 36); x.lineTo(46, 84); x.stroke(); x.fillStyle = '#fff'; x.beginPath(); x.moveTo(30, 96); x.lineTo(38, 68); x.lineTo(60, 88); x.fill(); }),
+        canvasTex(256, 64, (x, w, h) => { x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.strokeStyle = '#111'; x.lineWidth = 6; x.strokeRect(3, 3, w - 6, h - 6); x.fillStyle = '#111'; x.font = '700 30px Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('LEGENDS STREET', w / 2, h / 2 + 2); })
+    ];
+    let k = 0;
+    for (let d = 60; d < trackLen; d += 95) {
+        if (corners.some(ci => Math.abs(samples[ci].d - d) < 30)) continue;
+        const side = k % 2 ? 1 : -1; if (!insideCheck(d, side)) continue;
+        const kind = k++ % 3, sign = new THREE.Group();
+        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.6, 8), steel); pole.position.y = 1.3; sign.add(pole);
+        const face = kind === 2 ? new THREE.PlaneGeometry(2, 0.5) : new THREE.CircleGeometry(0.45, 24);
+        const plate = new THREE.Mesh(face, new THREE.MeshBasicMaterial({ map: signTex[kind], side: THREE.DoubleSide })); plate.position.y = 2.75; sign.add(plate);
+        place(sign, d, side, -0.6);
+        sign.rotation.y += Math.PI / 2 * side;
+    }
+    // zebra crossings across two straights
+    const zebra = canvasTex(256, 64, (x, w, h) => { x.fillStyle = '#34373d'; x.fillRect(0, 0, w, h); x.fillStyle = '#f2f2f2'; for (let i = 0; i < 8; i++) x.fillRect(8 + i * 32, 0, 18, h); });
+    for (const frac of [0.3, 0.72]) {
+        const d = trackLen * frac; if (corners.some(ci => Math.abs(samples[ci].d - d) < 25)) continue;
+        const p = pathAt(d, 0, 0), z = new THREE.Mesh(new THREE.PlaneGeometry(TRACK.width, 3.2), new THREE.MeshStandardMaterial({ map: zebra, roughness: 0.9 }));
+        z.rotation.x = -Math.PI / 2; z.rotation.z = p.heading + Math.PI / 2; z.position.set(p.x, 0.033, p.z); group.add(z);
+    }
+}
 
 const SKIES = { coast: [0x8ec5ee, 150, 650], city: [0xaec4d6, 120, 520], forest: [0x9fcbe6, 160, 800] };
 function loadTrack(id) {
