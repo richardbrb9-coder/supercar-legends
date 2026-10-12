@@ -13,6 +13,50 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="stylesheet" href="style.css">
+    <!-- Child-friendly settings: stop browser features that get in the way when a child is playing
+         (long-press "save image" menus, dragging pictures, zooming, pull-to-refresh, print/save shortcuts,
+         translate prompts, and the Back button closing the app). The search box still works normally. -->
+    <meta name="google" content="notranslate">
+    <style>
+        html { touch-action: pan-x pan-y; }   /* scrolling only: no pinch or double-tap zoom (games that need touch set their own) */
+        html, body { overscroll-behavior: none; -webkit-text-size-adjust: 100%; }   /* no pull-to-refresh or bounce */
+        body { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+        img, svg, canvas, video, a { -webkit-touch-callout: none; -webkit-user-drag: none; }
+        input, textarea, [contenteditable="true"] { -webkit-touch-callout: default; -webkit-user-select: text; user-select: text; }
+        @media print {
+            body > * { display: none !important; }
+            body::after { content: 'Printing is switched off in this app.'; display: block; padding: 40px; text-align: center; font: 700 24px sans-serif; }
+        }
+    </style>
+    <script>
+        (function () {
+            const isTyping = el => el && el.closest && el.closest('input, textarea, [contenteditable="true"]');
+            const block = e => { if (!isTyping(e.target)) e.preventDefault(); };
+            document.addEventListener('contextmenu', block, true);   // long-press menu: save / download / share image, open link
+            document.addEventListener('dragstart', block, true);     // dragging pictures and links out of the app
+            document.addEventListener('selectstart', block, true);   // selecting text (and the copy / web-search bubble)
+            // iPads ignore "user-scalable=no", so stop pinch-zoom there too
+            ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+            // Keyboard shortcuts: print, save, find, open, view source and zoom
+            document.addEventListener('keydown', e => {
+                if ((e.ctrlKey || e.metaKey) && ['p', 's', 'f', 'g', 'o', 'u', '+', '=', '-', '0'].includes((e.key || '').toLowerCase())) e.preventDefault();
+            }, true);
+            document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });   // trackpad pinch-zoom
+
+            // Back button / back swipe: close a pop-up or return to the first screen, instead of leaving the app
+            const arm = () => { if (!(history.state && history.state.kidGuard)) history.pushState({ kidGuard: true }, ''); };
+            document.addEventListener('pointerdown', arm, true);   // browsers only honour this after a tap, so add it on the first touch
+            window.addEventListener('popstate', () => {
+                if (document.querySelector('.modal.open')) {
+                    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+                } else {
+                    const home = document.querySelector('.nav-btn');
+                    if (home && !home.classList.contains('active')) home.click();
+                }
+                arm();
+            });
+        })();
+    </script>
 </head>
 <body>
     <header class="topbar">
