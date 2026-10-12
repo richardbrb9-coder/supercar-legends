@@ -1,6 +1,7 @@
 // Supercar Legends: racing. Loaded only when the Race screen first opens.
 // Arcade driving, not a simulator. Your car is the one you designed in the Build screen.
 import * as THREE from './lib/three.module.min.js';
+import * as SC from './scenery.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
 
 // =====================================================================
@@ -60,17 +61,6 @@ function pathAt(d, extraOffset = 0, lineScale = 0.9) {
              heading: a.heading + wrapAngle(b.heading - a.heading) * t };
 }
 
-// A canvas texture: asphalt with a little grain
-function asphaltTexture() {
-    const c = document.createElement('canvas'); c.width = c.height = 256;
-    const x = c.getContext('2d');
-    x.fillStyle = '#34373d'; x.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 2600; i++) { const g = 40 + Math.random() * 40; x.fillStyle = `rgba(${g},${g},${g + 4},.5)`; x.fillRect(Math.random() * 256, Math.random() * 256, 2, 2); }
-    // edge lines
-    x.fillStyle = '#E8E8E8'; x.fillRect(0, 0, 8, 256); x.fillRect(248, 0, 8, 256);
-    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-    return t;
-}
 function ribbon(offA, offB, yA, yB, mat, vScale = 0.1, colorFn = null) {
     const pos = [], uv = [], col = [], idx = [];
     for (let i = 0; i <= N; i++) {
@@ -94,11 +84,14 @@ function buildTrack(scene) {
     const bounds = { minX: Math.min(...xs) - 160, maxX: Math.max(...xs) + 160, minZ: Math.min(...zs) - 160, maxZ: Math.max(...zs) + 160 };
     // ground: grass, or pavement in the city
     const gw = bounds.maxX - bounds.minX + 800, gd = bounds.maxZ - bounds.minZ + 800;
-    const grass = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd), new THREE.MeshStandardMaterial({ color: city ? 0x4a4f57 : 0x3d7a3a, roughness: 1 }));
-    grass.rotation.x = -Math.PI / 2; grass.position.set((bounds.minX + bounds.maxX) / 2, -0.02, (bounds.minZ + bounds.maxZ) / 2); group.add(grass);
+    if (city) {   // pavement; the other circuits get their ground from scenery.js
+        const grass = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd), new THREE.MeshStandardMaterial({ color: 0x4a4f57, roughness: 1 }));
+        grass.rotation.x = -Math.PI / 2; grass.position.set((bounds.minX + bounds.maxX) / 2, -0.02, (bounds.minZ + bounds.maxZ) / 2); grass.receiveShadow = true; group.add(grass);
+    }
     // road (the texture's v runs along the track)
-    const tex = asphaltTexture(); tex.repeat.set(1, 1);
-    const road = ribbon(HW, -HW, 0.02, 0.02, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }), 1 / 16);
+    const tex = SC.asphaltTexture(); tex.repeat.set(1, 1);
+    const road = ribbon(HW, -HW, 0.02, 0.02, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 }), 1 / 16);
+    road.receiveShadow = true;
     group.add(road);
     // a dashed white line down the middle, splitting the road into two lanes
     {
@@ -150,33 +143,15 @@ function buildTrack(scene) {
         const l = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 8), m); l.position.set(-0.55, 7, (i - 2) * 1.3); gantry.add(l);
     }
     gantry.position.set(s0.p.x, 0, s0.p.z); gantry.rotation.y = s0.heading; group.add(gantry);
-    // grandstands along the start straight
-    const standMat = new THREE.MeshStandardMaterial({ color: 0x1E3A8A, roughness: 0.8 }), roofMat = new THREE.MeshStandardMaterial({ color: 0xE10600, roughness: 0.6 });
-    for (const [d, side] of city ? [] : [[60, -1], [140, -1], [100, 1]]) {
-        const s = sampleAt(d), st = new THREE.Group();
-        for (let r = 0; r < 5; r++) { const step = new THREE.Mesh(new THREE.BoxGeometry(60, 1.2, 2.4), standMat); step.position.set(0, 0.6 + r * 1.2, -side * r * 2.4); st.add(step); }
-        const roof = new THREE.Mesh(new THREE.BoxGeometry(62, 0.4, 14), roofMat); roof.position.set(0, 9, -side * 5); st.add(roof);
-        st.position.copy(s.p).addScaledVector(s.n, side * (HW + RUNOFF + 9)); st.rotation.y = s.heading; group.add(st);
-    }
     const nearTrack = (x, z) => { let near = Infinity; for (let i = 0; i < N; i += 5) near = Math.min(near, (samples[i].p.x - x) ** 2 + (samples[i].p.z - z) ** 2); return Math.sqrt(near); };
     if (city) buildCity(group, nearTrack);
-    // trees: two instanced meshes, kept away from the track
-    const TREES = city ? 0 : TRACK.theme === 'forest' ? 900 : 320;
-    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.35, 0.5, 3, 6), new THREE.MeshStandardMaterial({ color: 0x5b3a1e }), Math.max(1, TREES));
-    const tops = new THREE.InstancedMesh(new THREE.ConeGeometry(2.6, 7, 7), new THREE.MeshStandardMaterial({ color: 0x24592b, flatShading: true }), Math.max(1, TREES));
-    const m4 = new THREE.Matrix4(); let placed = 0, tries = 0;
-    while (placed < TREES && tries < TREES * 20) {
-        tries++;
-        const x = bounds.minX + Math.random() * (bounds.maxX - bounds.minX), z = bounds.minZ + Math.random() * (bounds.maxZ - bounds.minZ);
-        if (nearTrack(x, z) < HW + RUNOFF + 8) continue;
-        const sc = 0.7 + Math.random() * 0.8;
-        m4.makeScale(sc, sc, sc).setPosition(x, 1.5 * sc, z); trunks.setMatrixAt(placed, m4);
-        m4.makeScale(sc, sc, sc).setPosition(x, 6 * sc, z); tops.setMatrixAt(placed, m4);
-        placed++;
-    }
-    trunks.count = tops.count = placed; group.add(trunks, tops);
+    // scenery for this circuit (scenery.js): ground, hills, trees, stands, signs and more
+    const ctx = { group, samples, N, trackLen, HW, RUNOFF, pathAt, nearTrack, bounds, theme: TRACK.theme, quality: SC.QUALITY[quality] };
+    SC.tyreMarks(ctx);
+    const extra = SC.decorate(ctx);
+    group.traverse(o => { if (o.isMesh && !o.receiveShadow && o.material && !o.material.transparent) o.receiveShadow = true; });
     scene.add(group);
-    return { lightMats, group };
+    return { lightMats, group, update: extra.update || (() => {}) };
 }
 
 // =====================================================================
@@ -198,8 +173,10 @@ function blobShadow() {
 }
 function makeRacer(design, factor, isPlayer) {
     const model = createCar(design), stats = carStats(design);
-    const holder = new THREE.Group(); holder.add(model.group, blobShadow());
-    return { design, model, holder, stats, perf: perf(stats, factor), isPlayer, x: 0, z: 0, heading: 0, v: 0, steer: 0, d: 0, idx: 0, lap: 0,
+    const holder = new THREE.Group(), blob = blobShadow(); holder.add(model.group, blob);
+    model.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    blob.visible = !(renderer && renderer.shadowMap.enabled);
+    return { design, model, holder, blob, stats, perf: perf(stats, factor), isPlayer, x: 0, z: 0, heading: 0, v: 0, steer: 0, d: 0, idx: 0, lap: 0,
              lapStart: 0, lastLat: 0, finished: null, best: null, half: false, wheelSpin: 0, lineOffset: 0 };
 }
 // Rival cars are designed in code from the builder presets, so they're original designs too
@@ -216,6 +193,9 @@ function rivalDesign(i) {
 //  STATE
 // =====================================================================
 let renderer, scene, camera, raf = null, started = false, lastT = 0;
+let sky = null, sun = null, hemi = null;
+// graphics quality: 'auto' picks a level and steps down if the frame rate drops
+let qualitySetting = store('raceQuality', 'auto'), quality = qualitySetting === 'auto' ? SC.guessQuality() : qualitySetting;
 let world = null, player = null, rivals = [], ghost = null, mode = 'race', difficulty = 'medium';
 let race = null;                                  // { phase: 'grid'|'lights'|'go'|'done', t, lightsT, results }
 const input = { left: false, right: false, gas: false, brake: false, tilt: 0 };
@@ -481,6 +461,7 @@ function placeCamera(snap = false, dt = 0.016) {
     const look = new THREE.Vector3(r.x + fx * ahead, 0.9, r.z + fz * ahead);
     if (snap) { camPos.copy(want); camLook.copy(look); }
     else { const k = Math.min(1, dt * 6); camPos.lerp(want, k); camLook.lerp(look, Math.min(1, dt * 10)); }
+    if (window.__aerial) { camPos.set(r.x + window.__aerial * 0.6, window.__aerial, r.z + window.__aerial * 0.6); camLook.set(r.x, 0, r.z); }   // testing only
     camera.position.copy(camPos); camera.lookAt(camLook);
     camera.fov = 60 + Math.min(14, Math.max(0, r.v - 30) * 0.25); camera.updateProjectionMatrix();
 }
@@ -560,10 +541,25 @@ function stopEngine() {
 // =====================================================================
 //  MAIN LOOP
 // =====================================================================
+// keep the shadow area centred on the player, and the sky around the camera
+function followSun() {
+    const d = sun.userData.dir;
+    sun.position.set(player.x + d.x * 200, d.y * 200, player.z + d.z * 200); sun.target.position.set(player.x, 0, player.z); sun.target.updateMatrixWorld();
+    sky.position.copy(camera.position);
+}
+// 'auto' quality: if the frame rate stays low for a few seconds, step down a level
+let fpsTime = 0, fpsFrames = 0;
+function watchFrameRate(dt) {
+    if (qualitySetting !== 'auto' || race.phase !== 'go') return;
+    fpsTime += dt; fpsFrames++;
+    if (fpsTime < 4) return;
+    const fps = fpsFrames / fpsTime; fpsTime = 0; fpsFrames = 0;
+    if (fps < 42 && quality !== 'low') { applyQuality(quality === 'high' ? 'medium' : 'low'); flash('Graphics set to ' + SC.QUALITY[quality].label + ' for smoother racing', 2200); }
+}
 function frame(now) {
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - lastT) / 1000 || 0); lastT = now;
-    if (!race || race.paused) { renderer.render(scene, camera); return; }
+    if (!race || race.paused) { if (sky) sky.position.copy(camera.position); renderer.render(scene, camera); return; }
     race.t += dt;
     if (race.phase === 'lights') {
         const lit = Math.min(5, Math.floor(race.t / 0.8));
@@ -583,6 +579,7 @@ function frame(now) {
         updateGhost();
     }
     updateCars(dt); placeCamera(false, dt); updateEngine();
+    followSun(); world.update(dt); watchFrameRate(dt);
     hud(); drawMap();
     renderer.render(scene, camera);
 }
@@ -651,12 +648,18 @@ function renderMenu() {
                 <div class="rr-actions"><button class="big-btn" data-race="start-race">Start race</button><button class="act-btn" data-race="start-trial">Time trial (with ghost)</button></div>
             </div>
         </div>
+        <div class="panel how"><h3>Graphics</h3><p>Higher quality looks better; lower is smoother on older tablets. Auto starts at a sensible level and steps down if racing gets jerky.</p>
+            <div class="opts">${['auto', 'low', 'medium', 'high'].map(k => `<button class="opt ${k === qualitySetting ? 'active' : ''}" data-quality="${k}">${k === 'auto' ? `Auto (${SC.QUALITY[quality].label})` : SC.QUALITY[k].label}</button>`).join('')}</div></div>
         <div class="panel how"><h3>How to drive</h3><p><b>Tablet and phone:</b> hold the arrow buttons on the left to steer, and the pedals on the right to go and brake. You can also turn on tilt steering. <b>Driving help</b> (on at the start) slows you down before tight corners and nudges you back onto the road. <b>Laptop:</b> arrow keys or W A S D, C changes the camera, Esc pauses.</p></div>`;
 }
 function onMenuClick(e) {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.diff) { difficulty = b.dataset.diff; renderMenu(); return; }
     if (b.dataset.track) { loadTrack(b.dataset.track); renderMenu(); return; }
+    if (b.dataset.quality) {
+        qualitySetting = b.dataset.quality; storeSet('raceQuality', qualitySetting);
+        applyQuality(qualitySetting === 'auto' ? SC.guessQuality() : qualitySetting); renderMenu(); return;
+    }
     if (b.dataset.race === 'start-race' || b.dataset.race === 'start-trial') { mode = b.dataset.race === 'start-race' ? 'race' : 'trial'; showStage(); }
 }
 function showStage() {
@@ -827,7 +830,6 @@ function buildCity(group, nearTrack) {
     }
 }
 
-const SKIES = { coast: [0x8ec5ee, 150, 650], city: [0xaec4d6, 120, 520], forest: [0x9fcbe6, 160, 800] };
 function loadTrack(id) {
     const t = TRACKS.find(x => x.id === id) || TRACKS[0];
     if (world && TRACK === t) return;
@@ -835,23 +837,51 @@ function loadTrack(id) {
     TRACK = t; storeSet('raceTrack', t.id);
     buildSamples();
     world = buildTrack(scene);
-    const [sky, near, far] = SKIES[t.theme];
-    scene.background = new THREE.Color(sky); scene.fog = new THREE.Fog(sky, near, far);
-    camera.far = far + 200; camera.updateProjectionMatrix();
+    setAtmosphere(t.theme);
     drawMapBase();
+}
+// sky, haze, sun direction and reflections for a circuit's theme
+function setAtmosphere(theme) {
+    const th = SC.THEMES[theme];
+    if (sky) { scene.remove(sky); sky.geometry.dispose(); sky.material.dispose(); }
+    sky = SC.makeSky(theme); scene.add(sky);
+    scene.background = new THREE.Color(th.horizon);
+    scene.fog = new THREE.Fog(th.horizon, th.fog[0], th.fog[1]);
+    if (scene.environment) scene.environment.dispose();
+    scene.environment = SC.makeEnvironment(renderer, theme);
+    scene.environmentIntensity = 0.9;
+    sun.userData.dir = new THREE.Vector3(...th.sun).normalize();
+    camera.far = th.fog[1] + 900; camera.updateProjectionMatrix();
+}
+// apply a quality level: sharpness and shadows
+function applyQuality(q) {
+    quality = q;
+    const Q = SC.QUALITY[q];
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pixelRatio));
+    const wantShadows = Q.shadows > 0;
+    if (renderer.shadowMap.enabled !== wantShadows) { renderer.shadowMap.enabled = wantShadows; scene.traverse(o => { if (o.material) [].concat(o.material).forEach(m => { m.needsUpdate = true; }); }); }
+    sun.castShadow = wantShadows;
+    if (wantShadows) {
+        if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+        sun.shadow.mapSize.set(Q.shadows, Q.shadows);
+        const c = sun.shadow.camera; c.left = c.bottom = -Q.shadowSize; c.right = c.top = Q.shadowSize; c.near = 10; c.far = 400; c.updateProjectionMatrix();
+    }
+    [player, ...rivals].forEach(r => { if (r) r.blob.visible = !wantShadows; });
+    resize();
 }
 function init() {
     const wrap = document.getElementById('race-canvas-wrap'), canvas = document.createElement('canvas');
     try { renderer = new THREE.WebGLRenderer({ canvas, antialias: (window.devicePixelRatio || 1) < 2 }); } catch (e) { return false; }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.25));
-    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05; renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     wrap.prepend(canvas);
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x8ec5ee); scene.fog = new THREE.Fog(0x8ec5ee, 150, 650);
-    scene.add(new THREE.HemisphereLight(0xcfe8ff, 0x3d5a2a, 1.3));
-    const sun = new THREE.DirectionalLight(0xfff2dd, 2.2); sun.position.set(100, 160, 60); scene.add(sun);
-    camera = new THREE.PerspectiveCamera(60, 1, 0.5, 900);
+    hemi = new THREE.HemisphereLight(0xcfe8ff, 0x4a5a3a, 0.7); scene.add(hemi);
+    sun = new THREE.DirectionalLight(0xfff0d8, 2.8); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04;
+    scene.add(sun, sun.target);
+    camera = new THREE.PerspectiveCamera(60, 1, 0.5, 2600);
     loadTrack(store('raceTrack', 'coast'));
+    applyQuality(quality);
     bindControls();
     new ResizeObserver(resize).observe(wrap);
     return true;
@@ -887,5 +917,5 @@ export function leave() {
 }
 // for testing: drive automatically along the racing line
 export function autopilot(on) { window.__autopilot = on; }
-export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), trackLen, ghost: !!(ghost && ghost.holder.visible), grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
+export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), trackLen, ghost: !!(ghost && ghost.holder.visible), quality, shadows: renderer.shadowMap.enabled, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
 export function setHelp(on) { help = on; }
