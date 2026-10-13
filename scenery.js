@@ -1,6 +1,7 @@
 // Supercar Legends: the look of the race world. Sky, distant hills, reflections, shadows, quality levels,
 // and the scenery for each circuit. Made in code plus a few saved pictures (skies, trees, textures), so it works offline.
 import * as THREE from './lib/three.module.min.js';
+import { STANDS } from './standdata.js';
 
 // =====================================================================
 //  QUALITY LEVELS (chosen automatically, or by the player in the race menu)
@@ -371,26 +372,60 @@ function marshalPosts(ctx, every = 280) {
     }
 }
 // a grandstand with a crowd (the crowd is a texture of coloured dots on each step)
-function crowdTexture() {
-    return canvasTex(512, 64, (x, w, h) => {
-        x.fillStyle = '#2b3240'; x.fillRect(0, 0, w, h);
-        const cols = ['#E10600', '#FFB300', '#F4F6F8', '#00B8D9', '#1E3A8A', '#43A047', '#FF6D00', '#7E57C2', '#d9b38c', '#8d5524'];
-        for (let i = 0; i < 260; i++) { const cx = rand(0, w), cy = rand(14, h - 6); x.fillStyle = cols[Math.floor(Math.random() * cols.length)]; x.fillRect(cx, cy, 5, h - cy); x.fillStyle = Math.random() < 0.5 ? '#d9b38c' : '#8d5524'; x.beginPath(); x.arc(cx + 2.5, cy - 2, 3, 0, 7); x.fill(); }
-    });
+// Grandstands: 10 m sections modelled in Blender (concrete terraces, aisles, railing, back wall, steel columns and a
+// cantilever roof on trusses) with soft shadows baked in, placed side by side. The crowd is pictures of seated
+// spectators (also made in Blender), one strip per row.
+const standGeo = {};
+function standPart(rows, name) {
+    const key = rows + name;
+    if (standGeo[key]) return standGeo[key];
+    const p = STANDS[rows].parts[name], g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(p.pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(p.nor, 3));
+    const c = new Float32Array(p.ao.length * 3); p.ao.forEach((a, i) => { const v = 0.35 + 0.65 * a; c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = v; });
+    g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.setIndex(p.idx);
+    g.rotateY(Math.PI);          // the rows climb away from the road (local +z), like the rest of the scenery
+    return (standGeo[key] = g);
 }
-function grandstand(ctx, d, lateral, length = 70, rows = 8) {
-    const st = new THREE.Group(), steps = new THREE.MeshStandardMaterial({ color: 0x9aa3af, roughness: 0.8 });
-    const crowd = crowdTexture(); crowd.repeat.set(length / 14, 1);
-    const crowdMat = new THREE.MeshStandardMaterial({ map: crowd, roughness: 0.9 });
-    for (let r = 0; r < rows; r++) {
-        const step = new THREE.Mesh(new THREE.BoxGeometry(length, 0.9, 1.6), steps); step.position.set(0, 0.45 + r * 0.9, r * 1.6); st.add(step);
-        const people = new THREE.Mesh(new THREE.PlaneGeometry(length, 0.9), crowdMat); people.position.set(0, 1.35 + r * 0.9, r * 1.6 - 0.75); people.rotation.y = Math.PI; st.add(people);
+const crowdMats = [];
+function crowdMat(k) {
+    if (!crowdMats[k]) {
+        const map = loader.load(`stands/crowd_${k + 1}.webp`); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
+        crowdMats[k] = new THREE.MeshStandardMaterial({ map, alphaTest: 0.5, roughness: 0.9, side: THREE.DoubleSide });
     }
-    const back = new THREE.Mesh(new THREE.BoxGeometry(length, rows * 0.9 + 4, 0.4), steps); back.position.set(0, (rows * 0.9 + 4) / 2, rows * 1.6); st.add(back);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(length + 2, 0.35, rows * 1.6 + 3), new THREE.MeshStandardMaterial({ color: 0xE10600, roughness: 0.5 }));
-    roof.position.set(0, rows * 0.9 + 4.2, rows * 0.8 - 0.5); st.add(roof);
-    for (let x = -length / 2; x <= length / 2; x += length / 6) { const col = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, rows * 0.9 + 4.2, 8), steps); col.position.set(x, (rows * 0.9 + 4.2) / 2, -0.6); st.add(col); }
-    st.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    return crowdMats[k];
+}
+function grandstand(ctx, d, lateral, length = 70, rows = 8, roofColour = 0xE10600) {
+    const R = rows >= 9 ? 10 : 7, S = STANDS[R], bays = Math.max(1, Math.round(length / 10)), W = S.halfWidth * 2;
+    const st = new THREE.Group(), m = new THREE.Matrix4();
+    const mats = {
+        concrete: new THREE.MeshStandardMaterial({ color: 0xc9ccd1, vertexColors: true, roughness: 0.92 }),
+        steel: new THREE.MeshStandardMaterial({ color: 0x59616e, vertexColors: true, metalness: 0.6, roughness: 0.45 }),
+        roof: new THREE.MeshStandardMaterial({ color: roofColour, vertexColors: true, metalness: 0.25, roughness: 0.5, side: THREE.DoubleSide }),
+        glass: new THREE.MeshStandardMaterial({ color: 0xa8c8dc, transparent: true, opacity: 0.28, roughness: 0.1, metalness: 0.2, depthWrite: false })
+    };
+    for (const name of Object.keys(S.parts)) {
+        const mesh = new THREE.InstancedMesh(standPart(R, name), mats[name], bays);
+        for (let b = 0; b < bays; b++) mesh.setMatrixAt(b, m.makeTranslation((b - (bays - 1) / 2) * W, 0, 0));
+        mesh.castShadow = name !== 'glass'; mesh.receiveShadow = true; st.add(mesh);
+    }
+    // the crowd: one strip of spectators per row in each section, in three different mixes
+    const stripW = W - S.aisle * 2, stripH = 1.953, byMix = [[], [], []];
+    for (let b = 0; b < bays; b++) for (let r = 0; r < R; r++) byMix[Math.floor(Math.random() * 3)].push([(b - (bays - 1) / 2) * W, S.front + (r + 1) * S.rise + 0.353 + stripH / 2, r * S.tread + 0.5]);
+    const strip = new THREE.PlaneGeometry(stripW, stripH); strip.rotateY(Math.PI);
+    byMix.forEach((list, k) => {
+        if (!list.length) return;
+        const mesh = new THREE.InstancedMesh(strip, crowdMat(k), list.length);
+        list.forEach(([x, y, z], i) => mesh.setMatrixAt(i, m.makeTranslation(x, y, z)));
+        st.add(mesh);
+    });
+    // end walls
+    const top = S.front + R * S.rise, back = R * S.tread;
+    for (const sgn of [1, -1]) {
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.3, top + 3.2, back + 0.6), mats.concrete.clone());
+        wall.material.vertexColors = false; wall.material.color.set(0xb4b8be);
+        wall.position.set(sgn * (bays * W / 2 + 0.15), (top + 3.2) / 2, (back + 0.6) / 2 - 0.25); wall.castShadow = wall.receiveShadow = true; st.add(wall);
+    }
     placeBeside(ctx, st, d, lateral);   // rows climb away from the road (local +z)
     return st;
 }

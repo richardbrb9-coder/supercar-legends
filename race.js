@@ -508,7 +508,8 @@ function placeCamera(snap = false, dt = 0.016) {
     const look = new THREE.Vector3(r.x + fx * ahead, 0.9, r.z + fz * ahead);
     if (snap) { camPos.copy(want); camLook.copy(look); }
     else { const k = Math.min(1, dt * 6); camPos.lerp(want, k); camLook.lerp(look, Math.min(1, dt * 10)); }
-    if (window.__aerial) { camPos.set(r.x + window.__aerial * 0.6, window.__aerial, r.z + window.__aerial * 0.6); camLook.set(r.x, 0, r.z); }   // testing only
+    if (window.__camAt) { const c = window.__camAt, a = pathAt(c.d, c.lat, 0), b = pathAt(c.d2, c.lat2, 0); camPos.set(a.x, c.h, a.z); camLook.set(b.x, c.h2, b.z); }   // testing only
+    else if (window.__aerial) { camPos.set(r.x + window.__aerial * 0.6, window.__aerial, r.z + window.__aerial * 0.6); camLook.set(r.x, 0, r.z); }   // testing only
     camera.position.copy(camPos);
     if (efx) { const [sx, sy] = efx.shakeOffset(r.v / r.perf.vmax, elapsed); camera.position.x += sx; camera.position.y += sy; }
     camera.lookAt(camLook);
