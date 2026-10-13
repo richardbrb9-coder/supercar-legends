@@ -7,8 +7,10 @@ import * as THREE from './lib/three.module.min.js';
 // =====================================================================
 export const PRESETS = {
     // Inspired by the classic 1960s British grand tourer: long bonnet, rounded body, framed windows, chrome trim, wire wheels
-    gt60:     { label: '60s GT',          L: 4.57, W: 1.70, nose: 0.62, deck: 0.84, roof: 1.30, tail: 0.80, cabin: [0.46, 0.86], fast: 0.45, ride: 0.15, wheel: 0.34,
-                cross: 'triple', crossB: 0.045, crossW: 0.085, noseW: 0.84, noseTip: 0.93, noseLift: 0.9, wbFrac: 0.545, axleShift: -0.035, round: 0.5, fenderH: 0.02, fenderReach: 3.2, cabinStyle: 'glasshouse', cabinWB: 0.9, cabinWT: 0.74,
+    // (proportions measured from a side photo: windscreen at 41°, roof crown just behind it, then a long gentle fastback to the tail)
+    gt60:     { label: '60s GT',          L: 4.57, W: 1.70, nose: 0.70, deck: 0.94, roof: 1.34, tail: 0.86, cabin: [0.345, 0.87], fast: 0, ride: 0.15, wheel: 0.34,
+                rake: 0.17, screenBow: 0.55, roofDrop: 0.955, bulge: 0.025,
+                cross: 'triple', crossB: 0.045, crossW: 0.085, noseW: 0.84, noseTip: 0.93, noseLift: 0.9, wbFrac: 0.555, axleShift: -0.06, round: 0.5, fenderH: 0.1, fenderReach: 3.2, cabinStyle: 'glasshouse', cabinWB: 0.9, cabinWT: 0.74,
                 grille: 'shield', lamps: 'round', bumpers: true, scoop: 'bonnet', exhaust: 'twin',
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'wire', rimColour: 'chrome' } },
     // Inspired by the 1970s Italian rally wedge: very short and wide, sharp nose with bonnet louvres, wraparound visor windscreen,
@@ -64,7 +66,7 @@ export const ENGINES = {
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
-export const SHAPE_DEFAULTS = { noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
+export const SHAPE_DEFAULTS = { rake: 0.34, screenBow: 0.74, roofDrop: 0.995, bulge: 0, noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
     grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false, cornerIntakes: false, tailBar: false, diffuser: false, roofBar: false, tailBig: false, tailMid: 0.96, tailW: 0.88, wheelCovers: false };
 // Apply a body style: its shape, its details, and the parts that suit it
 export function applyPreset(design, key) {
@@ -116,7 +118,10 @@ function profiles(p) {
     const wb = p.L * q.wbFrac;                                // wheelbase
     const frontAxle = 0.5 + q.axleShift - wb / 2 / p.L, rearAxle = 0.5 + q.axleShift + wb / 2 / p.L;
     // centre line of the body: bonnet, scuttle, rear deck
-    const centre = curve([[0, p.nose * q.noseTip], [0.025, p.nose], [0.14, lerp(p.nose, p.deck, 0.45)], [c0, p.deck * 0.98], [c1, p.deck], [0.94, p.tail], [1, p.tail * 0.93]]);
+    // bulge: the bonnet swells gently in the middle (over the front wheels) and dips a little before the windscreen
+    const centre = curve(q.bulge > 0 && c0 > 0.26
+        ? [[0, p.nose * q.noseTip], [0.025, p.nose], [0.11, lerp(p.nose, p.deck, 0.7)], [0.2, p.deck * 0.98 + q.bulge], [c0, p.deck * 0.98], [c1, p.deck], [0.94, p.tail], [1, p.tail * 0.93]]
+        : [[0, p.nose * q.noseTip], [0.025, p.nose], [0.14, lerp(p.nose, p.deck, 0.45)], [c0, p.deck * 0.98], [c1, p.deck], [0.94, p.tail], [1, p.tail * 0.93]]);
     const width = curve([[0, W2 * q.noseW], [0.05, W2 * Math.max(q.noseW2, q.noseW + 0.08)], [frontAxle, W2 * 0.99], [0.45, W2 * 0.95], [rearAxle, W2], [lerp(rearAxle, 0.95, 0.45), W2 * lerp(1, q.tailMid, 0.6)], [0.95, W2 * q.tailMid], [1, W2 * q.tailW]]);
     const archR = wheelR + 0.055;
     // how high the wheel arch reaches at this point (0 if not over a wheel)
@@ -139,8 +144,12 @@ function profiles(p) {
     };
     const base = s => p.ride + (s < 0.07 ? (0.07 - s) * q.noseLift : 0) + (s > 0.9 ? (s - 0.9) * 2.2 : 0);
     // the greenhouse (cabin): windscreen rises fast, the roof is flat, then it falls to the tail
-    const rakeEnd = c0 + (c1 - c0) * 0.34, roofEnd = c0 + (c1 - c0) * lerp(0.62, 0.42, p.fast);
-    const roof = curve([[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, 0.74)], [rakeEnd, p.roof], [roofEnd, p.roof * 0.995], [c1, p.deck]]);
+    // rake: how much of the cabin the windscreen takes; screenBow: how curved the windscreen is; roofDrop: how far the roof
+    // falls before the rear window (below 0.99 the roof gets a gentle crown and a long fastback, like a 60s GT)
+    const rakeEnd = c0 + (c1 - c0) * q.rake, roofEnd = c0 + (c1 - c0) * lerp(0.62, 0.42, p.fast);
+    const roof = curve(q.roofDrop < 0.99
+        ? [[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, q.screenBow)], [rakeEnd, p.roof * lerp(1, q.roofDrop, 0.4)], [lerp(rakeEnd, roofEnd, 0.4), p.roof], [roofEnd, p.roof * q.roofDrop], [c1, p.deck * 0.93]]
+        : [[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, q.screenBow)], [rakeEnd, p.roof], [roofEnd, p.roof * q.roofDrop], [c1, p.deck]]);
     const shoulder = s => Math.max(centre(s) + 0.03, fender(s));
     // the height of the body surface across the car (u = -1 left side … 1 right side)
     // 'triple' (60s GT): seen from the front, the bonnet is a wide dome in the middle with a valley each side, then a narrower
@@ -153,7 +162,13 @@ function profiles(p) {
         return base + t * (q.crossB * (dome(a, 0, 0.44) - 1) + q.crossW * dome(a, 0.77, 0.3));
     };
     const bottomAt = (s, u) => { const b0 = base(s), a = arch(s), t = Math.min(1, Math.max(0, (Math.abs(u) - 0.5) / 0.16)); return b0 + Math.max(0, a - b0) * t * t * (3 - 2 * t); };
-    return { centre, width, arch, base, roof, topAt, bottomAt, top: centre, c0, c1, frontAxle, rearAxle, wheelR, rakeEnd, roofEnd, q };
+    // the real height of the body's skin at side position u (topAt is the top of the cross-section; the rounded edges fall away below it)
+    const surfAt = (s, u) => {
+        const a = Math.min(0.999, Math.abs(u)), c = Math.pow(a, 1 / q.round), sn = Math.sqrt(1 - c * c);
+        const v = Math.pow(sn, 0.5 + (q.round - 0.38) * 0.6), yt = topAt(s, a), yb = Math.min(yt - 0.03, bottomAt(s, a));
+        return lerp((yt + yb) / 2, yt, v);
+    };
+    return { centre, width, arch, base, roof, topAt, bottomAt, surfAt, top: centre, c0, c1, frontAxle, rearAxle, wheelR, rakeEnd, roofEnd, q };
 }
 
 // Build a closed tube from rings of points, with caps at both ends
@@ -219,17 +234,28 @@ function bodyGeometry(p, pr) {
 function cabinGeometry(p, pr) {
     // The windows rise from the body's edge (the beltline), leaning in a little, to a flatter roof.
     // The lower half of each ring is tucked down inside the body so the cabin grows out of it with no ledge.
-    const N = 48, K = 36, rings = [];
+    const N = 48, K = p.cabinStyle === 'glasshouse' ? 52 : 36, rings = [];   // (more points round a glasshouse, for its crisp roof edge)
     for (let i = 0; i <= N; i++) {
         const s = lerp(pr.c0, pr.c1, i / N), x = p.L / 2 - s * p.L;
         const f = pr.q.cabinWB, w = pr.width(s);
         const yb = pr.topAt(s, f) - 0.015, yt = Math.max(yb + 0.015, pr.roof(s));
         const wb = w * f, wt = w * pr.q.cabinWT, ring = [];
+        // a fastback roof runs down to meet the rear deck, so there it follows the deck's own curve (no step at the end)
+        const hug = pr.q.roofDrop < 0.99;
         for (let k = 0; k < K; k++) {
             const a = (k / K) * Math.PI * 2 - Math.PI / 2, c = Math.cos(a), sn = Math.sin(a);   // start underneath, like the body
             if (sn >= 0) {
-                const rise = Math.pow(sn, pr.q.cabinStyle === 'bubble' ? 0.62 : 0.38);   // steep sides and flatter roof, or a rounder bubble
-                ring.push(new THREE.Vector3(x, yb + (yt - yb) * rise, spow(c, 0.7) * lerp(wb, wt, Math.pow(sn, 1.4))));
+                let rise = Math.pow(sn, pr.q.cabinStyle === 'bubble' ? 0.62 : 0.38);   // steep sides and flatter roof, or a rounder bubble
+                let z = spow(c, 0.7) * lerp(wb, wt, Math.pow(sn, 1.4));
+                if (pr.q.cabinStyle === 'glasshouse') {
+                    // 60s glasshouse: straight sides leaning in (where the side windows go), a crisp edge, then a flat roof panel
+                    const t = Math.asin(Math.min(1, sn)) / (Math.PI / 2), edge = 0.48;
+                    if (t < edge) { const f = t / edge; rise = 0.88 * f; z = Math.sign(c) * lerp(wb, wt, f); }
+                    else { const f = (t - edge) / (1 - edge); rise = 0.88 + 0.12 * (1 - (1 - f) * (1 - f)); z = Math.sign(c) * wt * (1 - f) * (1 + 0.15 * f); }
+                }
+                // (where the roof dips below the deck the ring sinks out of sight inside the body)
+                const y0 = hug ? pr.surfAt(s, z / w) - 0.02 : yb, y1 = hug ? pr.roof(s) : yt;
+                ring.push(new THREE.Vector3(x, y0 + (y1 - y0) * rise, z));
             } else {
                 ring.push(new THREE.Vector3(x, yb - 0.14 * Math.pow(-sn, 0.5), c * wb * 0.98));   // hidden inside the body
             }
@@ -250,11 +276,13 @@ function cabinTexture(d, pr) {
         x.fillStyle = glass;
         // v: 0.25 = right beltline, 0.5 = middle of the roof, 0.75 = left beltline
         rect(0.03, rake - 0.01, 0.262, 0.738);                   // windscreen
-        const sideEnd = Math.min(0.9, roofEnd + 0.25);
-        rect(rake + 0.045, sideEnd, 0.262, 0.335);               // right side windows
-        rect(rake + 0.045, sideEnd, 0.665, 0.738);               // left side windows
-        rect(Math.max(roofEnd + 0.2, 0.72), 0.95, 0.36, 0.64);   // rear window
-        const pillar = lerp(rake, sideEnd, 0.52);
+        const fastback = pr.q.roofDrop < 0.99;                   // long fastback: side glass to where the roof falls, then a big rear window
+        const sideEnd = fastback ? roofEnd + 0.03 : Math.min(0.9, roofEnd + 0.25);
+        const sideTop = fastback ? 0.352 : 0.335;   // (the glass stops below the roof edge)
+        rect(rake + 0.045, sideEnd, 0.262, sideTop);             // right side windows
+        rect(rake + 0.045, sideEnd, 1 - sideTop, 0.738);         // left side windows
+        if (fastback) rect(roofEnd + 0.06, 0.95, 0.36, 0.64); else rect(Math.max(roofEnd + 0.2, 0.72), 0.95, 0.36, 0.64);   // rear window
+        const pillar = lerp(rake, sideEnd, fastback ? 0.45 : 0.52);
         x.fillStyle = d.paint; rect(pillar, pillar + 0.025, 0.2, 0.4); rect(pillar, pillar + 0.025, 0.6, 0.8);   // door pillars
     }
     if (style === 'bubble') { x.fillStyle = d.paint; rect(rake * 0.9, 1, 0.45, 0.55); }   // painted roof spine
@@ -694,7 +722,8 @@ const CODE_KEYS_2 = [...CODE_KEYS_1, 'wbFrac', 'axleShift', 'round', 'fenderH', 
 const CODE_KEYS_3 = [...CODE_KEYS_2, 'cross', 'crossB', 'crossW', 'noseW', 'noseTip', 'noseLift', 'mouth', 'sideIntake', 'rearGrille'];
 const CODE_KEYS_4 = [...CODE_KEYS_3, 'cornerIntakes', 'tailBar', 'diffuser'];
 const CODE_KEYS_5 = [...CODE_KEYS_4, 'roofBar', 'tailBig'];
-const CODE_KEYS = [...CODE_KEYS_5, 'tailMid', 'tailW', 'wheelCovers', 'noseW2'];
+const CODE_KEYS_6 = [...CODE_KEYS_5, 'tailMid', 'tailW', 'wheelCovers', 'noseW2'];
+const CODE_KEYS = [...CODE_KEYS_6, 'rake', 'screenBow', 'roofDrop', 'bulge'];
 export function encodeDesign(d) {
     const arr = CODE_KEYS.map(k => {
         const v = d[k];
@@ -704,12 +733,12 @@ export function encodeDesign(d) {
         return v;
     });
     const json = JSON.stringify(arr);
-    return 'SL6-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'SL7-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export function decodeDesign(code) {
-    const m = String(code || '').trim().match(/^SL([1-6])-([A-Za-z0-9_-]+)$/);
+    const m = String(code || '').trim().match(/^SL([1-7])-([A-Za-z0-9_-]+)$/);
     if (!m) return null;
-    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS }[m[1]];
+    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS_6, 7: CODE_KEYS }[m[1]];
     try {
         let b = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
         const arr = JSON.parse(decodeURIComponent(escape(atob(b))));
@@ -722,7 +751,7 @@ export function decodeDesign(code) {
         d.preset = typeof raw.preset === 'string' ? raw.preset.slice(0, 20) : 'custom';
         d.L = num(raw.L, 4.0, 5.2, d.L); d.W = num(raw.W, 1.7, 2.1, d.W); d.nose = num(raw.nose, 0.38, 0.72, d.nose);
         d.deck = num(raw.deck, 0.7, 0.95, d.deck); d.roof = num(raw.roof, 1.0, 1.35, d.roof); d.tail = num(raw.tail, 0.78, 1.05, d.tail);
-        d.cabin = Array.isArray(raw.cabin) && raw.cabin.length === 2 ? [num(raw.cabin[0], 0.2, 0.6, 0.3), num(raw.cabin[1], 0.5, 0.85, 0.62)] : d.cabin;
+        d.cabin = Array.isArray(raw.cabin) && raw.cabin.length === 2 ? [num(raw.cabin[0], 0.2, 0.6, 0.3), num(raw.cabin[1], 0.5, 0.9, 0.62)] : d.cabin;
         d.fast = num(raw.fast, 0, 1, d.fast); d.ride = num(raw.ride, 0.06, 0.2, d.ride); d.wheel = num(raw.wheel, 0.31, 0.38, d.wheel);
         d.paint = colour(raw.paint, d.paint); d.finish = pickKey(raw.finish, FINISHES, d.finish); d.rim = pickKey(raw.rim, RIMS, d.rim);
         d.rimColour = pickKey(raw.rimColour, RIM_COLOURS, d.rimColour); d.caliper = colour(raw.caliper, d.caliper); d.wing = pickKey(raw.wing, WINGS, d.wing);
@@ -749,6 +778,7 @@ export function decodeDesign(code) {
         if (m[1] >= '4') { d.cornerIntakes = !!raw.cornerIntakes; d.tailBar = !!raw.tailBar; d.diffuser = !!raw.diffuser; }
         if (m[1] >= '5') { d.roofBar = !!raw.roofBar; d.tailBig = !!raw.tailBig; }
         if (m[1] >= '6') { d.tailMid = num(raw.tailMid, 0.4, 1, 0.96); d.tailW = num(raw.tailW, 0.3, 1, 0.88); d.wheelCovers = !!raw.wheelCovers; d.noseW2 = num(raw.noseW2, 0.6, 0.95, 0.9); }
+        if (m[1] >= '7') { d.rake = num(raw.rake, 0.12, 0.5, 0.34); d.screenBow = num(raw.screenBow, 0.4, 0.9, 0.74); d.roofDrop = num(raw.roofDrop, 0.9, 1, 0.995); d.bulge = num(raw.bulge, 0, 0.06, 0); }
         return d;
     } catch (e) { return null; }
 }
