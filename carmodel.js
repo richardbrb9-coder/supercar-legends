@@ -22,9 +22,12 @@ export const PRESETS = {
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'five', rimColour: 'bronze' } },
     // Inspired by the famous early-1990s British supercar: compact and smooth, cab-forward with a roof intake, lamps under covers,
     // a low nose intake, big side air intakes, a full-width mesh grille at the back and no fixed wing
-    super90:  { label: '90s supercar',    L: 4.29, W: 1.82, nose: 0.46, deck: 0.80, roof: 1.14, tail: 0.97, cabin: [0.29, 0.83], fast: 0.95, ride: 0.12, wheel: 0.335,
-                noseW: 0.68, noseTip: 0.7, noseLift: 2.4, wbFrac: 0.634, axleShift: 0.005, round: 0.38, fenderH: 0.07, fenderReach: 2.4,
-                cabinStyle: 'tallglass', cabinWB: 0.86, cabinWT: 0.6, grille: 'none', lamps: 'pods', bumpers: false, scoop: 'snorkel', exhaust: 'none',
+    // (shape measured from scaled side, top and front drawings: low rounded nose, long raked windscreen, narrow central cabin,
+    //  one long slope from the roof to a low flat tail)
+    super90:  { label: '90s supercar',    L: 4.29, W: 1.82, nose: 0.40, deck: 0.79, roof: 1.12, tail: 0.88, cabin: [0.26, 0.9], fast: 0, ride: 0.12, wheel: 0.335,
+                rake: 0.34, screenBow: 0.6, roofDrop: 0.975, deckRear: 1.12,
+                noseW: 0.42, noseW2: 0.76, noseTip: 0.9, noseLift: 2.4, wbFrac: 0.634, axleShift: 0.005, round: 0.38, fenderH: 0.0, fenderReach: 1.8,
+                cabinStyle: 'tallglass', cabinWB: 0.66, cabinWT: 0.48, grille: 'none', lamps: 'pods', bumpers: false, scoop: 'snorkel', exhaust: 'none',
                 mouth: true, sideIntake: true, rearGrille: true,
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'five', rimColour: 'silver' } },
     // Inspired by the Italian carbon-fibre hypercars of around 2000: low nose, big front wings, glass bubble canopy, roof scoop, quad exhaust
@@ -66,7 +69,7 @@ export const ENGINES = {
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
-export const SHAPE_DEFAULTS = { rake: 0.34, screenBow: 0.74, roofDrop: 0.995, bulge: 0, noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
+export const SHAPE_DEFAULTS = { rake: 0.34, screenBow: 0.74, roofDrop: 0.995, bulge: 0, deckRear: 1, noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
     grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false, cornerIntakes: false, tailBar: false, diffuser: false, roofBar: false, tailBig: false, tailMid: 0.96, tailW: 0.88, wheelCovers: false };
 // Apply a body style: its shape, its details, and the parts that suit it
 export function applyPreset(design, key) {
@@ -118,10 +121,11 @@ function profiles(p) {
     const wb = p.L * q.wbFrac;                                // wheelbase
     const frontAxle = 0.5 + q.axleShift - wb / 2 / p.L, rearAxle = 0.5 + q.axleShift + wb / 2 / p.L;
     // centre line of the body: bonnet, scuttle, rear deck
+    const deckR = p.deck * q.deckRear;                        // the rear deck can sit higher than the scuttle (deckRear > 1)
     // bulge: the bonnet swells gently in the middle (over the front wheels) and dips a little before the windscreen
     const centre = curve(q.bulge > 0 && c0 > 0.26
-        ? [[0, p.nose * q.noseTip], [0.025, p.nose], [0.11, lerp(p.nose, p.deck, 0.7)], [0.2, p.deck * 0.98 + q.bulge], [c0, p.deck * 0.98], [c1, p.deck], [0.94, p.tail], [1, p.tail * 0.93]]
-        : [[0, p.nose * q.noseTip], [0.025, p.nose], [0.14, lerp(p.nose, p.deck, 0.45)], [c0, p.deck * 0.98], [c1, p.deck], [0.94, p.tail], [1, p.tail * 0.93]]);
+        ? [[0, p.nose * q.noseTip], [0.025, p.nose], [0.11, lerp(p.nose, p.deck, 0.7)], [0.2, p.deck * 0.98 + q.bulge], [c0, p.deck * 0.98], [c1, deckR], [0.94, p.tail], [1, p.tail * 0.93]]
+        : [[0, p.nose * q.noseTip], [0.025, p.nose], [0.14, lerp(p.nose, p.deck, 0.45)], [c0, p.deck * 0.98], [c1, deckR], [0.94, p.tail], [1, p.tail * 0.93]]);
     const width = curve([[0, W2 * q.noseW], [0.05, W2 * Math.max(q.noseW2, q.noseW + 0.08)], [frontAxle, W2 * 0.99], [0.45, W2 * 0.95], [rearAxle, W2], [lerp(rearAxle, 0.95, 0.45), W2 * lerp(1, q.tailMid, 0.6)], [0.95, W2 * q.tailMid], [1, W2 * q.tailW]]);
     const archR = wheelR + 0.055;
     // how high the wheel arch reaches at this point (0 if not over a wheel)
@@ -148,8 +152,8 @@ function profiles(p) {
     // falls before the rear window (below 0.99 the roof gets a gentle crown and a long fastback, like a 60s GT)
     const rakeEnd = c0 + (c1 - c0) * q.rake, roofEnd = c0 + (c1 - c0) * lerp(0.62, 0.42, p.fast);
     const roof = curve(q.roofDrop < 0.99
-        ? [[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, q.screenBow)], [rakeEnd, p.roof * lerp(1, q.roofDrop, 0.4)], [lerp(rakeEnd, roofEnd, 0.4), p.roof], [roofEnd, p.roof * q.roofDrop], [c1, p.deck * 0.93]]
-        : [[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, q.screenBow)], [rakeEnd, p.roof], [roofEnd, p.roof * q.roofDrop], [c1, p.deck]]);
+        ? [[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, q.screenBow)], [rakeEnd, p.roof * lerp(1, q.roofDrop, 0.4)], [lerp(rakeEnd, roofEnd, 0.4), p.roof], [roofEnd, p.roof * q.roofDrop], [c1, deckR * 0.93]]
+        : [[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, q.screenBow)], [rakeEnd, p.roof], [roofEnd, p.roof * q.roofDrop], [c1, deckR]]);
     const shoulder = s => Math.max(centre(s) + 0.03, fender(s));
     // the height of the body surface across the car (u = -1 left side … 1 right side)
     // 'triple' (60s GT): seen from the front, the bonnet is a wide dome in the middle with a valley each side, then a narrower
@@ -271,7 +275,7 @@ function cabinTexture(d, pr) {
     const span = pr.c1 - pr.c0, rake = (pr.rakeEnd - pr.c0) / span, roofEnd = (pr.roofEnd - pr.c0) / span;
     const rect = (u0, u1, v0, v1) => x.fillRect(u0 * W, Y(v1), (u1 - u0) * W, Y(v0) - Y(v1));
     const style = pr.q.cabinStyle;
-    x.fillStyle = style === 'glasshouse' ? d.paint : glass; x.fillRect(0, 0, W, H);
+    x.fillStyle = style === 'glasshouse' || style === 'tallglass' ? d.paint : glass; x.fillRect(0, 0, W, H);
     if (style === 'glasshouse') {
         x.fillStyle = glass;
         // v: 0.25 = right beltline, 0.5 = middle of the roof, 0.75 = left beltline
@@ -296,8 +300,9 @@ function cabinTexture(d, pr) {
     if (style === 'tallglass') {                                 // big windscreen, tall side glass, painted roof and engine cover
         x.fillStyle = glass;
         rect(0.02, rake + 0.03, 0.255, 0.745);
-        rect(rake + 0.04, 0.6, 0.255, 0.41); rect(rake + 0.04, 0.6, 0.59, 0.745);
-        x.fillStyle = 'rgba(0,0,0,.55)'; for (let i = 0; i < 4; i++) rect(0.72 + i * 0.06, 0.75 + i * 0.06, 0.44, 0.56);   // engine cover vents
+        rect(rake + 0.04, 0.55, 0.255, 0.4); rect(rake + 0.04, 0.55, 0.6, 0.745);           // door windows
+        rect(0.58, 0.68, 0.38, 0.62);                                                        // small rear window over the engine
+        x.fillStyle = 'rgba(0,0,0,.55)'; for (let i = 0; i < 4; i++) rect(0.72 + i * 0.05, 0.75 + i * 0.05, 0.42, 0.58);   // engine cover vents
     }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     return t;
@@ -723,7 +728,8 @@ const CODE_KEYS_3 = [...CODE_KEYS_2, 'cross', 'crossB', 'crossW', 'noseW', 'nose
 const CODE_KEYS_4 = [...CODE_KEYS_3, 'cornerIntakes', 'tailBar', 'diffuser'];
 const CODE_KEYS_5 = [...CODE_KEYS_4, 'roofBar', 'tailBig'];
 const CODE_KEYS_6 = [...CODE_KEYS_5, 'tailMid', 'tailW', 'wheelCovers', 'noseW2'];
-const CODE_KEYS = [...CODE_KEYS_6, 'rake', 'screenBow', 'roofDrop', 'bulge'];
+const CODE_KEYS_7 = [...CODE_KEYS_6, 'rake', 'screenBow', 'roofDrop', 'bulge'];
+const CODE_KEYS = [...CODE_KEYS_7, 'deckRear'];
 export function encodeDesign(d) {
     const arr = CODE_KEYS.map(k => {
         const v = d[k];
@@ -733,12 +739,12 @@ export function encodeDesign(d) {
         return v;
     });
     const json = JSON.stringify(arr);
-    return 'SL7-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'SL8-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export function decodeDesign(code) {
-    const m = String(code || '').trim().match(/^SL([1-7])-([A-Za-z0-9_-]+)$/);
+    const m = String(code || '').trim().match(/^SL([1-8])-([A-Za-z0-9_-]+)$/);
     if (!m) return null;
-    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS_6, 7: CODE_KEYS }[m[1]];
+    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS_6, 7: CODE_KEYS_7, 8: CODE_KEYS }[m[1]];
     try {
         let b = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
         const arr = JSON.parse(decodeURIComponent(escape(atob(b))));
@@ -779,6 +785,7 @@ export function decodeDesign(code) {
         if (m[1] >= '5') { d.roofBar = !!raw.roofBar; d.tailBig = !!raw.tailBig; }
         if (m[1] >= '6') { d.tailMid = num(raw.tailMid, 0.4, 1, 0.96); d.tailW = num(raw.tailW, 0.3, 1, 0.88); d.wheelCovers = !!raw.wheelCovers; d.noseW2 = num(raw.noseW2, 0.6, 0.95, 0.9); }
         if (m[1] >= '7') { d.rake = num(raw.rake, 0.12, 0.5, 0.34); d.screenBow = num(raw.screenBow, 0.4, 0.9, 0.74); d.roofDrop = num(raw.roofDrop, 0.9, 1, 0.995); d.bulge = num(raw.bulge, 0, 0.06, 0); }
+        if (m[1] >= '8') d.deckRear = num(raw.deckRear, 0.8, 1.3, 1);
         return d;
     } catch (e) { return null; }
 }
