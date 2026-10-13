@@ -2,6 +2,7 @@
 // Arcade driving, not a simulator. Your car is the one you designed in the Build screen.
 import * as THREE from './lib/three.module.min.js';
 import * as SC from './scenery.js';
+import { Effects } from './effects.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
 
 // =====================================================================
@@ -85,13 +86,15 @@ function buildTrack(scene) {
     // ground: grass, or pavement in the city
     const gw = bounds.maxX - bounds.minX + 800, gd = bounds.maxZ - bounds.minZ + 800;
     if (city) {   // pavement; the other circuits get their ground from scenery.js
-        const grass = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd), new THREE.MeshStandardMaterial({ color: 0x4a4f57, roughness: 1 }));
+        const grass = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd), SC.photoMat('concrete_pavement', gw / 4, gd / 4, 0xc9c9c9));
         grass.rotation.x = -Math.PI / 2; grass.position.set((bounds.minX + bounds.maxX) / 2, -0.02, (bounds.minZ + bounds.maxZ) / 2); grass.receiveShadow = true; group.add(grass);
     }
     // road (the texture's v runs along the track)
-    const tex = SC.asphaltTexture(); tex.repeat.set(1, 1);
-    const road = ribbon(HW, -HW, 0.02, 0.02, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85 }), 1 / 16);
+    const road = ribbon(HW, -HW, 0.02, 0.02, SC.photoMat('asphalt_02', TRACK.width / 6, 16 / 6, 0xb8bcc4, 0.85), 1 / 16);
     road.receiveShadow = true;
+    // white lines along both edges of the road
+    const edgeMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.7 });
+    group.add(ribbon(HW - 0.15, HW - 0.45, 0.03, 0.03, edgeMat), ribbon(-HW + 0.45, -HW + 0.15, 0.03, 0.03, edgeMat));
     group.add(road);
     // a dashed white line down the middle, splitting the road into two lanes
     {
@@ -172,7 +175,7 @@ function blobShadow() {
     return m;
 }
 function makeRacer(design, factor, isPlayer) {
-    const model = createCar(design), stats = carStats(design);
+    const model = createCar(design, { merge: true }), stats = carStats(design);
     const holder = new THREE.Group(), blob = blobShadow(); holder.add(model.group, blob);
     model.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
     blob.visible = !(renderer && renderer.shadowMap.enabled);
@@ -193,7 +196,8 @@ function rivalDesign(i) {
 //  STATE
 // =====================================================================
 let renderer, scene, camera, raf = null, started = false, lastT = 0;
-let sky = null, sun = null, hemi = null;
+let sky = null, sun = null, hemi = null, efx = null, headlight = null, carGlow = null, look = null, elapsed = 0, puffT = 0;
+let timeOfDay = store('raceTime', 'day');
 // graphics quality: 'auto' picks a level and steps down if the frame rate drops
 let qualitySetting = store('raceQuality', 'auto'), quality = qualitySetting === 'auto' ? SC.guessQuality() : qualitySetting;
 let world = null, player = null, rivals = [], ghost = null, mode = 'race', difficulty = 'medium';
@@ -235,6 +239,7 @@ function setupRace() {
             ghost.holder.visible = false; scene.add(ghost.holder);
         }
     }
+    if (efx) efx.clear();
     race = { phase: 'lights', t: 0, lightsT: 0, raceTime: 0, results: null, recording: [], lapTimes: [] };
     updateCars(0); placeCamera(true);
     hud();
@@ -303,10 +308,19 @@ function drivePlayer(dt) {
     r.steer += (steerIn * maxSteer - r.steer) * Math.min(1, dt * 16);   // steering responds quickly
     // grass slows you down (but not too much)
     const onGrass = Math.abs(lat) > HW + 1.3;
+    r.onGrass = onGrass;
+    // slipstream: tucked in close behind another car, the air is easier to push through
+    r.slip = false;
+    if (go && r.v > 20) for (const o of rivals) {
+        const dx = o.x - r.x, dz = o.z - r.z, fx2 = Math.cos(r.heading), fz2 = -Math.sin(r.heading);
+        const ahead = dx * fx2 + dz * fz2, side = Math.abs(-dx * fz2 + dz * fx2);
+        if (ahead > 3 && ahead < 22 && side < 2.6) { r.slip = true; break; }
+    }
     if (go) { r.driveTime = (r.driveTime || 0) + dt; if (onGrass) r.grassTime = (r.grassTime || 0) + dt; }
     const vmax = onGrass ? Math.min(P.vmax, 30) : P.vmax;
     let a = 0;
-    if (go && gas) a += P.a0 * Math.max(0.12, 1 - r.v / vmax);
+    const vTop = r.slip ? vmax * 1.05 : vmax;
+    if (go && gas) a += P.a0 * Math.max(0.12, 1 - r.v / vTop) * (r.slip ? 1.15 : 1);
     if (brake) a -= r.v > 0.5 ? P.brake : 3;           // brake, then gently reverse
     a -= 0.25 + r.v * r.v * 0.0004 + (onGrass ? r.v * 0.06 : 0);  // rolling and air drag
     if (!gas && !brake && Math.abs(r.v) < 0.3) r.v = 0;
@@ -327,7 +341,12 @@ function drivePlayer(dt) {
         r.x -= s2.n.x * push * Math.sign(lat2); r.z -= s2.n.z * push * Math.sign(lat2);
         let rel = r.heading - s2.heading; while (rel > Math.PI) rel -= Math.PI * 2; while (rel < -Math.PI) rel += Math.PI * 2;
         if (Math.abs(rel) < Math.PI / 2) r.heading -= rel * 0.6; else r.heading -= (rel - Math.sign(rel) * Math.PI) * 0.6;
-        if (r.v > 8) bump(0.35);
+        if (r.v > 8) {
+            bump(0.35);
+            const sg = Math.sign(lat2);   // sparks where the car scrapes the barrier
+            efx.sparksAt(r.x + s2.n.x * sg * 1.0, 0.4, r.z + s2.n.z * sg * 1.0, Math.cos(r.heading), -Math.sin(r.heading), Math.min(40, 8 + r.v));
+            efx.bump(Math.min(0.8, r.v / 60));
+        }
         r.v *= 0.82;
     }
     r.lastLat = lat2;
@@ -365,7 +384,7 @@ function collisions() {
         const a = all[i], b = all[j], dx = b.x - a.x, dz = b.z - a.z, dist = Math.hypot(dx, dz), min = 2.6;
         if (dist < min && dist > 0.01) {
             const push = (min - dist) / 2, nx = dx / dist, nz = dz / dist;
-            if (a.isPlayer) { a.x -= nx * push * 2; a.z -= nz * push * 2; a.v *= 0.97; if (Math.abs(a.v - b.v) > 4) bump(0.2); }
+            if (a.isPlayer) { a.x -= nx * push * 2; a.z -= nz * push * 2; a.v *= 0.97; if (Math.abs(a.v - b.v) > 4) { bump(0.2); efx.sparksAt((a.x + b.x) / 2, 0.5, (a.z + b.z) / 2, -nx, -nz, 14); } }
             else if (b.isPlayer) { b.x += nx * push * 2; b.z += nz * push * 2; b.v *= 0.97; }
             else { a.v *= 0.995; }
         }
@@ -462,8 +481,10 @@ function placeCamera(snap = false, dt = 0.016) {
     if (snap) { camPos.copy(want); camLook.copy(look); }
     else { const k = Math.min(1, dt * 6); camPos.lerp(want, k); camLook.lerp(look, Math.min(1, dt * 10)); }
     if (window.__aerial) { camPos.set(r.x + window.__aerial * 0.6, window.__aerial, r.z + window.__aerial * 0.6); camLook.set(r.x, 0, r.z); }   // testing only
-    camera.position.copy(camPos); camera.lookAt(camLook);
-    camera.fov = 60 + Math.min(14, Math.max(0, r.v - 30) * 0.25); camera.updateProjectionMatrix();
+    camera.position.copy(camPos);
+    if (efx) { const [sx, sy] = efx.shakeOffset(r.v / r.perf.vmax, elapsed); camera.position.x += sx; camera.position.y += sy; }
+    camera.lookAt(camLook);
+    camera.fov = 60 + Math.min(14, Math.max(0, r.v - 30) * 0.25) + (r.slip ? 3 : 0); camera.updateProjectionMatrix();
 }
 let mapCtx = null, mapScale = 1, mapOff = [0, 0];
 function drawMapBase() {
@@ -541,6 +562,24 @@ function stopEngine() {
 // =====================================================================
 //  MAIN LOOP
 // =====================================================================
+// smoke when sliding, dust on the grass, speed lines, headlights
+function updateEffects(dt) {
+    elapsed += dt; puffT += dt;
+    const r = player, fwdX = Math.cos(r.heading), fwdZ = -Math.sin(r.heading), back = r.design.L * 0.32;
+    if (puffT > 0.06 && race.phase !== 'lights') {
+        puffT = 0;
+        const kind = r.onGrass && r.v > 8 ? 'dust' : r.sliding && r.v > 12 ? 'smoke' : null;
+        if (kind) for (const side of [-1, 1]) efx.puff(r.x - fwdX * back + fwdZ * side * 0.8, r.z - fwdZ * back - fwdX * side * 0.8, kind, r.v * fwdX, r.v * fwdZ);
+    }
+    efx.update(dt);
+    efx.drawSpeedLines(r.v / r.perf.vmax, r.slip, dt);
+    if (headlight && headlight.visible) {
+        headlight.position.set(r.x + fwdX * 1.8, 1.0, r.z + fwdZ * 1.8);
+        headlight.target.position.set(r.x + fwdX * 25, 0, r.z + fwdZ * 25); headlight.target.updateMatrixWorld();
+        carGlow.position.set(r.x - fwdX * 2, 4.5, r.z - fwdZ * 2);
+    }
+    const tag = document.getElementById('race-slip'); if (tag) tag.classList.toggle('show', !!r.slip);
+}
 // keep the shadow area centred on the player, and the sky around the camera
 function followSun() {
     const d = sun.userData.dir;
@@ -580,6 +619,7 @@ function frame(now) {
     }
     updateCars(dt); placeCamera(false, dt); updateEngine();
     followSun(); world.update(dt); watchFrameRate(dt);
+    updateEffects(dt);
     hud(); drawMap();
     renderer.render(scene, camera);
 }
@@ -648,6 +688,8 @@ function renderMenu() {
                 <div class="rr-actions"><button class="big-btn" data-race="start-race">Start race</button><button class="act-btn" data-race="start-trial">Time trial (with ghost)</button></div>
             </div>
         </div>
+        <div class="panel how"><h3>Time of day</h3><p>Race in daylight, at sunset, or at night with your headlights on.</p>
+            <div class="opts">${Object.entries(SC.TIMES).map(([k, v]) => `<button class="opt ${k === timeOfDay ? 'active' : ''}" data-time="${k}">${v}</button>`).join('')}</div></div>
         <div class="panel how"><h3>Graphics</h3><p>Higher quality looks better; lower is smoother on older tablets. Auto starts at a sensible level and steps down if racing gets jerky.</p>
             <div class="opts">${['auto', 'low', 'medium', 'high'].map(k => `<button class="opt ${k === qualitySetting ? 'active' : ''}" data-quality="${k}">${k === 'auto' ? `Auto (${SC.QUALITY[quality].label})` : SC.QUALITY[k].label}</button>`).join('')}</div></div>
         <div class="panel how"><h3>How to drive</h3><p><b>Tablet and phone:</b> hold the arrow buttons on the left to steer, and the pedals on the right to go and brake. You can also turn on tilt steering. <b>Driving help</b> (on at the start) slows you down before tight corners and nudges you back onto the road. <b>Laptop:</b> arrow keys or W A S D, C changes the camera, Esc pauses.</p></div>`;
@@ -656,6 +698,7 @@ function onMenuClick(e) {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.diff) { difficulty = b.dataset.diff; renderMenu(); return; }
     if (b.dataset.track) { loadTrack(b.dataset.track); renderMenu(); return; }
+    if (b.dataset.time) { timeOfDay = b.dataset.time; storeSet('raceTime', timeOfDay); setAtmosphere(TRACK.theme); renderMenu(); return; }
     if (b.dataset.quality) {
         qualitySetting = b.dataset.quality; storeSet('raceQuality', qualitySetting);
         applyQuality(qualitySetting === 'auto' ? SC.guessQuality() : qualitySetting); renderMenu(); return;
@@ -694,20 +737,23 @@ function canvasTex(w, h, draw) {
 }
 // one window bay (4 m wide, 3.5 m tall) that repeats over every wall; the wall is white so each building's colour shows through
 function windowTexture() {
-    const t = canvasTex(128, 112, (x, w, h) => {
-        x.fillStyle = '#ffffff'; x.fillRect(0, 0, w, h);
-        x.fillStyle = '#c8c8c8'; x.fillRect(0, h - 8, w, 8);                       // floor line
-        const lit = Math.random() < 0.3;
+    // two matching textures: the wall with windows, and a "glow" map where only the lit windows shine (used at night)
+    const lit = Math.random() < 0.3;
+    const draw = glow => (x, w, h) => {
+        x.fillStyle = glow ? '#000' : '#ffffff'; x.fillRect(0, 0, w, h);
+        if (!glow) { x.fillStyle = '#c8c8c8'; x.fillRect(0, h - 8, w, 8); }                 // floor line
         const g = x.createLinearGradient(0, 22, 0, 82);
-        g.addColorStop(0, lit ? '#ffe7a3' : '#3c5872'); g.addColorStop(1, lit ? '#f4c86a' : '#1c2b3a');
+        g.addColorStop(0, lit ? '#ffe7a3' : glow ? '#000' : '#3c5872'); g.addColorStop(1, lit ? '#f4c86a' : glow ? '#000' : '#1c2b3a');
         x.fillStyle = g; x.fillRect(22, 22, 84, 62);
-        x.fillStyle = '#e8e8e8'; x.fillRect(62, 22, 4, 62);                        // window frame
-    });
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        if (!glow) { x.fillStyle = '#e8e8e8'; x.fillRect(62, 22, 4, 62); }                   // window frame
+    };
+    const t = canvasTex(128, 112, draw(false)), e = canvasTex(128, 112, draw(true));
+    t.wrapS = t.wrapT = e.wrapS = e.wrapT = THREE.RepeatWrapping;
+    t.userData.glow = e;
     return t;
 }
 function buildCity(group, nearTrack) {
-    const BAY_W = 4, BAY_H = 3.5;
+    const BAY_W = 4, BAY_H = 3.5, extras = [];
     const palette = [0x8a8f98, 0x6d7480, 0xb7aa96, 0x9c6b52, 0x5c6f82, 0xc9c4ba, 0x7d5b4a, 0xa49a8a].map(c => new THREE.Color(c));
     const pos = [], nor = [], uv = [], col = [], idx = [];
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), nm = new THREE.Matrix3();
@@ -727,11 +773,46 @@ function buildCity(group, nearTrack) {
         }
         box.index.array.forEach(k => idx.push(base + k));
         box.dispose();
+        extras.push({ x, z, w, dpt, h, heading: s.heading, side, c });
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
     g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx);
-    group.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: windowTexture(), vertexColors: true, roughness: 0.75 })));
+    const wt = windowTexture();
+    group.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: wt, vertexColors: true, roughness: 0.75, emissive: 0xffd890, emissiveMap: wt.userData.glow, emissiveIntensity: 0.05 })));
+
+    // building details: a shop awning facing the street, a ledge round the roof, rooftop units, and some stepped towers
+    const unit = new THREE.BoxGeometry(1, 1, 1), n = extras.length;
+    const awnings = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ roughness: 0.8 }), n);
+    const ledges = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.9 }), n);
+    const acs = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.4, roughness: 0.5 }), n * 3);
+    const tt = windowTexture();
+    const towers = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ map: tt, roughness: 0.75, emissive: 0xffd890, emissiveMap: tt.userData.glow, emissiveIntensity: 0.05 }), n);
+    const awningCols = [0xc0392b, 0x1e8449, 0x1f4e8c, 0xd68910, 0x6c3483, 0x117a65].map(c => new THREE.Color(c));
+    const q2 = new THREE.Quaternion(), M = new THREE.Matrix4(), V = (x, y, z) => new THREE.Vector3(x, y, z);
+    let na = 0, nt = 0;
+    extras.forEach((b, i) => {
+        q2.setFromAxisAngle(up, b.heading);
+        const toRoad = V(0, 0, b.side > 0 ? -1 : 1).applyQuaternion(q2);   // the wall facing the street
+        const across = V(1, 0, 0).applyQuaternion(q2);
+        const front = (b.dpt / 2 + 0.9);
+        awnings.setMatrixAt(i, M.compose(V(b.x + toRoad.x * front, 3.4, b.z + toRoad.z * front), q2, V(b.w * 0.85, 0.18, 1.8)));
+        awnings.setColorAt(i, awningCols[i % awningCols.length]);
+        ledges.setMatrixAt(i, M.compose(V(b.x, b.h + 0.3, b.z), q2, V(b.w + 0.6, 0.6, b.dpt + 0.6)));
+        for (let k = 0; k < 3; k++) {
+            const ox = (k - 1) * b.w * 0.25, oz = (k % 2 ? 1 : -1) * b.dpt * 0.18;
+            acs.setMatrixAt(na++, M.compose(V(b.x + across.x * ox - toRoad.x * oz, b.h + 1.2, b.z + across.z * ox - toRoad.z * oz), q2, V(2.2, 1.4, 1.6)));
+        }
+        if (i % 4 === 0) {   // a narrower tower on top
+            const th = BAY_H * (3 + (i % 3) * 2);
+            towers.setMatrixAt(nt, M.compose(V(b.x, b.h + th / 2, b.z), q2, V(b.w * 0.6, th, b.dpt * 0.6)));
+            towers.setColorAt(nt++, b.c);
+        }
+    });
+    acs.count = na; towers.count = nt;
+    // windows on the towers: scale the repeating texture to the tower's size (approximate: one repeat per 4 m by 3.5 m)
+    towers.material.map.repeat.set(4, 6); tt.userData.glow.repeat.set(4, 6);
+    [awnings, ledges, acs, towers].forEach(o => { o.castShadow = true; o.receiveShadow = true; group.add(o); });
 
     // pavement props sit between the barrier and the buildings
     const kerbside = HW + RUNOFF + 2.5;
@@ -842,20 +923,30 @@ function loadTrack(id) {
 }
 // sky, haze, sun direction and reflections for a circuit's theme
 function setAtmosphere(theme) {
-    const th = SC.THEMES[theme];
+    const th = look = SC.lookFor(theme, timeOfDay);
     if (sky) { scene.remove(sky); sky.geometry.dispose(); sky.material.dispose(); }
-    sky = SC.makeSky(theme); scene.add(sky);
+    sky = SC.makeSky(th); scene.add(sky);
     scene.background = new THREE.Color(th.horizon);
     scene.fog = new THREE.Fog(th.horizon, th.fog[0], th.fog[1]);
     if (scene.environment) scene.environment.dispose();
-    scene.environment = SC.makeEnvironment(renderer, theme);
-    scene.environmentIntensity = 0.9;
+    scene.environment = SC.makeEnvironment(renderer, th);
+    scene.environmentIntensity = th.light.env;
+    sun.intensity = th.light.sun; sun.color.set(th.light.sunColor); hemi.intensity = th.light.hemi;
+    renderer.toneMappingExposure = th.light.exposure;
+    if (headlight) headlight.visible = carGlow.visible = timeOfDay === 'night';
+    // glowing things (lamps, lit windows, tail lights) glow brighter in the dark
+    world.group.traverse(o => { if (o.material) [].concat(o.material).forEach(m => {
+        if (!m.emissive) return;
+        if (m.userData.baseGlow === undefined) m.userData.baseGlow = m.emissiveIntensity;
+        // lit windows only show at sunset and night; other lamps just glow brighter in the dark
+        m.emissiveIntensity = m.emissiveMap ? th.glow * 1.4 : m.userData.baseGlow * (1 + th.glow * 2);
+    }); });
     sun.userData.dir = new THREE.Vector3(...th.sun).normalize();
     camera.far = th.fog[1] + 900; camera.updateProjectionMatrix();
 }
 // apply a quality level: sharpness and shadows
 function applyQuality(q) {
-    quality = q;
+    quality = q; SC.setDetail(q !== 'low');
     const Q = SC.QUALITY[q];
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pixelRatio));
     const wantShadows = Q.shadows > 0;
@@ -880,6 +971,15 @@ function init() {
     sun = new THREE.DirectionalLight(0xfff0d8, 2.8); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.04;
     scene.add(sun, sun.target);
     camera = new THREE.PerspectiveCamera(60, 1, 0.5, 2600);
+    SC.setDetail(quality !== 'low');
+    // the speed lines are drawn on a see-through layer over the 3D view
+    const overlay = document.createElement('canvas'); overlay.className = 'race-fx';
+    canvas.after(overlay);
+    efx = new Effects(scene, overlay);
+    // headlights for night races (one light that follows your car)
+    headlight = new THREE.SpotLight(0xfff4e0, 60, 90, 0.45, 0.5, 1.4); headlight.visible = false;
+    carGlow = new THREE.PointLight(0xc8d8ff, 18, 14, 1.6); carGlow.visible = false;   // like light from street lamps falling on your car
+    scene.add(headlight, headlight.target, carGlow);
     loadTrack(store('raceTrack', 'coast'));
     applyQuality(quality);
     bindControls();
@@ -917,5 +1017,5 @@ export function leave() {
 }
 // for testing: drive automatically along the racing line
 export function autopilot(on) { window.__autopilot = on; }
-export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), trackLen, ghost: !!(ghost && ghost.holder.visible), quality, shadows: renderer.shadowMap.enabled, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
+export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), trackLen, ghost: !!(ghost && ghost.holder.visible), slip: player && player.slip, time: timeOfDay, quality, shadows: renderer.shadowMap.enabled, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
 export function setHelp(on) { help = on; }

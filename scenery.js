@@ -24,9 +24,19 @@ export const THEMES = {
     city:   { top: 0x4f86c6, horizon: 0xd4dde6, sun: [-0.5, 0.5, -0.7],   fog: [180, 900],  ground: 0x4a4f57, hills: 0x8a95a3 },
     forest: { top: 0x3a86d8, horizon: 0xcfe6f5, sun: [0.6, 0.38, 0.7],    fog: [280, 1700], ground: 0x3f7a35, hills: 0x4d6e55 }
 };
+// Time of day changes the colours, sun height and light strength of any theme
+export const TIMES = { day: 'Day', sunset: 'Sunset', night: 'Night' };
+export function lookFor(themeKey, time = 'day') {
+    const t = { ...THEMES[themeKey], light: { sun: 2.8, sunColor: 0xfff0d8, hemi: 0.7, env: 0.9, exposure: 1.05 }, clouds: themeKey === 'city' ? 0.5 : 0.8, stars: 0, glow: 0 };
+    if (time === 'sunset') Object.assign(t, { top: 0x3a4f8c, horizon: 0xf2a65a, sun: [t.sun[0], 0.08, t.sun[2]], fog: [t.fog[0] * 0.9, t.fog[1] * 0.9],
+        light: { sun: 2.2, sunColor: 0xffb070, hemi: 0.5, env: 0.75, exposure: 1.1 }, clouds: 0.6, glow: 0.4 });
+    if (time === 'night') Object.assign(t, { top: 0x05070f, horizon: 0x1a2236, sun: [-t.sun[0], 0.35, -t.sun[2]], fog: [t.fog[0] * 0.5, t.fog[1] * 0.45],
+        light: { sun: 0.5, sunColor: 0x9fb4ff, hemi: 0.32, env: 0.45, exposure: 1.25 }, clouds: 0.15, stars: 1, glow: 1 });
+    return t;
+}
 const SKY_VERT = `varying vec3 vDir; void main() { vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
 const SKY_FRAG = `
-uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir; uniform float clouds;
+uniform vec3 top; uniform vec3 horizon; uniform vec3 sunDir; uniform float clouds; uniform float stars; uniform float night;
 varying vec3 vDir;
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -37,29 +47,30 @@ void main() {
   vec3 col = mix(horizon, top, pow(clamp(h, 0.0, 1.0), 0.55));
   if (h < 0.0) col = horizon * 0.92;
   float s = max(dot(d, normalize(sunDir)), 0.0);
-  col += vec3(1.0, 0.92, 0.75) * (pow(s, 900.0) * 3.0 + pow(s, 12.0) * 0.25);
+  vec3 sunCol = mix(vec3(1.0, 0.92, 0.75), vec3(0.85, 0.9, 1.0), night);
+  col += sunCol * (pow(s, 900.0) * 3.0 * (1.0 - night * 0.6) + pow(s, 12.0) * 0.25 * (1.0 - night));
+  if (stars > 0.0 && h > 0.05) { vec2 g = floor(d.xz / (h + 0.3) * 260.0); float st = step(0.997, hash(g)); col += vec3(st) * stars * 0.9; }
   if (h > 0.02 && clouds > 0.0) {
     vec2 uv = d.xz / (h + 0.12) * 1.6;
     float c = smoothstep(0.52, 0.78, fbm(uv + vec2(3.7, 1.1)));
-    col = mix(col, vec3(1.0) * (0.92 + 0.08 * s), c * clouds * smoothstep(0.02, 0.2, h));
+    col = mix(col, mix(vec3(1.0) * (0.92 + 0.08 * s), horizon * 0.6, night), c * clouds * smoothstep(0.02, 0.2, h));
   }
   gl_FragColor = vec4(col, 1.0);
 }`;
-export function makeSky(theme) {
-    const t = THEMES[theme];
+export function makeSky(t) {
     const mat = new THREE.ShaderMaterial({
         uniforms: { top: { value: new THREE.Color(t.top) }, horizon: { value: new THREE.Color(t.horizon) },
-                    sunDir: { value: new THREE.Vector3(...t.sun).normalize() }, clouds: { value: theme === 'city' ? 0.5 : 0.8 } },
+                    sunDir: { value: new THREE.Vector3(...t.sun).normalize() }, clouds: { value: t.clouds }, stars: { value: t.stars }, night: { value: t.stars } },
         vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, side: THREE.BackSide, depthWrite: false, fog: false });
     const sky = new THREE.Mesh(new THREE.SphereGeometry(2000, 32, 16), mat);
     sky.renderOrder = -1; sky.frustumCulled = false;
     return sky;
 }
 // Reflections for the cars' paint: the sky and the ground, blurred into an environment map
-export function makeEnvironment(renderer, theme) {
-    const t = THEMES[theme], env = new THREE.Scene();
-    env.add(makeSky(theme));
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(1900, 32), new THREE.MeshBasicMaterial({ color: t.ground }));
+export function makeEnvironment(renderer, t) {
+    const env = new THREE.Scene();
+    env.add(makeSky(t));
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(1900, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(t.ground).multiplyScalar(t.stars ? 0.15 : 1) }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -20; env.add(ground);
     const pmrem = new THREE.PMREMGenerator(renderer);
     const tex = pmrem.fromScene(env, 0.02, 1, 2500).texture;
@@ -78,6 +89,27 @@ function canvasTex(w, h, draw, repeat = true) {
     return t;
 }
 const rand = (a, b) => a + Math.random() * (b - a);
+// Free CC0 textures from Poly Haven (polyhaven.com), saved in textures/ so they work offline
+const loader = new THREE.TextureLoader(), texCache = {};
+export let useDetailMaps = true;   // normal maps are skipped on Low quality
+export function setDetail(on) { useDetailMaps = on; }
+export function photoTex(name, kind = 'col') {
+    const key = name + kind;
+    if (!texCache[key]) {
+        const t = loader.load(`textures/${name}_${kind}.webp`);
+        t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8;
+        if (kind === 'col') t.colorSpace = THREE.SRGBColorSpace;
+        texCache[key] = t;
+    }
+    return texCache[key].clone();   // clones share the image, so it's loaded once
+}
+// a material using a photo texture, repeated every 'metres', with an optional colour tint
+export function photoMat(name, rx, ry, tint = 0xffffff, rough = 0.95) {
+    const map = photoTex(name, 'col'); map.repeat.set(rx, ry);
+    const m = new THREE.MeshStandardMaterial({ map, color: tint, roughness: rough });
+    if (useDetailMaps) { const n = photoTex(name, 'nor'); n.repeat.set(rx, ry); m.normalMap = n; m.normalScale.set(0.8, 0.8); }
+    return m;
+}
 export function asphaltTexture() {
     return canvasTex(512, 512, (x, w, h) => {
         x.fillStyle = '#3a3d43'; x.fillRect(0, 0, w, h);
@@ -121,10 +153,10 @@ const cornerList = ctx => {
 // the outside of a corner (as a lateral sign for pathAt)
 const outside = (ctx, i) => Math.sign(ctx.samples[i].ks) || 1;
 
+const GRASS_TINT = 0x8fd06a;   // the photo grass is quite yellow; this tints it a fresher green
 function ground(ctx, color) {
     const { bounds } = ctx, gw = bounds.maxX - bounds.minX + 1600, gd = bounds.maxZ - bounds.minZ + 1600;
-    const tex = grassTexture(color); tex.repeat.set(gw / 14, gd / 14);
-    const g = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd), new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(gw, gd), photoMat('leafy_grass', gw / 9, gd / 9, GRASS_TINT));
     g.rotation.x = -Math.PI / 2; g.position.set((bounds.minX + bounds.maxX) / 2, -0.02, (bounds.minZ + bounds.maxZ) / 2);
     g.receiveShadow = true; ctx.group.add(g);
 }
@@ -168,21 +200,22 @@ function trees(ctx, count, minGap = 8, area = null) {
 }
 // gravel traps on the outside of corners (between the kerb and the barrier)
 function gravel(ctx) {
-    const { samples, N, HW, RUNOFF, pathAt } = ctx, pos = [], col = [], idx = [];
-    const sand = new THREE.Color(0xc9b48a);
+    const { samples, N, HW, RUNOFF, pathAt } = ctx, pos = [], col = [], idx = [], uv = [];
+    const sand = new THREE.Color(0xffffff);
     for (const ci of cornerList(ctx)) {
         const side = outside(ctx, ci), d0 = samples[ci].d - 45, steps = 30;
         const base = pos.length / 3;
         for (let k = 0; k <= steps; k++) {
             const d = d0 + k * 90 / steps, fade = Math.sin(Math.PI * k / steps);
             const a = pathAt(d, side * (HW + 1.4), 0), b = pathAt(d, side * (HW + 1.4 + (RUNOFF - 1.8) * Math.max(0.15, fade)), 0);
-            pos.push(a.x, 0.025, a.z, b.x, 0.025, b.z);
-            const c = sand.clone().offsetHSL(0, 0, rand(-0.03, 0.03)); col.push(c.r, c.g, c.b, c.r, c.g, c.b);
+            pos.push(a.x, 0.025, a.z, b.x, 0.025, b.z); uv.push(d / 4, 0, d / 4, (RUNOFF - 1.8) * Math.max(0.15, fade) / 4);
+            const c = sand.clone(); col.push(c.r, c.g, c.b, c.r, c.g, c.b);
             if (k < steps) { const q = base + k * 2; idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
         }
     }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
-    const mesh = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, side: THREE.DoubleSide })); mesh.receiveShadow = true;
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+    const gm = photoMat('coast_sand_01', 1, 1, 0xf0e2c0); gm.side = THREE.DoubleSide;
+    const mesh = new THREE.Mesh(g, gm); mesh.receiveShadow = true;
     ctx.group.add(mesh);
 }
 // stacks of old tyres along the barrier on the outside of corners
@@ -348,8 +381,7 @@ function coast(ctx) {
     const outline = rad.map((r, k) => { const a = k / SEG * Math.PI * 2 - Math.PI, rr = r + 38 + 12 * Math.sin(k * 0.7) + 6 * Math.sin(k * 2.3); return [cx + Math.cos(a) * rr, cz + Math.sin(a) * rr]; });
     // grass top (with texture) as a flat shape
     const shape = new THREE.Shape(outline.map(([x, z]) => new THREE.Vector2(x, -z)));
-    const tex = grassTexture(THEMES.coast.ground); tex.repeat.set(1 / 14, 1 / 14);
-    const top = new THREE.Mesh(new THREE.ShapeGeometry(shape, 4), new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
+    const top = new THREE.Mesh(new THREE.ShapeGeometry(shape, 4), photoMat('leafy_grass', 1 / 9, 1 / 9, GRASS_TINT));
     top.rotation.x = -Math.PI / 2; top.position.y = -0.02; top.receiveShadow = true; ctx.group.add(top);
     // a sandy beach band and rocky cliffs down to the sea
     const pos = [], col = [], idx = [], rock = new THREE.Color(0x9b8a76), sandC = new THREE.Color(0xe3cf9a);

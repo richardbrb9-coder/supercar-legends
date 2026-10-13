@@ -21,6 +21,7 @@ const CORE_FILES = [
     './carmodel.js',
     './race.js',
     './scenery.js',
+    './effects.js',
     './credits.js',
     './manifest.json',
     './licences/fdl-1.2.txt',
@@ -36,6 +37,15 @@ const CORE_FILES = [
 ];
 // three.js for the 3D builder
 const LIB_FILES = [
+    './textures/asphalt_02_col.webp',
+    './textures/asphalt_02_nor.webp',
+    './textures/coast_sand_01_col.webp',
+    './textures/coast_sand_01_nor.webp',
+    './textures/concrete_pavement_col.webp',
+    './textures/concrete_pavement_nor.webp',
+    './textures/leafy_grass_col.webp',
+    './textures/leafy_grass_nor.webp',
+
     './lib/three.module.min.js',
     './lib/three.core.min.js',
     './lib/addons/OrbitControls.js',

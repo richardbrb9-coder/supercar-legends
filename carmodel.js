@@ -395,8 +395,39 @@ function buildMaterials(design) {
         tail: new THREE.MeshStandardMaterial({ color: 0x550000, emissive: 0xff1a10, emissiveIntensity: 1.4 })
     };
 }
+// Combine all the meshes under 'root' that share a material into one mesh each (fewer things to draw = smoother on tablets).
+// Each part keeps its exact position; the look doesn't change.
+function mergeByMaterial(root) {
+    root.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), groups = new Map(), victims = [];
+    root.traverse(o => {
+        if (!o.isMesh || o === root || o.userData.keep) return;
+        // only parts that belong directly to this root (not to a wheel, which turns on its own)
+        let p = o.parent; while (p && p !== root) { if (p.userData.wheelRoot) return; p = p.parent; }
+        const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+        g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+        if (!groups.has(o.material)) groups.set(o.material, []);
+        groups.get(o.material).push(g); victims.push(o);
+    });
+    victims.forEach(o => { o.parent.remove(o); o.geometry.dispose(); });
+    // drop now-empty helper groups (but never a wheel)
+    const empties = []; root.traverse(o => { if (o !== root && o.isGroup && !o.userData.wheelRoot && o.children.length === 0) empties.push(o); });
+    empties.forEach(o => o.parent && o.parent.remove(o));
+    for (const [mat, list] of groups) {
+        const useUV = list.every(g => g.attributes.uv), names = useUV ? ['position', 'normal', 'uv'] : ['position', 'normal'];
+        const total = list.reduce((n, g) => n + g.attributes.position.count, 0), merged = new THREE.BufferGeometry();
+        for (const name of names) {
+            const size = name === 'uv' ? 2 : 3, arr = new Float32Array(total * size); let off = 0;
+            for (const g of list) { arr.set(g.attributes[name].array, off); off += g.attributes[name].array.length; }
+            merged.setAttribute(name, new THREE.BufferAttribute(arr, size));
+        }
+        list.forEach(g => g.dispose());
+        root.add(new THREE.Mesh(merged, mat));
+    }
+}
 // Build a whole car as a group. Returns { group, mats, wheels, dispose }. The car points along +x and sits on y = 0.
-export function createCar(design) {
+// merge: combine parts for speed (used in races, where the car doesn't change)
+export function createCar(design, { merge = false } = {}) {
     const mats = buildMaterials(design), wheels = [];
     const p = design, pr = profiles(p);
     const car = new THREE.Group();
@@ -599,6 +630,7 @@ export function createCar(design) {
             car.add(strut);
         }
     }
+    if (merge) { wheels.forEach(w => { w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
     const dispose = () => { car.traverse(o => { if (o.geometry) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); };
     return { group: car, mats, wheels, dispose };
 }
