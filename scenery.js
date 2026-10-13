@@ -1,5 +1,5 @@
 // Supercar Legends: the look of the race world. Sky, distant hills, reflections, shadows, quality levels,
-// and the scenery for each circuit. Everything is made in code, so it works offline and needs no downloads.
+// and the scenery for each circuit. Made in code plus a few saved pictures (skies, trees, textures), so it works offline.
 import * as THREE from './lib/three.module.min.js';
 
 // =====================================================================
@@ -210,27 +210,95 @@ function hills(ctx, color, height = 60) {
     ctx.group.add(new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true, side: THREE.DoubleSide })));
 }
 // two kinds of tree (pine and round), in varied greens; they cast shadows
+// Trees are "impostors": real tree models (free CC0 models from Poly Haven) photographed in Blender from 8 directions
+// around them. In the race each tree is one flat picture that turns to face you and shows the view from your side,
+// so a forest of hundreds costs the tablet very little but looks like real trees.
+// frame: the picture's size in metres; bottom: how far below the picture's edge the tree's base sits; grow: how much
+// bigger to make it (the round and slim models are young trees)
+const TREE_TYPES = {
+    fir_a: { frame: 9.214, bottom: 0.184, grow: 1.3 }, fir_b: { frame: 8.245, bottom: 0.165, grow: 1.35 },
+    round: { frame: 6.149, bottom: 0.123, grow: 2.0 }, slim: { frame: 6.052, bottom: 0.121, grow: 1.7 },
+    bush_a: { frame: 5.25, bottom: 0.105, grow: 0.8 }, bush_b: { frame: 3.718, bottom: 0.074, grow: 0.9 }
+};
+// which trees grow where, and how often
+const TREE_MIX = {
+    forest: [['fir_a', 0.3], ['fir_b', 0.28], ['round', 0.12], ['slim', 0.14], ['bush_a', 0.08], ['bush_b', 0.08]],
+    coast:  [['round', 0.36], ['slim', 0.16], ['fir_b', 0.08], ['bush_a', 0.22], ['bush_b', 0.18]],
+    city:   [['round', 0.55], ['slim', 0.45]]
+};
+const treeMats = {};
+let treeTint = new THREE.Color(1, 1, 1);
+function treeMaterial(name) {
+    if (treeMats[name]) return treeMats[name];
+    const map = loader.load(`trees/${name}.webp`); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
+    const mat = new THREE.MeshBasicMaterial({ map, alphaTest: 0.42, side: THREE.DoubleSide, toneMapped: false, color: treeTint });
+    mat.onBeforeCompile = sh => {
+        // pick the picture taken from the direction we're looking from (each tree also gets its own turn, from its position)
+        sh.vertexShader = sh.vertexShader.replace('#include <uv_vertex>', `#include <uv_vertex>
+            vec3 iC = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+            vec3 toCam = cameraPosition - iC;
+            float turn = fract(sin(dot(iC.xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831853;
+            float fr = mod(floor((atan(toCam.x, toCam.z) + turn) / 6.2831853 * 8.0 + 0.5), 8.0);
+            vMapUv = vec2((vMapUv.x + mod(fr, 4.0)) / 4.0, (vMapUv.y + 1.0 - floor(fr / 4.0)) / 2.0);`)
+        // stand the picture upright, facing the camera
+            .replace('#include <project_vertex>', `
+            float sc = length(instanceMatrix[0].xyz);
+            vec3 side = normalize(vec3(toCam.z, 0.0, -toCam.x) + vec3(1e-5, 0.0, 0.0));
+            vec4 mvPosition = viewMatrix * vec4(iC + side * transformed.x * sc + vec3(0.0, transformed.y * sc, 0.0), 1.0);
+            gl_Position = projectionMatrix * mvPosition;`);
+    };
+    return (treeMats[name] = mat);
+}
+// trees get a little darker and warmer at sunset, and dim at night
+export function setTreeLight(t) {
+    const c = t.time === 'night' ? [0.2, 0.23, 0.33] : t.time === 'sunset' ? [0.92, 0.76, 0.62] : [1, 1, 1];
+    treeTint.setRGB(...c); Object.values(treeMats).forEach(m => m.color.copy(treeTint));
+}
+let shadowTex = null;
+function treeShadowTex() {
+    if (shadowTex) return shadowTex;
+    const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+    const g = x.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(0,0,0,0.55)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 64, 64); return (shadowTex = new THREE.CanvasTexture(c));
+}
+// spots: [{ x, z, size }] (size 1 = the tree's normal size); mix: which kinds of tree
+function plantTrees(ctx, spots, mix) {
+    const byType = {}; const total = mix.reduce((a, [, w]) => a + w, 0);
+    for (const sp of spots) {
+        let r = Math.random() * total, k = mix[0][0]; for (const [name, w] of mix) { if ((r -= w) <= 0) { k = name; break; } }
+        (byType[k] = byType[k] || []).push(sp);
+    }
+    const plane = new THREE.PlaneGeometry(1, 1); plane.translate(0, 0.5, 0);
+    const m = new THREE.Matrix4(), col = new THREE.Color(), shadows = [];
+    for (const [name, list] of Object.entries(byType)) {
+        const T = TREE_TYPES[name], mesh = new THREE.InstancedMesh(plane, treeMaterial(name), list.length);
+        list.forEach((sp, i) => {
+            const S = T.frame * T.grow * sp.size;
+            m.makeScale(S, S, S).setPosition(sp.x, -T.bottom * T.grow * sp.size, sp.z); mesh.setMatrixAt(i, m);
+            mesh.setColorAt(i, col.setHSL(0.28, 0.1, rand(0.42, 0.55)).multiplyScalar(1.9));   // a little variety in shade
+            shadows.push([sp.x, sp.z, S * (name.startsWith('fir') ? 0.32 : 0.42)]);
+        });
+        mesh.frustumCulled = false; ctx.group.add(mesh);
+    }
+    // a soft shadow on the ground under each tree
+    const sg = new THREE.PlaneGeometry(1, 1); sg.rotateX(-Math.PI / 2);
+    const sh = new THREE.InstancedMesh(sg, new THREE.MeshBasicMaterial({ map: treeShadowTex(), transparent: true, depthWrite: false, toneMapped: false }), shadows.length);
+    shadows.forEach(([x, z, r], i) => { m.makeScale(r * 2, 1, r * 2).setPosition(x, 0.02, z); sh.setMatrixAt(i, m); });
+    sh.frustumCulled = false; ctx.group.add(sh);
+}
 function trees(ctx, count, minGap = 8, area = null) {
     const { bounds, nearTrack, HW, RUNOFF } = ctx;
-    const n = Math.round(count * ctx.quality.density);
-    const pineTop = new THREE.InstancedMesh(new THREE.ConeGeometry(2.6, 7.5, 7), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), n);
-    const roundTop = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(3.2, 0), new THREE.MeshStandardMaterial({ flatShading: true, roughness: 0.9 }), n);
-    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.45, 3, 6), new THREE.MeshStandardMaterial({ color: 0x5b3a1e, roughness: 1 }), n * 2);
-    const m = new THREE.Matrix4(), col = new THREE.Color(); let np = 0, nr = 0, nt = 0, tries = 0;
-    const greens = [0x24592b, 0x2e6b30, 0x3b7d33, 0x1f4d2a, 0x4a8a35, 0x5a8f2e];
-    while (np + nr < n && tries < n * 25) {
+    const n = Math.round(count * ctx.quality.density), spots = [];
+    let tries = 0;
+    while (spots.length < n && tries < n * 25) {
         tries++;
         const x = area ? area.x + rand(-area.r, area.r) : rand(bounds.minX - 120, bounds.maxX + 120);
         const z = area ? area.z + rand(-area.r, area.r) : rand(bounds.minZ - 120, bounds.maxZ + 120);
         if (nearTrack(x, z) < HW + RUNOFF + minGap) continue;
         if (ctx.avoid && ctx.avoid(x, z)) continue;
-        const sc = rand(0.7, 1.5); col.set(greens[Math.floor(Math.random() * greens.length)]).offsetHSL(0, 0, rand(-0.04, 0.04));
-        m.makeScale(sc, sc, sc).setPosition(x, 1.5 * sc, z); trunks.setMatrixAt(nt++, m);
-        if (Math.random() < 0.55) { m.makeScale(sc, sc, sc).setPosition(x, 6.2 * sc, z); pineTop.setMatrixAt(np, m); pineTop.setColorAt(np++, col); }
-        else { m.makeScale(sc, sc * rand(0.85, 1.15), sc).setPosition(x, 5.5 * sc, z); roundTop.setMatrixAt(nr, m); roundTop.setColorAt(nr++, col); }
+        spots.push({ x, z, size: rand(0.75, 1.3) });
     }
-    pineTop.count = np; roundTop.count = nr; trunks.count = nt;
-    [pineTop, roundTop, trunks].forEach(o => { o.castShadow = true; ctx.group.add(o); });
+    plantTrees(ctx, spots, TREE_MIX[ctx.theme] || TREE_MIX.forest);
 }
 // gravel traps on the outside of corners (between the kerb and the barrier)
 function gravel(ctx) {
@@ -394,7 +462,7 @@ function leMans(ctx) {
     }
     gravel(ctx); tyreWalls(ctx); adBoards(ctx, 65); marshalPosts(ctx, 300);
     ctx.avoid = (x, z) => best && Math.hypot(x - best.x, z - best.z) < 35;
-    trees(ctx, 1400, 10);
+    trees(ctx, 2800, 10);
     return { update(dt) {
         if (!wheel) return;
         wheel.rotation.z += dt * 0.08;
@@ -446,7 +514,7 @@ function coast(ctx) {
     gravel(ctx); tyreWalls(ctx); adBoards(ctx, 75); marshalPosts(ctx, 320);
     grandstand(ctx, 70, -(HW + RUNOFF + 4), 70, 7); grandstand(ctx, 150, HW + RUNOFF + 4, 60, 6);
     ctx.avoid = (x, z) => { const a = Math.atan2(z - cz, x - cx), k = Math.floor(((a + Math.PI) / (Math.PI * 2)) * SEG) % SEG; const [ox, oz] = outline[k]; return Math.hypot(x - cx, z - cz) > Math.hypot(ox - cx, oz - cz) - 8; };
-    trees(ctx, 260, 9);
+    trees(ctx, 650, 9);
     return { cx, cz };
 }
 
@@ -485,10 +553,7 @@ function cityExtras(ctx) {
     for (let d = 14; d < trackLen; d += 26) for (const side of [1, -1]) {
         const p = pathAt(d, side * (curb + 3), 0); if (nearTrack(p.x, p.z) < curb + 2) continue; tspots.push(p);
     }
-    const tops = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(2.2, 0), new THREE.MeshStandardMaterial({ color: 0x3f7d34, flatShading: true }), tspots.length);
-    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.18, 0.24, 3, 6), new THREE.MeshStandardMaterial({ color: 0x5b3a1e }), tspots.length);
-    tspots.forEach((p, i) => { m.makeTranslation(p.x, 1.5, p.z); trunks.setMatrixAt(i, m); m.makeScale(1, rand(0.9, 1.25), 1).setPosition(p.x, 4.2, p.z); tops.setMatrixAt(i, m); });
-    [tops, trunks].forEach(o => { o.castShadow = true; ctx.group.add(o); });
+    plantTrees(ctx, tspots.map(p => ({ x: p.x, z: p.z, size: rand(0.6, 0.8) })), TREE_MIX.city);
 }
 
 // =====================================================================

@@ -962,6 +962,7 @@ function setAtmosphere(theme) {
     scene.environment = SC.makeEnvironment(renderer, th);
     scene.environmentIntensity = th.light.env;
     sun.intensity = th.light.sun; sun.color.set(th.light.sunColor); hemi.intensity = th.light.hemi;
+    SC.setTreeLight(th);
     renderer.toneMappingExposure = th.light.exposure;
     if (headlight) headlight.visible = carGlow.visible = timeOfDay === 'night';
     // glowing things (lamps, lit windows, tail lights) glow brighter in the dark
