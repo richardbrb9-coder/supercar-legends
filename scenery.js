@@ -1,7 +1,7 @@
 // Supercar Legends: the look of the race world. Sky, distant hills, reflections, shadows, quality levels,
 // and the scenery for each circuit. Made in code plus a few saved pictures (skies, trees, textures), so it works offline.
 import * as THREE from './lib/three.module.min.js';
-import { STANDS } from './standdata.js';
+import { STANDS, PITS, BRIDGE } from './standdata.js';
 
 // =====================================================================
 //  QUALITY LEVELS (chosen automatically, or by the player in the race menu)
@@ -376,15 +376,17 @@ function marshalPosts(ctx, every = 280) {
 // cantilever roof on trusses) with soft shadows baked in, placed side by side. The crowd is pictures of seated
 // spectators (also made in Blender), one strip per row.
 const standGeo = {};
-function standPart(rows, name) {
-    const key = rows + name;
+function standPart(rows, name) { return bakedPart(STANDS[rows], name, 'stand' + rows); }
+// a part of a building made in Blender, as a geometry (turned so the side that faced the track faces local -z)
+function bakedPart(data, name, key, turn = true) {
+    key += name;
     if (standGeo[key]) return standGeo[key];
-    const p = STANDS[rows].parts[name], g = new THREE.BufferGeometry();
+    const p = data.parts[name], g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(p.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(p.nor, 3));
     const c = new Float32Array(p.ao.length * 3); p.ao.forEach((a, i) => { const v = 0.35 + 0.65 * a; c[i * 3] = c[i * 3 + 1] = c[i * 3 + 2] = v; });
     g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.setIndex(p.idx);
-    g.rotateY(Math.PI);          // the rows climb away from the road (local +z), like the rest of the scenery
+    if (turn) g.rotateY(Math.PI);          // so it stands away from the road (local +z), like the rest of the scenery
     return (standGeo[key] = g);
 }
 const crowdMats = [];
@@ -430,6 +432,61 @@ function grandstand(ctx, d, lateral, length = 70, rows = 8, roofColour = 0xE1060
     return st;
 }
 
+// The pit building: 10 m sections modelled in Blender (two garages each, some with the doors open showing tyres,
+// a workbench and lights inside; a glass hospitality floor with a balcony; a roof canopy over the pit lane).
+// Each section gets a team colour on the strip over its doors and on its tool chests.
+const TEAM_COLOURS = [0xE10600, 0x00B8D9, 0xFFB300, 0x1E3A8A, 0x00A86B, 0xFF6D00, 0x7E57C2, 0xF4F6F8, 0x1B1F26, 0xC6FF00];
+function pitBuilding(sections) {
+    const g = new THREE.Group(), m = new THREE.Matrix4(), col = new THREE.Color(), W = PITS.a.halfWidth * 2;
+    const mats = {
+        wall: new THREE.MeshStandardMaterial({ color: 0xf6f3ee, vertexColors: true, roughness: 0.85 }),
+        accent: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.5 }),
+        floor: new THREE.MeshStandardMaterial({ color: 0x5a5e66, vertexColors: true, roughness: 0.7 }),
+        lamp: new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf4f8ff, emissiveIntensity: 1.1 }),
+        tyre: new THREE.MeshStandardMaterial({ color: 0x1a1b1e, vertexColors: true, roughness: 0.9 }),
+        steel: new THREE.MeshStandardMaterial({ color: 0x6a717c, vertexColors: true, metalness: 0.6, roughness: 0.45 }),
+        door: new THREE.MeshStandardMaterial({ color: 0xa9b0ba, vertexColors: true, metalness: 0.5, roughness: 0.45 }),
+        glass: new THREE.MeshStandardMaterial({ color: 0x1c2b3a, metalness: 0.7, roughness: 0.08 }),
+        roof: new THREE.MeshStandardMaterial({ color: 0xE10600, vertexColors: true, roughness: 0.5 })
+    };
+    const picks = Array.from({ length: sections }, () => ['a', 'b', 'c'][Math.floor(Math.random() * 3)]);
+    const teams = Array.from({ length: sections }, () => TEAM_COLOURS[Math.floor(Math.random() * TEAM_COLOURS.length)]);
+    for (const v of ['a', 'b', 'c']) {
+        const here = picks.map((p, i) => p === v ? i : -1).filter(i => i >= 0); if (!here.length) continue;
+        for (const name of Object.keys(PITS[v].parts)) {
+            const mesh = new THREE.InstancedMesh(bakedPart(PITS[v], name, 'pits' + v), mats[name], here.length);
+            here.forEach((i, k) => { mesh.setMatrixAt(k, m.makeTranslation((i - (sections - 1) / 2) * W, 0, 0)); if (name === 'accent') mesh.setColorAt(k, col.set(teams[i])); });
+            mesh.castShadow = name === 'wall' || name === 'roof'; mesh.receiveShadow = name !== 'lamp'; g.add(mesh);   // only the big parts cast shadows (cheaper)
+        }
+    }
+    for (const sgn of [1, -1]) {         // end walls
+        const wall = new THREE.Mesh(new THREE.BoxGeometry(0.4, 9.2, 14.3), new THREE.MeshStandardMaterial({ color: 0xd9dce0, roughness: 0.85 }));
+        wall.position.set(sgn * (sections * W / 2 + 0.2), 4.6, 7.15); wall.castShadow = wall.receiveShadow = true; g.add(wall);
+    }
+    return g;
+}
+// The covered footbridge (modelled in Blender), stretched to fit across the track, with a banner on each side
+function footbridge(group, span) {
+    const B = BRIDGE, sx = span / B.span;
+    const mats = {
+        concrete: new THREE.MeshStandardMaterial({ color: 0xd4d7dc, vertexColors: true, roughness: 0.85 }),
+        steel: new THREE.MeshStandardMaterial({ color: 0xF4F6F8, vertexColors: true, metalness: 0.4, roughness: 0.4 }),
+        deck: new THREE.MeshStandardMaterial({ color: 0x2a2f39, vertexColors: true, roughness: 0.7 }),
+        roof: new THREE.MeshStandardMaterial({ color: 0x2a2f39, vertexColors: true, metalness: 0.3, roughness: 0.5 }),
+        glass: new THREE.MeshStandardMaterial({ color: 0x9fc0d6, transparent: true, opacity: 0.3, metalness: 0.3, roughness: 0.1, depthWrite: false })
+    };
+    for (const name of Object.keys(B.parts)) {
+        const mesh = new THREE.Mesh(bakedPart(B, name, 'bridge', false), mats[name]); mesh.scale.x = sx;
+        mesh.castShadow = name === 'concrete' || name === 'roof' || name === 'deck'; mesh.receiveShadow = true; group.add(mesh);
+    }
+    const signTex = canvasTex(1024, 96, (x, w, h) => { x.fillStyle = '#E10600'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; x.font = '900 64px Arial Black, Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('SUPERCAR LEGENDS', w / 2, h / 2 + 4); }, false);
+    // the banner hangs under the walkway, facing both ways along the track
+    for (const face of [1, -1]) {
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(span * 0.62, 1.5), new THREE.MeshBasicMaterial({ map: signTex }));
+        sign.position.set(0, B.height - 1.25, face * (B.halfWidth + 0.08)); sign.rotation.y = face > 0 ? 0 : Math.PI; group.add(sign);
+    }
+}
+
 // =====================================================================
 //  LE MANS: pit building, big grandstand, footbridge, Ferris wheel, forest, hills
 // =====================================================================
@@ -439,34 +496,12 @@ function leMans(ctx) {
     hills(ctx, THEMES.forest.hills, 70);
     // pit building along the start straight (one side), grandstand opposite
     const pitLen = 170, pitD = 25 + pitLen / 2;
-    const pits = new THREE.Group();
-    const garageTex = canvasTex(256, 128, (x, w, h) => {
-        x.fillStyle = '#e8e8ea'; x.fillRect(0, 0, w, h);
-        x.fillStyle = '#2a2f39'; x.fillRect(18, 34, w - 36, h - 34);
-        for (let y = 40; y < h; y += 8) { x.fillStyle = '#3a4150'; x.fillRect(18, y, w - 36, 2); }
-        x.fillStyle = '#E10600'; x.fillRect(0, 0, w, 16);
-    });
-    garageTex.repeat.set(pitLen / 8, 1);
-    const pitBody = new THREE.Mesh(new THREE.BoxGeometry(pitLen, 6, 12), [
-        new THREE.MeshStandardMaterial({ color: 0xe8e8ea }), new THREE.MeshStandardMaterial({ color: 0xe8e8ea }),
-        new THREE.MeshStandardMaterial({ color: 0xcfd3d8 }), new THREE.MeshStandardMaterial({ color: 0xcfd3d8 }),
-        new THREE.MeshStandardMaterial({ color: 0xe8e8ea }), new THREE.MeshStandardMaterial({ map: garageTex })]);
-    pitBody.position.set(0, 3, 6); pits.add(pitBody);
-    const terrace = new THREE.Mesh(new THREE.BoxGeometry(pitLen, 0.4, 14), new THREE.MeshStandardMaterial({ color: 0x2a2f39 })); terrace.position.set(0, 6.2, 6); pits.add(terrace);
-    const glass = new THREE.Mesh(new THREE.BoxGeometry(pitLen - 4, 3, 9), new THREE.MeshStandardMaterial({ color: 0x1c2b3a, metalness: 0.6, roughness: 0.15 })); glass.position.set(0, 7.9, 7); pits.add(glass);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(pitLen + 2, 0.5, 15), new THREE.MeshStandardMaterial({ color: 0xE10600 })); roof.position.set(0, 9.6, 6); pits.add(roof);
-    pits.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    const pits = pitBuilding(Math.round(pitLen / 10));
     placeBeside(ctx, pits, pitD, -(HW + RUNOFF + 4));   // the garage doors (the -z face) look onto the track
     grandstand(ctx, pitD, HW + RUNOFF + 3, 120, 10);
     // a footbridge arching over the track, with a sign on it
     const bd = 290, bridge = new THREE.Group(), span = (HW + RUNOFF) * 2 + 6;
-    const arch = new THREE.Mesh(new THREE.TorusGeometry(span / 2, 1.1, 10, 40, Math.PI), new THREE.MeshStandardMaterial({ color: 0x16171a, roughness: 0.7 }));
-    arch.position.y = 0; bridge.add(arch);
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(span, 1.2, 2.6), new THREE.MeshStandardMaterial({ color: 0xF4F6F8 })); deck.position.y = span / 2 - 1.5; bridge.add(deck);
-    const signTex = canvasTex(1024, 96, (x, w, h) => { x.fillStyle = '#E10600'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; x.font = '900 64px Arial Black, Arial'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('SUPERCAR LEGENDS', w / 2, h / 2 + 4); }, false);
-    // the group is turned so local x runs across the track and local z along it; the signs face both ways along the track
-    for (const face of [1, -1]) { const sign = new THREE.Mesh(new THREE.PlaneGeometry(span * 0.7, span * 0.07), new THREE.MeshBasicMaterial({ map: signTex })); sign.position.set(0, span / 2 - 1.5, face * 1.32); sign.rotation.y = face > 0 ? 0 : Math.PI; bridge.add(sign); }
-    bridge.traverse(o => { o.castShadow = true; });
+    footbridge(bridge, span);
     const bp = pathAt(bd, 0, 0); bridge.position.set(bp.x, 0, bp.z); bridge.rotation.y = bp.heading + Math.PI / 2;
     ctx.group.add(bridge);
     // a Ferris wheel in the infield, near the start
