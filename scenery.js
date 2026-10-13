@@ -27,7 +27,7 @@ export const THEMES = {
 // Time of day changes the colours, sun height and light strength of any theme
 export const TIMES = { day: 'Day', sunset: 'Sunset', night: 'Night' };
 export function lookFor(themeKey, time = 'day') {
-    const t = { ...THEMES[themeKey], light: { sun: 2.8, sunColor: 0xfff0d8, hemi: 0.7, env: 0.9, exposure: 1.05 }, clouds: themeKey === 'city' ? 0.5 : 0.8, stars: 0, glow: 0 };
+    const t = { ...THEMES[themeKey], time, light: { sun: 2.8, sunColor: 0xfff0d8, hemi: 0.7, env: 0.9, exposure: 1.05 }, clouds: themeKey === 'city' ? 0.5 : 0.8, stars: 0, glow: 0 };
     if (time === 'sunset') Object.assign(t, { top: 0x3a4f8c, horizon: 0xf2a65a, sun: [t.sun[0], 0.08, t.sun[2]], fog: [t.fog[0] * 0.9, t.fog[1] * 0.9],
         light: { sun: 2.2, sunColor: 0xffb070, hemi: 0.5, env: 0.75, exposure: 1.1 }, clouds: 0.6, glow: 0.4 });
     if (time === 'night') Object.assign(t, { top: 0x05070f, horizon: 0x1a2236, sun: [-t.sun[0], 0.35, -t.sun[2]], fog: [t.fog[0] * 0.5, t.fog[1] * 0.45],
@@ -57,7 +57,40 @@ void main() {
   }
   gl_FragColor = vec4(col, 1.0);
 }`;
+// Photographed skies (free CC0 skies from Poly Haven, shrunk and saved in skies/ so they work offline).
+// They load in the background; until they arrive (or if they can't load) the drawn sky above is used.
+const SKY_FILES = { day: 'skies/day.webp', sunset: 'skies/sunset.webp', night: 'skies/night.webp' };
+const photoSkies = {}, skyWaiters = [];
+for (const [time, url] of Object.entries(SKY_FILES)) {
+    photoSkies[time] = { tex: null, sunU: 0.25, horizon: null };
+    new THREE.TextureLoader().load(url, tex => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        // measure the photo once: where its sun (brightest spot) is, and the colour just above the horizon (for the haze)
+        const img = tex.image, c = document.createElement('canvas'); c.width = 256; c.height = 128;
+        const x = c.getContext('2d'); x.drawImage(img, 0, 0, 256, 128);
+        const d = x.getImageData(0, 0, 256, 128).data; let best = -1, bu = 0.25, r = 0, g = 0, b = 0;
+        for (let j = 20; j < 62; j++) for (let i = 0; i < 256; i++) { const k = (j * 256 + i) * 4, l = d[k] + d[k + 1] + d[k + 2]; if (l > best) { best = l; bu = i / 256; } }
+        for (let i = 0; i < 256; i++) { const k = (60 * 256 + i) * 4; r += d[k]; g += d[k + 1]; b += d[k + 2]; }
+        photoSkies[time] = { tex, sunU: bu, horizon: new THREE.Color().setRGB(r / 256 / 255, g / 256 / 255, b / 256 / 255, THREE.SRGBColorSpace) };
+        skyWaiters.splice(0).forEach(f => f());
+    });
+}
+// call f once a photo sky that wasn't ready yet has arrived (so the race can swap the drawn sky for the photo)
+export function whenSkyLoads(f) { skyWaiters.push(f); }
+export function hasPhotoSky(t) { return !!(photoSkies[t.time] && photoSkies[t.time].tex); }
+// the haze colour that blends the distant scenery into the sky
+export function horizonColour(t) { const p = photoSkies[t.time]; return p && p.horizon ? p.horizon.clone() : new THREE.Color(t.horizon); }
 export function makeSky(t) {
+    const photo = photoSkies[t.time];
+    if (photo && photo.tex) {
+        const sky = new THREE.Mesh(new THREE.SphereGeometry(2000, 48, 24),
+            new THREE.MeshBasicMaterial({ map: photo.tex, side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false }));
+        // turn the photo so its sun sits where the scene's sunlight comes from
+        const a = photo.sunU * Math.PI * 2, ax = -Math.cos(a), az = Math.sin(a);
+        sky.rotation.y = Math.atan2(t.sun[0], t.sun[2]) - Math.atan2(ax, az);
+        sky.renderOrder = -1; sky.frustumCulled = false;
+        return sky;
+    }
     const mat = new THREE.ShaderMaterial({
         uniforms: { top: { value: new THREE.Color(t.top) }, horizon: { value: new THREE.Color(t.horizon) },
                     sunDir: { value: new THREE.Vector3(...t.sun).normalize() }, clouds: { value: t.clouds }, stars: { value: t.stars }, night: { value: t.stars } },
@@ -71,6 +104,7 @@ export function makeEnvironment(renderer, t) {
     const env = new THREE.Scene();
     env.add(makeSky(t));
     const ground = new THREE.Mesh(new THREE.CircleGeometry(1900, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(t.ground).multiplyScalar(t.stars ? 0.15 : 1) }));
+    ground.material.toneMapped = false;
     ground.rotation.x = -Math.PI / 2; ground.position.y = -20; env.add(ground);
     const pmrem = new THREE.PMREMGenerator(renderer);
     const tex = pmrem.fromScene(env, 0.02, 1, 2500).texture;

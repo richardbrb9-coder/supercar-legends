@@ -1,4 +1,4 @@
-const CACHE_NAME = 'supercar-legends-v24'; // Bump this on every change so tablets pick up the new version
+const CACHE_NAME = 'supercar-legends-v25'; // Bump this on every change so tablets pick up the new version
 const CACHE_PREFIX = CACHE_NAME.replace(/\d+$/, ''); // Only delete this app's own old caches: every app on richardbrb9-coder.github.io shares the same cache storage
 
 // The car list and picture credits, so every photo can be saved for offline use.
@@ -45,6 +45,9 @@ const LIB_FILES = [
     './textures/concrete_pavement_nor.webp',
     './textures/leafy_grass_col.webp',
     './textures/leafy_grass_nor.webp',
+    './skies/day.webp',
+    './skies/sunset.webp',
+    './skies/night.webp',
 
     './lib/three.module.min.js',
     './lib/three.core.min.js',

@@ -53,6 +53,11 @@ function buildSamples() {
 const sampleAt = d => samples[((Math.floor(d / trackLen * N) % N) + N) % N];
 // A smooth point along the track: blends between the two nearest samples so cars glide instead of stepping
 const wrapAngle = a => { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; };
+// the racing line's distance from the middle of the road at distance d
+function lineAt(d) {
+    const f = ((d / trackLen * N) % N + N) % N, i = Math.floor(f), t = f - i;
+    return samples[i].line + (samples[(i + 1) % N].line - samples[i].line) * t;
+}
 function pathAt(d, extraOffset = 0, lineScale = 0.9) {
     const f = ((d / trackLen * N) % N + N) % N, i = Math.floor(f), t = f - i;
     const a = samples[i], b = samples[(i + 1) % N];
@@ -129,6 +134,22 @@ function buildTrack(scene) {
         g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
         g.setIndex(idx); g.computeVertexNormals(); group.add(new THREE.Mesh(g, barMat));
     }
+    // F1-style grid boxes: a white bar in front of each starting spot with short legs back along each side
+    {
+        const pos = [], idx = [];
+        const quad = (d0, d1, l0, l1) => {
+            const a = pathAt(d0, l0, 0), b = pathAt(d0, l1, 0), c = pathAt(d1, l0, 0), e = pathAt(d1, l1, 0), k = pos.length / 3;
+            pos.push(a.x, 0.036, a.z, b.x, 0.036, b.z, c.x, 0.036, c.z, e.x, 0.036, e.z); idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2);
+        };
+        for (const [back, side] of GRID) {
+            const front = trackLen + back + 2.7;
+            quad(front - 0.25, front, side - 1.25, side + 1.25);                 // the bar across the front
+            quad(front - 1.6, front - 0.25, side - 1.25, side - 1.05);           // the legs
+            quad(front - 1.6, front - 0.25, side + 1.05, side + 1.25);
+        }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+        group.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xf2f2f2, side: THREE.DoubleSide })));
+    }
     // start/finish line: chequered strip
     const cc = document.createElement('canvas'); cc.width = 64; cc.height = 8; const cx = cc.getContext('2d');
     for (let i = 0; i < 16; i++) for (let j = 0; j < 2; j++) { cx.fillStyle = (i + j) % 2 ? '#111' : '#fff'; cx.fillRect(i * 4, j * 4, 4, 4); }
@@ -180,7 +201,7 @@ function makeRacer(design, factor, isPlayer) {
     model.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
     blob.visible = !(renderer && renderer.shadowMap.enabled);
     return { design, model, holder, blob, stats, perf: perf(stats, factor), isPlayer, x: 0, z: 0, heading: 0, v: 0, steer: 0, d: 0, idx: 0, lap: 0,
-             lapStart: 0, lastLat: 0, finished: null, best: null, half: false, wheelSpin: 0, lineOffset: 0 };
+             lapStart: 0, lastLat: 0, finished: null, best: null, half: false, wheelSpin: 0, lineOffset: 0, lat: 0, latV: 0 };
 }
 // Rival cars are designed in code from the builder presets, so they're original designs too
 function rivalDesign(i) {
@@ -205,6 +226,7 @@ let race = null;                                  // { phase: 'grid'|'lights'|'g
 const input = { left: false, right: false, gas: false, brake: false, tilt: 0 };
 let camMode = 0, help = store('raceHelp', true);
 const DIFF = { easy: 0.8, medium: 0.88, hard: 0.96 };
+const GRID = [[-12, 3.5], [-20, -3.5], [-28, 3.5], [-36, -3.5]];   // [metres behind the line, metres from the middle of the road]
 const fmtTime = t => t == null ? '–' : `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
 function store(key, fallback) { try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch (e) { return fallback; } }
 function storeSet(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
@@ -215,12 +237,13 @@ function setupRace() {
     rivals = []; ghost = null;
     player = makeRacer(loadDesign(), 1, true);
     scene.add(player.holder);
-    // grid: two staggered columns behind the start line; you start at the back in a race
-    const slots = [[-12, 3.5], [-20, -3.5], [-28, 3.5], [-36, -3.5]];
+    // grid: two staggered columns behind the start line, F1 style; you start at the back in a race
+    const slots = GRID;
     const place = (r, [back, side]) => {
         const s = sampleAt(trackLen + back);
         r.x = s.p.x + s.n.x * side; r.z = s.p.z + s.n.z * side; r.heading = s.heading; r.d = back; r.lap = -1; r.half = true;
         r.idx = ((Math.floor(((back % trackLen) + trackLen) / trackLen * N) % N) + N) % N; r.v = 0;
+        r.lat = side; r.latV = 0;                       // rivals start in their own grid box and ease across to the racing line
     };
     if (mode === 'race') {
         for (let i = 0; i < 3; i++) {
@@ -367,13 +390,18 @@ function driveRival(r, dt) {
     a -= 0.25;
     r.v = Math.max(0, r.v + a * dt);
     r.d += r.v * dt;
-    // follow the racing line smoothly; the car points along its own path (from here to a little ahead)
-    const here = pathAt(r.d, r.lineOffset), ahead = pathAt(r.d + 3, r.lineOffset);
+    // follow the racing line like a real driver: the car can only move sideways gradually (faster when going faster),
+    // easing in and out of each move, so it never darts across the road
+    const latTarget = Math.max(-HW + 1.3, Math.min(HW - 1.3, lineAt(r.d + r.v * 0.4) * 0.9 + r.lineOffset));
+    const maxLatV = Math.min(4.5, r.v * 0.09), wantV = Math.max(-maxLatV, Math.min(maxLatV, (latTarget - r.lat) * 1.2));
+    r.latV += Math.max(-5 * dt, Math.min(5 * dt, wantV - r.latV));
+    r.lat += r.latV * dt;
+    const here = pathAt(r.d, r.lat, 0), ahead = pathAt(r.d + 3, r.lat + r.latV * 3 / Math.max(4, r.v), 0);
     r.x = here.x; r.z = here.z;
     const want = Math.atan2(-(ahead.z - here.z), ahead.x - here.x);
     const dh = wrapAngle(want - r.heading);
     r.heading += dh * Math.min(1, dt * 12);
-    r.steer += (Math.max(-0.4, Math.min(0.4, dh * 6 + wrapAngle(pathAt(r.d + 10, r.lineOffset).heading - want) * 2)) - r.steer) * Math.min(1, dt * 6);
+    r.steer += (Math.max(-0.4, Math.min(0.4, dh * 6 + wrapAngle(pathAt(r.d + 10, r.lat, 0).heading - want) * 2)) - r.steer) * Math.min(1, dt * 6);
     const prevIdx = r.idx; r.idx = ((Math.floor(r.d / trackLen * N) % N) + N) % N;
     if (go) lapCrossing(r, prevIdx);
 }
@@ -926,8 +954,10 @@ function setAtmosphere(theme) {
     const th = look = SC.lookFor(theme, timeOfDay);
     if (sky) { scene.remove(sky); sky.geometry.dispose(); sky.material.dispose(); }
     sky = SC.makeSky(th); scene.add(sky);
-    scene.background = new THREE.Color(th.horizon);
-    scene.fog = new THREE.Fog(th.horizon, th.fog[0], th.fog[1]);
+    const haze = SC.horizonColour(th);
+    scene.background = haze;
+    scene.fog = new THREE.Fog(haze, th.fog[0], th.fog[1]);
+    if (!SC.hasPhotoSky(th)) SC.whenSkyLoads(() => { if (TRACK && TRACK.theme === theme && look === th) setAtmosphere(theme); });
     if (scene.environment) scene.environment.dispose();
     scene.environment = SC.makeEnvironment(renderer, th);
     scene.environmentIntensity = th.light.env;
@@ -1017,5 +1047,5 @@ export function leave() {
 }
 // for testing: drive automatically along the racing line
 export function autopilot(on) { window.__autopilot = on; }
-export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), trackLen, ghost: !!(ghost && ghost.holder.visible), slip: player && player.slip, time: timeOfDay, quality, shadows: renderer.shadowMap.enabled, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
+export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), rivalLat: rivals.map(r => [+r.lat.toFixed(2), +r.latV.toFixed(2)]), trackLen, ghost: !!(ghost && ghost.holder.visible), slip: player && player.slip, time: timeOfDay, quality, shadows: renderer.shadowMap.enabled, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
 export function setHelp(on) { help = on; }
