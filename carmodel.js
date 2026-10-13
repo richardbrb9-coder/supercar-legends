@@ -44,9 +44,12 @@ export const PRESETS = {
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'ten', rimColour: 'silver' } },
     // Inspired by the 2020s Croatian electric hypercar: wide and muscular, long bonnet with a big vent, slim swept LED lamps, big corner
     // intakes, dark glass roof, large side scoops, a full-width light bar, ducktail and deep diffuser, and no exhausts
-    electric: { label: 'Electric',        L: 4.75, W: 1.99, nose: 0.48, deck: 0.82, roof: 1.21, tail: 0.98, cabin: [0.32, 0.72], fast: 0.75, ride: 0.11, wheel: 0.36,
-                noseW: 0.74, noseTip: 0.74, noseLift: 2.4, wbFrac: 0.578, axleShift: 0.01, round: 0.36, fenderH: 0.12, fenderReach: 2.4,
-                cabinStyle: 'canopy', cabinWB: 0.8, cabinWT: 0.56, grille: 'none', lamps: 'blade', bumpers: false, scoop: 'bonnetvent', exhaust: 'none',
+    // (shape measured from scaled side, top and front drawings: bonnet swell and dip, long gently raked windscreen, high roof,
+    //  long fastback down to a low tail)
+    electric: { label: 'Electric',        L: 4.75, W: 1.99, nose: 0.51, deck: 0.81, roof: 1.21, tail: 0.86, cabin: [0.29, 0.92], fast: 0, ride: 0.11, wheel: 0.36,
+                rake: 0.37, screenBow: 0.6, roofDrop: 0.965, bulge: 0.025, deckRear: 1.11,
+                noseW: 0.55, noseW2: 0.84, noseTip: 0.8, noseLift: 2.4, wbFrac: 0.578, axleShift: 0.01, round: 0.36, fenderH: 0.05, fenderReach: 2.4,
+                cabinStyle: 'tallglass', cabinWB: 0.68, cabinWT: 0.62, grille: 'none', lamps: 'blade', bumpers: false, scoop: 'bonnetvent', exhaust: 'none',
                 mouth: false, sideIntake: true, rearGrille: true, cornerIntakes: true, tailBar: true, diffuser: true,
                 style: { wing: 'ducktail', splitter: true, skirts: true, rim: 'turbine', rimColour: 'black' } }
 };
@@ -302,7 +305,9 @@ function cabinTexture(d, pr) {
         rect(0.02, rake + 0.03, 0.255, 0.745);
         rect(rake + 0.04, 0.55, 0.255, 0.4); rect(rake + 0.04, 0.55, 0.6, 0.745);           // door windows
         rect(0.58, 0.68, 0.38, 0.62);                                                        // small rear window over the engine
-        x.fillStyle = 'rgba(0,0,0,.55)'; for (let i = 0; i < 4; i++) rect(0.72 + i * 0.05, 0.75 + i * 0.05, 0.42, 0.58);   // engine cover vents
+        if (d.engine !== 'ev' && d.preset !== 'electric') {      // engine cover vents (an electric car has no engine to cool there)
+            x.fillStyle = 'rgba(0,0,0,.55)'; for (let i = 0; i < 4; i++) rect(0.72 + i * 0.05, 0.75 + i * 0.05, 0.42, 0.58);
+        }
     }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     return t;
@@ -573,10 +578,26 @@ export function createCar(design, { merge = false } = {}) {
         const v = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, w), mats.dark); v.position.set(X(ss), pr.centre(ss) + 0.005, 0); v.rotation.z = -0.18; car.add(v);
         for (let i = -2; i <= 2; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.012), mats.carbon); fin.position.set(X(ss), pr.centre(ss) + 0.01, i * w / 5); fin.rotation.z = -0.18; car.add(fin); }
     }
-    // big dark air intakes in the lower front corners
-    if (q.cornerIntakes) for (const side of [1, -1]) {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.2, 0.44), mats.intake);
-        m.position.set(X(0) + 0.01, pr.base(0) + 0.12, side * pr.width(0) * 0.56); m.rotation.y = side * 0.3; car.add(m);
+    // one big dark air intake across the nose, wider at the top than the bottom (like an upside-down trapezium seen head-on).
+    // Each point is laid onto the curved nose, so the intake hugs the bodywork instead of floating in front of it.
+    if (q.cornerIntakes) {
+        const W2 = p.W / 2, yTop = pr.base(0) + 0.14, yBot = pr.base(0.06) + 0.03, halfTop = W2 * 0.64, halfBot = W2 * 0.38;
+        const ray = new THREE.Raycaster(), from = new THREE.Vector3(), back = new THREE.Vector3(-1, 0, 0);
+        const onNose = (y, z) => { ray.set(from.set(p.L, y, z), back); const hit = ray.intersectObject(body)[0]; return (hit ? hit.point.x : X(0.05)) + 0.01; };
+        const NU = 24, NV = 16, pos = [], idx = [];   // (enough points that it follows the curve of the nose)
+        for (let j = 0; j <= NV; j++) for (let i = 0; i <= NU; i++) {
+            const v = j / NV, y = lerp(yBot, yTop, v), half = lerp(halfBot, halfTop, v), z = lerp(-half, half, i / NU);
+            pos.push(onNose(y, z), y, z);
+        }
+        for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) { const a0 = j * (NU + 1) + i, b0 = a0 + NU + 1; idx.push(a0, a0 + 1, b0, a0 + 1, b0 + 1, b0); }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+        car.add(new THREE.Mesh(g, mats.intake));
+        // two slim bars across the opening
+        for (const v of [0.35, 0.7]) {
+            const y = lerp(yBot, yTop, v), half = lerp(halfBot, halfTop, v) * 0.96, pts = [];
+            for (let i = 0; i <= NU; i++) { const z = lerp(-half, half, i / NU); pts.push(new THREE.Vector3(onNose(y, z) + 0.006, y, z)); }
+            car.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, 0.008, 5), mats.carbon));
+        }
     }
     // a deep diffuser under the tail, with fins
     if (q.diffuser) {
@@ -755,9 +776,9 @@ export function decodeDesign(code) {
         const colour = (v, def) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : def;
         const raw = Object.fromEntries(keys.map((k, i) => [k, arr[i]]));
         d.preset = typeof raw.preset === 'string' ? raw.preset.slice(0, 20) : 'custom';
-        d.L = num(raw.L, 4.0, 5.2, d.L); d.W = num(raw.W, 1.7, 2.1, d.W); d.nose = num(raw.nose, 0.38, 0.72, d.nose);
+        d.L = num(raw.L, 3.5, 5.4, d.L); d.W = num(raw.W, 1.7, 2.1, d.W); d.nose = num(raw.nose, 0.3, 0.75, d.nose);
         d.deck = num(raw.deck, 0.7, 0.95, d.deck); d.roof = num(raw.roof, 1.0, 1.35, d.roof); d.tail = num(raw.tail, 0.78, 1.05, d.tail);
-        d.cabin = Array.isArray(raw.cabin) && raw.cabin.length === 2 ? [num(raw.cabin[0], 0.2, 0.6, 0.3), num(raw.cabin[1], 0.5, 0.9, 0.62)] : d.cabin;
+        d.cabin = Array.isArray(raw.cabin) && raw.cabin.length === 2 ? [num(raw.cabin[0], 0.2, 0.6, 0.3), num(raw.cabin[1], 0.5, 0.95, 0.62)] : d.cabin;
         d.fast = num(raw.fast, 0, 1, d.fast); d.ride = num(raw.ride, 0.06, 0.2, d.ride); d.wheel = num(raw.wheel, 0.31, 0.38, d.wheel);
         d.paint = colour(raw.paint, d.paint); d.finish = pickKey(raw.finish, FINISHES, d.finish); d.rim = pickKey(raw.rim, RIMS, d.rim);
         d.rimColour = pickKey(raw.rimColour, RIM_COLOURS, d.rimColour); d.caliper = colour(raw.caliper, d.caliper); d.wing = pickKey(raw.wing, WINGS, d.wing);
@@ -770,7 +791,7 @@ export function decodeDesign(code) {
         const oneOf = (v, list, def) => list.includes(v) ? v : def;
         Object.assign(d, SHAPE_DEFAULTS);
         if (m[1] !== '1') {
-            d.wbFrac = num(raw.wbFrac, 0.5, 0.65, 0.6); d.axleShift = num(raw.axleShift, -0.06, 0.06, 0); d.round = num(raw.round, 0.3, 0.7, 0.38);
+            d.wbFrac = num(raw.wbFrac, 0.5, 0.65, 0.6); d.axleShift = num(raw.axleShift, -0.08, 0.08, 0); d.round = num(raw.round, 0.3, 0.7, 0.38);
             d.fenderH = num(raw.fenderH, 0, 0.25, 0.06); d.fenderReach = num(raw.fenderReach, 1.8, 3.5, 2.5);
             d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass', 'visor'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
             d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade', 'hidden'], 'slim'); d.bumpers = !!raw.bumpers;
@@ -778,12 +799,12 @@ export function decodeDesign(code) {
         }
         if (m[1] >= '3') {
             d.cross = oneOf(raw.cross, ['flat', 'triple'], 'flat'); d.crossB = num(raw.crossB, 0, 0.12, 0.07); d.crossW = num(raw.crossW, 0, 0.15, 0.09);
-            d.noseW = num(raw.noseW, 0.6, 0.95, 0.72); d.noseTip = num(raw.noseTip, 0.6, 1, 0.78); d.noseLift = num(raw.noseLift, 0.5, 3, 2.4);
+            d.noseW = num(raw.noseW, 0.35, 0.95, 0.72); d.noseTip = num(raw.noseTip, 0.4, 1, 0.78); d.noseLift = num(raw.noseLift, 0.5, 3, 2.4);
             d.mouth = !!raw.mouth; d.sideIntake = !!raw.sideIntake; d.rearGrille = !!raw.rearGrille;
         }
         if (m[1] >= '4') { d.cornerIntakes = !!raw.cornerIntakes; d.tailBar = !!raw.tailBar; d.diffuser = !!raw.diffuser; }
         if (m[1] >= '5') { d.roofBar = !!raw.roofBar; d.tailBig = !!raw.tailBig; }
-        if (m[1] >= '6') { d.tailMid = num(raw.tailMid, 0.4, 1, 0.96); d.tailW = num(raw.tailW, 0.3, 1, 0.88); d.wheelCovers = !!raw.wheelCovers; d.noseW2 = num(raw.noseW2, 0.6, 0.95, 0.9); }
+        if (m[1] >= '6') { d.tailMid = num(raw.tailMid, 0.4, 1, 0.96); d.tailW = num(raw.tailW, 0.2, 1, 0.88); d.wheelCovers = !!raw.wheelCovers; d.noseW2 = num(raw.noseW2, 0.6, 0.95, 0.9); }
         if (m[1] >= '7') { d.rake = num(raw.rake, 0.12, 0.5, 0.34); d.screenBow = num(raw.screenBow, 0.4, 0.9, 0.74); d.roofDrop = num(raw.roofDrop, 0.9, 1, 0.995); d.bulge = num(raw.bulge, 0, 0.06, 0); }
         if (m[1] >= '8') d.deckRear = num(raw.deckRear, 0.8, 1.3, 1);
         return d;
