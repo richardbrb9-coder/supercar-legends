@@ -522,15 +522,16 @@ export function createCar(design, { merge = false } = {}) {
             h.position.set(X(0.045), pr.topAt(0.045, 0.62) - 0.02, side * pr.width(0.045) * 0.62); h.rotation.z = -0.3; car.add(h);
         }
     }
-    // grille: a wide shield shape on the nose
+    // grille: a wide shield shape on the nose (about 0.95 m across on the 60s GT, like the real car)
     if (q.grille === 'shield') {
-        const gw = pr.width(0) * 0.5, gh = (pr.centre(0) - pr.base(0)) * 0.55, sh = new THREE.Shape();
+        const gw = pr.width(0) * 0.68, gh = (pr.centre(0) - pr.base(0)) * 0.55, sh = new THREE.Shape();
         sh.moveTo(-gw, 0); sh.lineTo(gw, 0); sh.quadraticCurveTo(gw * 1.02, gh * 0.75, gw * 0.55, gh); sh.quadraticCurveTo(0, gh * 1.18, -gw * 0.55, gh); sh.quadraticCurveTo(-gw * 1.02, gh * 0.75, -gw, 0);
         const gy = pr.base(0) + 0.05;
         const make = (shape, mat, depth, dx) => { const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false }); g.rotateY(Math.PI / 2); const m = new THREE.Mesh(g, mat); m.position.set(X(0) + dx, gy, 0); car.add(m); return m; };
         make(sh, mats.chrome, 0.02, -0.005);
         const inner = make(sh, mats.grille, 0.02, 0.006); inner.scale.set(1, 0.86, 0.9); inner.position.y += gh * 0.06;
-        for (let i = 1; i < 6; i++) { const bar = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.008, gw * 1.75), mats.chrome); bar.position.set(X(0) + 0.03, gy + gh * i / 6.5, 0); car.add(bar); }
+        // horizontal slats, each as wide as the grille is at its height (the shield narrows towards the top)
+        for (let i = 1; i < 6; i++) { const t = i / 6.5, half = gw * lerp(0.97, 0.62, Math.pow(t, 1.8)); const bar = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.008, half * 2), mats.chrome); bar.position.set(X(0) + 0.03, gy + gh * t, 0); car.add(bar); }
     }
     // chrome bumpers with overriders
     if (q.bumpers) for (const [s0, dir] of [[0, 1], [1, -1]]) {
