@@ -15,11 +15,14 @@ export const PRESETS = {
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'wire', rimColour: 'chrome' } },
     // Inspired by the 1970s Italian rally wedge: very short and wide, sharp nose with bonnet louvres, wraparound visor windscreen,
     // bulging arches, roof spoiler bar, tall flat tail with big round lamps, bronze wheels
-    wedge70:  { label: '70s wedge',       L: 3.71, W: 1.75, nose: 0.36, deck: 0.78, roof: 1.13, tail: 0.97, cabin: [0.33, 0.63], fast: 0.15, ride: 0.12, wheel: 0.33,
-                noseW: 0.62, noseW2: 0.82, noseTip: 0.45, noseLift: 3.0, wbFrac: 0.588, axleShift: 0.0, round: 0.32, fenderH: 0.12, fenderReach: 2.2,
+    // (shape measured from scaled side and top drawings: a straight wedge nose, a long wraparound windscreen, a short flat
+    //  roof that ends sharply, then the engine cover sloping down to a low chopped tail)
+    wedge70:  { label: '70s wedge',       L: 3.71, W: 1.75, nose: 0.42, deck: 0.80, roof: 1.11, tail: 0.86, cabin: [0.27, 0.72], fast: 0, ride: 0.12, wheel: 0.33,
+                rake: 0.5, screenBow: 0.62, roofLen: 0.86, deckRear: 1.11,
+                noseW: 0.62, noseW2: 0.82, noseTip: 0.45, noseLift: 3.0, wbFrac: 0.588, axleShift: 0.045, round: 0.32, fenderH: 0.03, fenderReach: 2.2,
                 cabinStyle: 'visor', cabinWB: 0.84, cabinWT: 0.66, grille: 'none', lamps: 'hidden', bumpers: false, scoop: 'louvres', exhaust: 'twin',
                 roofBar: true, tailBig: true,
-                style: { wing: 'none', splitter: false, skirts: false, rim: 'five', rimColour: 'bronze' } },
+                style: { wing: 'none', splitter: false, skirts: false, rim: 'five', rimColour: 'bronze', rallyLights: true } },
     // Inspired by the famous early-1990s British supercar: compact and smooth, cab-forward with a roof intake, lamps under covers,
     // a low nose intake, big side air intakes, a full-width mesh grille at the back and no fixed wing
     // (shape measured from scaled side, top and front drawings: low rounded nose, long raked windscreen, narrow central cabin,
@@ -37,8 +40,11 @@ export const PRESETS = {
                 style: { wing: 'none', splitter: true, skirts: true, rim: 'ten', rimColour: 'silver' } },
     // Inspired by the 2020s British streamliner: a teardrop with a very long tail tapering to a narrow tip, a long glass canopy,
     // covers over the front wheels, slim lamps and a light bar at the tip of the tail
-    longtail: { label: 'Longtail',        L: 5.14, W: 1.99, nose: 0.44, deck: 0.78, roof: 1.12, tail: 0.78, cabin: [0.24, 0.68], fast: 1, ride: 0.1, wheel: 0.35,
-                noseW: 0.5, noseW2: 0.7, noseTip: 0.62, noseLift: 2.6, wbFrac: 0.545, axleShift: -0.07, round: 0.4, fenderH: 0.1, fenderReach: 2.4,
+    // (shape measured from a side photo and the official sizes: a long low nose, a teardrop canopy peaking just behind
+    //  the middle, then one long gentle slope down to the narrow tail)
+    longtail: { label: 'Longtail',        L: 5.14, W: 2.03, nose: 0.60, deck: 0.84, roof: 1.18, tail: 0.67, cabin: [0.22, 0.86], fast: 0, ride: 0.1, wheel: 0.35,
+                rake: 0.3, screenBow: 0.6, roofLen: 0.47, roofDrop: 0.965, deckRear: 0.97,
+                noseW: 0.5, noseW2: 0.7, noseTip: 0.62, noseLift: 2.6, wbFrac: 0.531, axleShift: -0.04, round: 0.4, fenderH: 0.1, fenderReach: 2.4,
                 tailMid: 0.45, tailW: 0.24, cabinStyle: 'canopy', cabinWB: 0.78, cabinWT: 0.5, grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none',
                 tailBar: true, wheelCovers: true,
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'ten', rimColour: 'silver' } },
@@ -72,14 +78,14 @@ export const ENGINES = {
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
-export const SHAPE_DEFAULTS = { rake: 0.34, screenBow: 0.74, roofDrop: 0.995, bulge: 0, deckRear: 1, noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
+export const SHAPE_DEFAULTS = { rallyLights: false, rake: 0.34, screenBow: 0.74, roofDrop: 0.995, bulge: 0, deckRear: 1, roofLen: 0, noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
     grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false, cornerIntakes: false, tailBar: false, diffuser: false, roofBar: false, tailBig: false, tailMid: 0.96, tailW: 0.88, wheelCovers: false };
 // Apply a body style: its shape, its details, and the parts that suit it
 export function applyPreset(design, key) {
     const { label, style, ...shape } = PRESETS[key];
     return Object.assign(design, SHAPE_DEFAULTS, shape, style || {}, { preset: key });
 }
-export const DEFAULT = { preset: 'hyper', ...SHAPE_DEFAULTS, ...(({ label, style, ...shape }) => shape)(PRESETS.hyper), ...PRESETS.hyper.style,
+export const DEFAULT = { preset: 'hyper', rallyLights: false, ...SHAPE_DEFAULTS, ...(({ label, style, ...shape }) => shape)(PRESETS.hyper), ...PRESETS.hyper.style,
     paint: '#E10600', finish: 'metallic', caliper: '#FFB300', rimSize: 1, engine: 'v8', name: 'My Supercar',
     livery: 'none', stripeColour: '#F4F6F8', twoTone: false, paint2: '#1B1F26', number: '', tag: '' };
 const STORE_KEY = 'builderDesign';
@@ -153,7 +159,8 @@ function profiles(p) {
     // the greenhouse (cabin): windscreen rises fast, the roof is flat, then it falls to the tail
     // rake: how much of the cabin the windscreen takes; screenBow: how curved the windscreen is; roofDrop: how far the roof
     // falls before the rear window (below 0.99 the roof gets a gentle crown and a long fastback, like a 60s GT)
-    const rakeEnd = c0 + (c1 - c0) * q.rake, roofEnd = c0 + (c1 - c0) * lerp(0.62, 0.42, p.fast);
+    // roofLen (if set): how much of the cabin the roof reaches before it falls away; otherwise it comes from 'fast'
+    const rakeEnd = c0 + (c1 - c0) * q.rake, roofEnd = c0 + (c1 - c0) * (q.roofLen > 0 ? q.roofLen : lerp(0.62, 0.42, p.fast));
     const roof = curve(q.roofDrop < 0.99
         ? [[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, q.screenBow)], [rakeEnd, p.roof * lerp(1, q.roofDrop, 0.4)], [lerp(rakeEnd, roofEnd, 0.4), p.roof], [roofEnd, p.roof * q.roofDrop], [c1, deckR * 0.93]]
         : [[c0, p.deck * 0.98], [lerp(c0, rakeEnd, 0.5), lerp(p.deck, p.roof, q.screenBow)], [rakeEnd, p.roof], [roofEnd, p.roof * q.roofDrop], [c1, deckR]]);
@@ -223,8 +230,8 @@ function loftUV(rings, byArc = true) {
     g.setIndex(idx); g.computeVertexNormals();
     return g;
 }
-function bodyGeometry(p, pr) {
-    const N = 90, K = 84, rings = [];
+function bodyGeometry(p, pr, lite = false) {
+    const N = lite ? 54 : 90, K = lite ? 48 : 84, rings = [];
     for (let i = 0; i <= N; i++) {
         const s = i / N, x = p.L / 2 - s * p.L, w = pr.width(s), ring = [];
         for (let k = 0; k < K; k++) {
@@ -238,10 +245,10 @@ function bodyGeometry(p, pr) {
     }
     return loft(rings, true, true);
 }
-function cabinGeometry(p, pr) {
+function cabinGeometry(p, pr, lite = false) {
     // The windows rise from the body's edge (the beltline), leaning in a little, to a flatter roof.
     // The lower half of each ring is tucked down inside the body so the cabin grows out of it with no ledge.
-    const N = 48, K = p.cabinStyle === 'glasshouse' ? 52 : 36, rings = [];   // (more points round a glasshouse, for its crisp roof edge)
+    const N = lite ? 28 : 48, K = p.cabinStyle === 'glasshouse' ? (lite ? 40 : 52) : (lite ? 28 : 36), rings = [];   // (more points round a glasshouse, for its crisp roof edge)
     for (let i = 0; i <= N; i++) {
         const s = lerp(pr.c0, pr.c1, i / N), x = p.L / 2 - s * p.L;
         const f = pr.q.cabinWB, w = pr.width(s);
@@ -278,7 +285,7 @@ function cabinTexture(d, pr) {
     const span = pr.c1 - pr.c0, rake = (pr.rakeEnd - pr.c0) / span, roofEnd = (pr.roofEnd - pr.c0) / span;
     const rect = (u0, u1, v0, v1) => x.fillRect(u0 * W, Y(v1), (u1 - u0) * W, Y(v0) - Y(v1));
     const style = pr.q.cabinStyle;
-    x.fillStyle = style === 'glasshouse' || style === 'tallglass' ? d.paint : glass; x.fillRect(0, 0, W, H);
+    x.fillStyle = style === 'glasshouse' || style === 'tallglass' || style === 'visor' ? d.paint : glass; x.fillRect(0, 0, W, H);
     if (style === 'glasshouse') {
         x.fillStyle = glass;
         // v: 0.25 = right beltline, 0.5 = middle of the roof, 0.75 = left beltline
@@ -295,10 +302,10 @@ function cabinTexture(d, pr) {
     if (style === 'bubble') { x.fillStyle = d.paint; rect(rake * 0.9, 1, 0.45, 0.55); }   // painted roof spine
     if (style === 'visor') {                                     // a curved windscreen wrapping round into the sides, like a helmet visor
         x.fillStyle = glass;
-        x.beginPath(); x.moveTo(0.02 * W, Y(0.2)); x.lineTo(0.02 * W, Y(0.8));
-        x.quadraticCurveTo((rake + 0.25) * W, Y(0.8), (rake + 0.3) * W, Y(0.74)); x.lineTo((rake + 0.3) * W, Y(0.26));
-        x.quadraticCurveTo((rake + 0.25) * W, Y(0.2), 0.02 * W, Y(0.2)); x.fill();
-        rect(rake + 0.33, 0.7, 0.262, 0.33); rect(rake + 0.33, 0.7, 0.67, 0.738);   // small side windows
+        // it ends at the front of the roof in the middle, and wraps further back round each side
+        x.beginPath(); x.moveTo(0.02 * W, Y(0.262)); x.lineTo(0.02 * W, Y(0.738)); x.lineTo((rake + 0.12) * W, Y(0.738));
+        x.quadraticCurveTo((rake - 0.06) * W, Y(0.5), (rake + 0.12) * W, Y(0.262)); x.closePath(); x.fill();
+        rect(rake + 0.16, 0.74, 0.262, 0.38); rect(rake + 0.16, 0.74, 0.62, 0.738);   // side windows behind it
     }
     if (style === 'tallglass') {                                 // big windscreen, tall side glass, painted roof and engine cover
         x.fillStyle = glass;
@@ -316,15 +323,16 @@ function cabinTexture(d, pr) {
 // =====================================================================
 //  WHEELS
 // =====================================================================
-function makeWheel(p, mats, front) {
+function makeWheel(p, mats, front, lite = false) {
     const g = new THREE.Group();
     const R = p.wheel, tw = front ? 0.27 : 0.32, rimR = R * 0.72;
     // tyre: a rounded profile spun around the axle
     const prof = [];
-    for (let i = 0; i <= 12; i++) { const a = -Math.PI / 2 + Math.PI * i / 12; prof.push(new THREE.Vector2(rimR + (R - rimR) * (0.55 + 0.45 * Math.cos(a)), (tw / 2) * Math.sin(a))); }
-    const tyre = new THREE.Mesh(new THREE.LatheGeometry(prof, 28), mats.tyre);
+    const tp = lite ? 6 : 12, ts = lite ? 18 : 28;
+    for (let i = 0; i <= tp; i++) { const a = -Math.PI / 2 + Math.PI * i / tp; prof.push(new THREE.Vector2(rimR + (R - rimR) * (0.55 + 0.45 * Math.cos(a)), (tw / 2) * Math.sin(a))); }
+    const tyre = new THREE.Mesh(new THREE.LatheGeometry(prof, ts), mats.tyre);
     tyre.rotation.x = Math.PI / 2; g.add(tyre);
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(rimR, rimR, tw * 0.9, 28, 1, true), mats.rim);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(rimR, rimR, tw * 0.9, ts, 1, true), mats.rim);
     barrel.rotation.x = Math.PI / 2; g.add(barrel);
     const disc = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.78, rimR * 0.78, 0.03, 24), mats.brake);
     disc.rotation.x = Math.PI / 2; disc.position.z = 0.02; g.add(disc);
@@ -360,7 +368,76 @@ function makeWheel(p, mats, front) {
 //  MATERIALS AND THE WHOLE CAR
 // =====================================================================
 export const LIVERIES = { none: 'Plain', twin: 'Twin stripes', single: 'Offset stripe', side: 'Side stripes', chequer: 'Chequered flag', lightning: 'Lightning' };
+// Motorsport team paint jobs, with sponsor stickers. The sponsors are all made up (no real brands or logos).
+export const TEAM_LIVERIES = { rally: 'Rally team', endurance: 'Endurance team', gt: 'GT team' };
+const ALL_LIVERIES = [...Object.keys(LIVERIES), ...Object.keys(TEAM_LIVERIES)];
+const SPONSORS = [
+    { name: 'APEX TYRES', bg: '#111418', fg: '#FFB300', mark: 'ring' }, { name: 'NITRO FUEL', bg: '#E10600', fg: '#ffffff', mark: 'bolt' },
+    { name: 'VELOCITY OIL', bg: '#ffffff', fg: '#1E3A8A', mark: 'drop' }, { name: 'BOLT BRAKES', bg: '#FFB300', fg: '#111418', mark: 'bolt' },
+    { name: 'ROCKET PLUGS', bg: '#1E3A8A', fg: '#ffffff', mark: 'star' }, { name: 'ZOOM RADIO', bg: '#00A86B', fg: '#ffffff', mark: 'ring' },
+    { name: 'COMET LIGHTS', bg: '#ffffff', fg: '#E10600', mark: 'star' }, { name: 'PEAK GEARS', bg: '#111418', fg: '#C6FF00', mark: 'peak' }
+];
 const hasLivery = d => (d.livery && d.livery !== 'none') || d.twoTone || String(d.number || '').trim() || String(d.tag || '').trim();
+// A sponsor sticker, drawn centred on (0, 0), w x h pixels
+function sponsorSticker(x, sp, w, h) {
+    x.fillStyle = sp.bg; x.beginPath(); x.roundRect(-w / 2, -h / 2, w, h, h * 0.18); x.fill();
+    x.strokeStyle = sp.fg; x.lineWidth = Math.max(1, h * 0.06); x.stroke();
+    const m = h * 0.32, mx = -w / 2 + h * 0.5;
+    x.fillStyle = sp.fg; x.strokeStyle = sp.fg; x.lineWidth = h * 0.09;
+    if (sp.mark === 'ring') { x.beginPath(); x.arc(mx, 0, m, 0, Math.PI * 2); x.stroke(); }
+    if (sp.mark === 'bolt') { x.beginPath(); x.moveTo(mx + m * 0.3, -m); x.lineTo(mx - m * 0.5, m * 0.15); x.lineTo(mx, m * 0.15); x.lineTo(mx - m * 0.3, m); x.lineTo(mx + m * 0.5, -m * 0.15); x.lineTo(mx, -m * 0.15); x.closePath(); x.fill(); }
+    if (sp.mark === 'drop') { x.beginPath(); x.moveTo(mx, -m); x.quadraticCurveTo(mx + m, m * 0.3, mx, m); x.quadraticCurveTo(mx - m, m * 0.3, mx, -m); x.fill(); }
+    if (sp.mark === 'star') { x.beginPath(); for (let i = 0; i < 10; i++) { const r = i % 2 ? m * 0.45 : m, a = -Math.PI / 2 + i * Math.PI / 5; x.lineTo(mx + Math.cos(a) * r, Math.sin(a) * r); } x.closePath(); x.fill(); }
+    if (sp.mark === 'peak') { x.beginPath(); x.moveTo(mx - m, m * 0.7); x.lineTo(mx - m * 0.2, -m * 0.7); x.lineTo(mx + m * 0.25, 0); x.lineTo(mx + m * 0.55, -m * 0.4); x.lineTo(mx + m, m * 0.7); x.closePath(); x.fill(); }
+    x.font = `italic 900 ${h * 0.5}px "Exo 2", Arial Black, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+    const tx = h * 0.45, avail = w - h * 1.2, tw = x.measureText(sp.name).width;
+    x.save(); x.translate(tx, h * 0.03); if (tw > avail) x.scale(avail / tw, 1); x.fillText(sp.name, 0, 0); x.restore();
+}
+// Motorsport team schemes: stripes and colour blocks in the paint and stripe colours, then sponsor stickers
+function teamLivery(x, d, W, H, Y, band, pxU, pxV) {
+    const sc = d.stripeColour, p2 = d.paint2, k = pxV / pxU;
+    // a sticker on a side of the car (reads the right way round on each side), or on the bonnet (reads from the front)
+    const onSide = (u, v, wM, hM, sp, side) => {
+        x.save(); x.translate(u * W, Y(v)); x.scale(side === 'right' ? -1 : 1, (side === 'right' ? 1 : -1) * k);
+        sponsorSticker(x, sp, wM * pxU, hM * pxU); x.restore();
+    };
+    const onTop = (u, wM, hM, sp) => { x.save(); x.transform(0, -k, -1, 0, u * W, Y(0.5)); sponsorSticker(x, sp, wM * pxU, hM * pxU); x.restore(); };
+    const S = i => SPONSORS[i % SPONSORS.length];
+    const bonnetU = d.scoop === 'louvres' ? 0.235 : d.scoop === 'bonnetvent' || d.scoop === 'bonnet' ? 0.2 : 0.1;   // the bonnet sticker goes behind any louvres or vents
+    if (d.livery === 'rally') {
+        // three stripes from nose to tail over the top, and a sweep along each side rising towards the back
+        x.fillStyle = sc; band(0.43, 0.465); band(0.535, 0.57); x.fillStyle = p2; band(0.475, 0.525);
+        for (const [v0, dir] of [[0.22, 1], [0.78, -1]]) {
+            x.fillStyle = sc; x.beginPath(); x.moveTo(0.02 * W, Y(v0)); x.quadraticCurveTo(0.5 * W, Y(v0 + dir * 0.02), 0.98 * W, Y(v0 + dir * 0.09));
+            x.lineTo(0.98 * W, Y(v0 + dir * 0.06)); x.quadraticCurveTo(0.5 * W, Y(v0 - dir * 0.01), 0.02 * W, Y(v0 - dir * 0.025)); x.fill();
+        }
+        for (const side of ['right', 'left']) { const v = side === 'right' ? 0.258 : 0.742;
+            const hi = side === 'right' ? 0.318 : 0.682;      // up on the doors, clear of the wheel arches
+            onSide(0.32, hi, 0.58, 0.14, S(0), side); onSide(0.5, side === 'right' ? 0.238 : 0.762, 0.9, 0.17, S(1), side); onSide(0.68, hi, 0.58, 0.14, S(2), side); }
+        onTop(bonnetU, 0.9, 0.22, S(4));
+    }
+    if (d.livery === 'endurance') {
+        // a wide band over the top edged in the second colour, and a hoop of colour round the middle of the car
+        x.fillStyle = p2; band(0.385, 0.615); x.fillStyle = sc; band(0.4, 0.6);
+        x.fillStyle = sc; x.fillRect(0.4 * W, 0, 0.08 * W, H); x.fillStyle = p2; x.fillRect(0.48 * W, 0, 0.012 * W, H); x.fillRect(0.388 * W, 0, 0.012 * W, H);
+        for (const side of ['right', 'left']) { const v = side === 'right' ? 0.255 : 0.745;
+            const hi = side === 'right' ? 0.318 : 0.682;
+            onSide(0.3, hi, 0.62, 0.15, S(5), side); onSide(0.62, hi, 0.62, 0.15, S(3), side); onSide(0.62, side === 'right' ? 0.24 : 0.76, 0.55, 0.13, S(6), side); }
+        onTop(bonnetU, 0.8, 0.2, S(0));
+    }
+    if (d.livery === 'gt') {
+        // slashes of colour on the front wings, a dark lower half and a chequered patch on the rear quarters
+        x.fillStyle = p2; band(0, 0.22); band(0.78, 1);
+        for (const [v0, dir] of [[0.3, 1], [0.7, -1]]) for (let i = 0; i < 3; i++) {
+            const u = 0.12 + i * 0.05; x.fillStyle = i === 1 ? p2 : sc; x.beginPath();
+            x.moveTo(u * W, Y(v0 - dir * 0.08)); x.lineTo((u + 0.025) * W, Y(v0 - dir * 0.08)); x.lineTo((u + 0.065) * W, Y(v0 + dir * 0.06)); x.lineTo((u + 0.04) * W, Y(v0 + dir * 0.06)); x.fill();
+        }
+        const sq = 10; for (const v0 of [0.23, 0.69]) for (let i = 0; i < 9; i++) for (let j = 0; j < 4; j++) { x.fillStyle = (i + j) % 2 ? '#111' : '#fff'; x.fillRect(0.84 * W + i * sq, Y(v0 + 0.08) + j * sq, sq, sq); }
+        for (const side of ['right', 'left']) { const v = side === 'right' ? 0.232 : 0.768;
+            onSide(0.38, v, 0.75, 0.15, S(7), side); onSide(0.62, v, 0.75, 0.15, S(1), side); }
+        onTop(bonnetU, 0.85, 0.2, S(2));
+    }
+}
 // The livery is painted onto a canvas that wraps around the body (see loftUV for which way is which)
 function liveryTexture(d) {
     const W = 1024, H = 512, c = document.createElement('canvas'); c.width = W; c.height = H;
@@ -390,7 +467,9 @@ function liveryTexture(d) {
     }
     // race number roundels on both doors and the driver's tag, drawn so they read the right way round on each side
     const pxU = W / d.L, pxV = H / (2 * d.W + 2 * (d.deck - d.ride) + 0.4);   // pixels per metre along and around the body
-    const num = String(d.number || '').trim().slice(0, 2), tag = String(d.tag || '').trim().slice(0, 14);
+    const team = TEAM_LIVERIES[d.livery];
+    if (team) teamLivery(x, d, W, H, Y, band, pxU, pxV);
+    const num = String(d.number || '').trim().slice(0, 2) || (team ? { rally: '4', endurance: '24', gt: '7' }[d.livery] : ''), tag = String(d.tag || '').trim().slice(0, 14);
     for (const side of ['right', 'left']) {
         const v = side === 'right' ? 0.29 : 0.71, flipX = side === 'right' ? -1 : 1, flipY = side === 'right' ? 1 : -1;
         const draw = (u, vv, fn) => { x.save(); x.translate(u * W, Y(vv)); x.scale(flipX, flipY * pxV / pxU); fn(); x.restore(); };
@@ -465,21 +544,22 @@ function mergeByMaterial(root) {
 }
 // Build a whole car as a group. Returns { group, mats, wheels, dispose }. The car points along +x and sits on y = 0.
 // merge: combine parts for speed (used in races, where the car doesn't change)
-export function createCar(design, { merge = false } = {}) {
+// lite: a lighter build with fewer points on the curves (the same shape and paint), for the rival cars in a race
+export function createCar(design, { merge = false, lite = false } = {}) {
     const mats = buildMaterials(design), wheels = [];
     const p = design, pr = profiles(p);
     const car = new THREE.Group();
-    const body = new THREE.Mesh(bodyGeometry(p, pr), mats.paint); car.add(body);
+    const body = new THREE.Mesh(bodyGeometry(p, pr, lite), mats.paint); car.add(body);
     // the cabin uses the same paint finish as the body, so the roof matches; the dark windows still shine through the clearcoat
     const fin = FINISHES[p.finish] || FINISHES.gloss;
     const cabinMat = new THREE.MeshPhysicalMaterial({ map: cabinTexture(p, pr), metalness: fin.metalness, roughness: Math.min(fin.roughness, 0.4), clearcoat: 1, clearcoatRoughness: 0.05,
         iridescence: fin.iridescence, iridescenceIOR: 1.6, side: THREE.DoubleSide });
     mats.cabin = cabinMat;
-    car.add(new THREE.Mesh(cabinGeometry(p, pr), cabinMat));
+    car.add(new THREE.Mesh(cabinGeometry(p, pr, lite), cabinMat));
     const X = s => p.L / 2 - s * p.L;
     // wheels
     for (const [s, front] of [[pr.frontAxle, true], [pr.rearAxle, false]]) for (const side of [1, -1]) {
-        const w = makeWheel(p, mats, front);
+        const w = makeWheel(p, mats, front, lite);
         w.position.set(X(s), p.wheel, side * (p.W / 2 - (front ? 0.16 : 0.15)));
         if (side < 0) w.rotation.y = Math.PI;
         w.userData = { front, side };
@@ -569,7 +649,7 @@ export function createCar(design, { merge = false } = {}) {
     }
     // a spoiler bar across the back of the roof, on two struts
     if (q.roofBar) {
-        const ss = pr.c1 - 0.02, y = pr.roof(lerp(pr.roofEnd, pr.c1, 0.3)) + 0.06, span = pr.width(ss) * 1.4;
+        const ss = Math.min(pr.c1 - 0.02, pr.roofEnd + 0.012), y = pr.roof(ss) + 0.035, span = pr.width(ss) * 1.4;   // on the back edge of the roof
         const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, span), mats.dark); bar.position.set(X(ss), y, 0); bar.rotation.z = 0.15; car.add(bar);
         for (const side of [1, -1]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.09, 0.03), mats.dark); st.position.set(X(ss) + 0.02, y - 0.05, side * span * 0.42); car.add(st); }
     }
@@ -662,6 +742,17 @@ export function createCar(design, { merge = false } = {}) {
         tl.position.set(X(0.995) - 0.01, lerp(pr.base(0.99), pr.centre(0.99), 0.72), 0); car.add(tl);
     }
     // aero
+    // rally lights: a pod of four round driving lamps across the front of the bonnet
+    if (p.rallyLights) {
+        const s0 = 0.05, halfW = pr.width(s0), gap = Math.min(0.3, halfW * 0.44), r = Math.min(0.088, gap * 0.36);
+        const y0 = pr.topAt(s0, 0) + r * 0.85, x0 = X(s0) + 0.02;
+        const pod = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.05, gap * 3 + r * 2.4), mats.dark); pod.position.set(x0 - 0.04, y0 - r * 0.9, 0); car.add(pod);
+        for (const z of [-1.5, -0.5, 0.5, 1.5].map(k => k * gap)) {
+            const can = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.85, 0.11, 20), mats.dark); can.rotation.z = Math.PI / 2; can.position.set(x0, y0, z); car.add(can);
+            const lens = new THREE.Mesh(new THREE.CircleGeometry(r * 0.86, 20), mats.head); lens.rotation.y = Math.PI / 2; lens.position.set(x0 + 0.056, y0, z); car.add(lens);
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 0.93, r * 0.12, 6, 20), mats.chrome); ring.rotation.y = Math.PI / 2; ring.position.set(x0 + 0.058, y0, z); car.add(ring);
+        }
+    }
     if (p.splitter) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.025, p.W * 0.86), mats.carbon); sp.position.set(X(0.02) - 0.12, pr.base(0.03) + 0.01, 0); car.add(sp); }
     if (p.skirts) for (const side of [1, -1]) {
         const sk = new THREE.Mesh(new THREE.BoxGeometry(p.L * 0.3, 0.06, 0.05), mats.carbon);
@@ -751,7 +842,8 @@ const CODE_KEYS_4 = [...CODE_KEYS_3, 'cornerIntakes', 'tailBar', 'diffuser'];
 const CODE_KEYS_5 = [...CODE_KEYS_4, 'roofBar', 'tailBig'];
 const CODE_KEYS_6 = [...CODE_KEYS_5, 'tailMid', 'tailW', 'wheelCovers', 'noseW2'];
 const CODE_KEYS_7 = [...CODE_KEYS_6, 'rake', 'screenBow', 'roofDrop', 'bulge'];
-const CODE_KEYS = [...CODE_KEYS_7, 'deckRear'];
+const CODE_KEYS_8 = [...CODE_KEYS_7, 'deckRear'];
+const CODE_KEYS = [...CODE_KEYS_8, 'roofLen', 'rallyLights'];
 export function encodeDesign(d) {
     const arr = CODE_KEYS.map(k => {
         const v = d[k];
@@ -761,12 +853,12 @@ export function encodeDesign(d) {
         return v;
     });
     const json = JSON.stringify(arr);
-    return 'SL8-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'SL9-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export function decodeDesign(code) {
-    const m = String(code || '').trim().match(/^SL([1-8])-([A-Za-z0-9_-]+)$/);
+    const m = String(code || '').trim().match(/^SL([1-9])-([A-Za-z0-9_-]+)$/);
     if (!m) return null;
-    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS_6, 7: CODE_KEYS_7, 8: CODE_KEYS }[m[1]];
+    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS_6, 7: CODE_KEYS_7, 8: CODE_KEYS_8, 9: CODE_KEYS }[m[1]];
     try {
         let b = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
         const arr = JSON.parse(decodeURIComponent(escape(atob(b))));
@@ -778,14 +870,14 @@ export function decodeDesign(code) {
         const raw = Object.fromEntries(keys.map((k, i) => [k, arr[i]]));
         d.preset = typeof raw.preset === 'string' ? raw.preset.slice(0, 20) : 'custom';
         d.L = num(raw.L, 3.5, 5.4, d.L); d.W = num(raw.W, 1.7, 2.1, d.W); d.nose = num(raw.nose, 0.3, 0.75, d.nose);
-        d.deck = num(raw.deck, 0.7, 0.95, d.deck); d.roof = num(raw.roof, 1.0, 1.35, d.roof); d.tail = num(raw.tail, 0.78, 1.05, d.tail);
+        d.deck = num(raw.deck, 0.7, 0.95, d.deck); d.roof = num(raw.roof, 1.0, 1.35, d.roof); d.tail = num(raw.tail, 0.6, 1.05, d.tail);
         d.cabin = Array.isArray(raw.cabin) && raw.cabin.length === 2 ? [num(raw.cabin[0], 0.2, 0.6, 0.3), num(raw.cabin[1], 0.5, 0.95, 0.62)] : d.cabin;
         d.fast = num(raw.fast, 0, 1, d.fast); d.ride = num(raw.ride, 0.06, 0.2, d.ride); d.wheel = num(raw.wheel, 0.31, 0.38, d.wheel);
         d.paint = colour(raw.paint, d.paint); d.finish = pickKey(raw.finish, FINISHES, d.finish); d.rim = pickKey(raw.rim, RIMS, d.rim);
         d.rimColour = pickKey(raw.rimColour, RIM_COLOURS, d.rimColour); d.caliper = colour(raw.caliper, d.caliper); d.wing = pickKey(raw.wing, WINGS, d.wing);
         d.splitter = !!raw.splitter; d.skirts = !!raw.skirts; d.engine = pickKey(raw.engine, ENGINES, d.engine);
         d.name = typeof raw.name === 'string' ? raw.name.slice(0, 24) : d.name;
-        d.livery = typeof raw.livery === 'string' && ['none', 'twin', 'single', 'side', 'chequer', 'lightning'].includes(raw.livery) ? raw.livery : 'none';
+        d.livery = typeof raw.livery === 'string' && ALL_LIVERIES.includes(raw.livery) ? raw.livery : 'none';
         d.stripeColour = colour(raw.stripeColour, d.stripeColour); d.twoTone = !!raw.twoTone; d.paint2 = colour(raw.paint2, d.paint2);
         d.number = String(raw.number ?? '').replace(/[^0-9]/g, '').slice(0, 2); d.tag = String(raw.tag ?? '').slice(0, 14);
         // body-style details (version 2 codes); older codes get the plain defaults
@@ -808,6 +900,7 @@ export function decodeDesign(code) {
         if (m[1] >= '6') { d.tailMid = num(raw.tailMid, 0.4, 1, 0.96); d.tailW = num(raw.tailW, 0.2, 1, 0.88); d.wheelCovers = !!raw.wheelCovers; d.noseW2 = num(raw.noseW2, 0.6, 0.95, 0.9); }
         if (m[1] >= '7') { d.rake = num(raw.rake, 0.12, 0.5, 0.34); d.screenBow = num(raw.screenBow, 0.4, 0.9, 0.74); d.roofDrop = num(raw.roofDrop, 0.9, 1, 0.995); d.bulge = num(raw.bulge, 0, 0.06, 0); }
         if (m[1] >= '8') d.deckRear = num(raw.deckRear, 0.8, 1.3, 1);
+        if (m[1] >= '9') { d.roofLen = num(raw.roofLen, 0, 0.95, 0); d.rallyLights = !!raw.rallyLights; }
         return d;
     } catch (e) { return null; }
 }

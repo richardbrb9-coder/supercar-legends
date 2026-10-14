@@ -2,7 +2,7 @@
 import * as THREE from './lib/three.module.min.js';
 import { OrbitControls } from './lib/addons/OrbitControls.js';
 import { RoomEnvironment } from './lib/addons/RoomEnvironment.js';
-import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, LIVERIES, UNLOCKS, loadDesign, saveDesign as saveDesignTo, createCar, carStats,
+import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, LIVERIES, TEAM_LIVERIES, UNLOCKS, loadDesign, saveDesign as saveDesignTo, createCar, carStats,
     medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign, applyPreset } from './carmodel.js';
 
 // =====================================================================
@@ -101,7 +101,7 @@ function renderPanel() {
     let html = `<div class="b-tabs">${Object.entries(tabs).map(([k, v]) => `<button class="b-tab ${k === panelTab ? 'active' : ''}" data-btab="${k}">${v}</button>`).join('')}</div><div class="b-body">`;
     if (panelTab === 'body') html += `<p class="b-label">Body style</p><div class="opts">${choice(PRESETS, design.preset, 'preset')}</div>
         ${slider('L', 'Length', 4.0, 5.2, 0.05)}${slider('W', 'Width', 1.7, 2.1, 0.01)}${slider('roof', 'Roof height', 1.0, 1.35, 0.01)}
-        ${slider('nose', 'Nose height', 0.38, 0.72, 0.01)}${slider('tail', 'Tail height', 0.78, 1.05, 0.01)}${slider('ride', 'Ride height', 0.06, 0.2, 0.005)}`;
+        ${slider('nose', 'Nose height', 0.38, 0.72, 0.01)}${slider('tail', 'Tail height', 0.6, 1.05, 0.01)}${slider('ride', 'Ride height', 0.06, 0.2, 0.005)}`;
     if (panelTab === 'wheels') html += `<p class="b-label">Rim design</p><div class="opts">${choice(RIMS, design.rim, 'rim')}</div>
         <p class="b-label">Rim colour</p><div class="swatches">${Object.entries(RIM_COLOURS).map(([k, v]) => swatch(k, design.rimColour, 'rimcol', v === 'chrome' ? 'linear-gradient(135deg,#fff,#7c8591,#fff)' : v)).join('')}</div>
         <p class="b-label">Brake callipers</p><div class="swatches">${['#FFB300', '#E10600', '#00B8D9', '#C6FF00', '#16181C', '#F4F6F8'].map(c => swatch(c, design.caliper, 'caliper')).join('')}</div>
@@ -110,13 +110,14 @@ function renderPanel() {
         <label class="swatch custom" style="--sw:${design.paint}" title="Pick any colour"><input type="color" value="${design.paint}" data-paintpick="paint"></label></div>
         <p class="b-label">Finish</p><div class="opts">${choice(FINISHES, design.finish, 'finish')}</div>`;
     if (panelTab === 'livery') html += `<p class="b-label">Stripes and graphics</p><div class="opts">${choice(LIVERIES, design.livery || 'none', 'livery')}</div>
+        <p class="b-label">Motorsport team (with sponsors)</p><div class="opts">${choice(TEAM_LIVERIES, design.livery || 'none', 'livery')}</div>
         <p class="b-label">Stripe colour</p><div class="swatches">${COLOURS.map(c => swatch(c, design.stripeColour, 'stripe')).join('')}</div>
         <p class="b-label">Two-tone paint</p><div class="opts"><button class="opt ${design.twoTone ? 'active' : ''}" data-toggle="twoTone">${design.twoTone ? 'On' : 'Off'}</button></div>
         ${design.twoTone ? `<div class="swatches" style="margin-top:8px">${COLOURS.map(c => swatch(c, design.paint2, 'paint2')).join('')}</div>` : ''}
         <label class="field"><span>Race number</span><input type="text" inputmode="numeric" maxlength="2" value="${esc(design.number)}" data-text="number" placeholder="e.g. 7"></label>
         <label class="field"><span>Your name or tag</span><input type="text" maxlength="14" value="${esc(design.tag)}" data-text="tag" placeholder="e.g. MAX"></label>`;
     if (panelTab === 'aero') html += `<p class="b-label">Rear wing</p><div class="opts">${choice(WINGS, design.wing, 'wing')}</div>
-        <p class="b-label">Extras</p><div class="opts"><button class="opt ${design.splitter ? 'active' : ''}" data-toggle="splitter">Front splitter</button><button class="opt ${design.skirts ? 'active' : ''}" data-toggle="skirts">Side skirts</button></div>`;
+        <p class="b-label">Extras</p><div class="opts"><button class="opt ${design.splitter ? 'active' : ''}" data-toggle="splitter">Front splitter</button><button class="opt ${design.skirts ? 'active' : ''}" data-toggle="skirts">Side skirts</button><button class="opt ${design.rallyLights ? 'active' : ''}" data-toggle="rallyLights">Rally lights</button></div>`;
     if (panelTab === 'engine') html += `<p class="b-label">Engine</p><div class="opts">${choice(ENGINES, design.engine, 'engine')}</div><p class="small">${ENGINES[design.engine].note}. Tap again to hear it.</p>`;
     if (panelTab === 'cars') {
         const saved = loadSavedCars(), pts = medalPoints(), next = UNLOCKS.find(u => u.pts > pts);

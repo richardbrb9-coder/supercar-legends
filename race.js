@@ -196,7 +196,7 @@ function blobShadow() {
     return m;
 }
 function makeRacer(design, factor, isPlayer) {
-    const model = createCar(design, { merge: true }), stats = carStats(design);
+    const model = createCar(design, { merge: true, lite: !isPlayer }), stats = carStats(design);   // rivals use the lighter build
     const holder = new THREE.Group(), blob = blobShadow(); holder.add(model.group, blob);
     model.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
     blob.visible = !(renderer && renderer.shadowMap.enabled);
@@ -204,12 +204,19 @@ function makeRacer(design, factor, isPlayer) {
              lapStart: 0, lastLat: 0, finished: null, best: null, half: false, wheelSpin: 0, lineOffset: 0, lat: 0, latV: 0 };
 }
 // Rival cars are designed in code from the builder presets, so they're original designs too
+// team colours for rivals: [paint, stripes, second colour]
+const TEAM_COLOURS = [['#F4F6F8', '#E10600', '#00A86B'], ['#1E3A8A', '#FFB300', '#F4F6F8'], ['#00A86B', '#F4F6F8', '#1B1F26'],
+    ['#E10600', '#F4F6F8', '#1B1F26'], ['#FFB300', '#1B1F26', '#E10600'], ['#1B1F26', '#C6FF00', '#9AA3AF'], ['#7E57C2', '#F4F6F8', '#00B8D9']];
+const RIVAL_NUMBERS = [4, 24, 7, 11, 33, 18, 5];
 function rivalDesign(i) {
     const keys = Object.keys(PRESETS), preset = keys[(i * 2 + 1 + Math.floor(Math.random() * 2)) % keys.length];
     const paint = PAINTS.filter(c => c !== loadDesign().paint)[(i * 3 + Math.floor(Math.random() * 3)) % 10];
     const engines = Object.keys(ENGINES), rims = Object.keys(RIMS);
     const d = applyPreset({ ...DEFAULT }, preset);
-    return { ...d, paint, finish: ['gloss', 'metallic', 'pearl'][i % 3], engine: engines[(i + 1) % engines.length],
+    // each rival runs a motorsport team paint job in its own team colours, with its own race number
+    const team = TEAM_COLOURS[i % TEAM_COLOURS.length];
+    return { ...d, paint: team[0], stripeColour: team[1], paint2: team[2], livery: ['rally', 'endurance', 'gt'][i % 3], number: String(RIVAL_NUMBERS[i % RIVAL_NUMBERS.length]),
+             finish: ['gloss', 'metallic', 'gloss'][i % 3], engine: engines[(i + 1) % engines.length],
              rim: rims[(i * 2) % rims.length], rimColour: ['silver', 'black', 'gold'][i % 3], wing: ['gt', 'ducktail', 'swan'][i % 3] };
 }
 
@@ -222,11 +229,13 @@ let timeOfDay = store('raceTime', 'day');
 // graphics quality: 'auto' picks a level and steps down if the frame rate drops
 let qualitySetting = store('raceQuality', 'auto'), quality = qualitySetting === 'auto' ? SC.guessQuality() : qualitySetting;
 let world = null, player = null, rivals = [], ghost = null, mode = 'race', difficulty = 'medium';
+let fieldSize = [3, 5, 7].includes(store('raceField', 5)) ? store('raceField', 5) : 5;   // how many rivals (3, 5 or 7)
 let race = null;                                  // { phase: 'grid'|'lights'|'go'|'done', t, lightsT, results }
 const input = { left: false, right: false, gas: false, brake: false, tilt: 0 };
 let camMode = 0, help = store('raceHelp', true);
 const DIFF = { easy: 0.8, medium: 0.88, hard: 0.96 };
-const GRID = [[-12, 3.5], [-20, -3.5], [-28, 3.5], [-36, -3.5]];   // [metres behind the line, metres from the middle of the road]
+const GRID = Array.from({ length: 8 }, (_, k) => [-12 - k * 8, k % 2 ? -3.5 : 3.5]);   // [metres behind the line, metres from the middle of the road]
+const FIELD_SIZES = [3, 5, 7];
 const fmtTime = t => t == null ? '–' : `${Math.floor(t / 60)}:${(t % 60).toFixed(2).padStart(5, '0')}`;
 function store(key, fallback) { try { const v = JSON.parse(localStorage.getItem(key)); return v ?? fallback; } catch (e) { return fallback; } }
 function storeSet(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
@@ -246,12 +255,13 @@ function setupRace() {
         r.lat = side; r.latV = 0;                       // rivals start in their own grid box and ease across to the racing line
     };
     if (mode === 'race') {
-        for (let i = 0; i < 3; i++) {
-            const r = makeRacer(rivalDesign(i), DIFF[difficulty] * (1 - i * 0.02), false);
-            r.lineOffset = (i - 1) * 1.6;
+        // the rivals spread from quickest (at the front) to slowest, and you start at the back
+        for (let i = 0; i < fieldSize; i++) {
+            const r = makeRacer(rivalDesign(i), DIFF[difficulty] * (1 - i * 0.06 / fieldSize), false);
+            r.lineOffset = ((i % 3) - 1) * 1.6;
             rivals.push(r); scene.add(r.holder); place(r, slots[i]);
         }
-        place(player, slots[3]);
+        place(player, slots[fieldSize]);
     } else {
         place(player, [-12, 0]);
         const g = store('ghost_' + TRACK.id, null);
@@ -548,6 +558,22 @@ function hud() {
     if (html !== lastHud) { document.getElementById('race-hud').innerHTML = html; lastHud = html; }
 }
 let flashTimer = null;
+// The big start countdown, near the top of the screen so it never covers your car. Each number arrives large and
+// shrinks away; each one is a little smaller than the one before. A beep for each number, a higher one for GO.
+function countdown(text, step) {
+    let el = document.getElementById('race-count');
+    if (!el) { el = document.createElement('div'); el.id = 'race-count'; el.className = 'race-count'; document.getElementById('race-flash').after(el); }
+    el.textContent = text; el.classList.toggle('go', step === 4);
+    el.style.setProperty('--start', [2.6, 2.2, 1.8, 1.9][step - 1]);
+    el.classList.remove('run'); void el.offsetWidth; el.classList.add('run');      // restart the animation
+    beep(step === 4 ? 880 : 440, step === 4 ? 0.45 : 0.22);
+}
+function beep(freq, len) {
+    const ctx = window.getAudio && window.getAudio(); if (!ctx || !soundOn) return;
+    const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime;
+    o.type = 'square'; o.frequency.value = freq; g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    o.connect(g); g.connect(ctx.destination); o.start(t); o.stop(t + len + 0.05);
+}
 function flash(text, ms = 1800) {
     const el = document.getElementById('race-flash'); el.textContent = text; el.classList.add('show');
     clearTimeout(flashTimer); flashTimer = setTimeout(() => el.classList.remove('show'), ms);
@@ -630,10 +656,13 @@ function frame(now) {
     if (!race || race.paused) { if (sky) sky.position.copy(camera.position); renderer.render(scene, camera); return; }
     race.t += dt;
     if (race.phase === 'lights') {
+        // the gantry lights come on one by one while the countdown runs: 3, 2, 1, GO!
         const lit = Math.min(5, Math.floor(race.t / 0.8));
         world.lightMats.forEach((m, i) => { m.emissiveIntensity = i < lit ? 4 : 0; });
-        if (race.t > 4.0 + (race.goDelay ??= 0.3 + Math.random() * 0.8)) {
-            race.phase = 'go'; world.lightMats.forEach(m => { m.emissiveIntensity = 0; }); flash('GO!', 900);
+        const step = Math.floor(race.t);                    // 1 = "3", 2 = "2", 3 = "1", 4 = GO
+        if (step >= 1 && step <= 3 && step !== race.countShown) { race.countShown = step; countdown(String(4 - step), step); }
+        if (race.t > 4.0) {
+            race.phase = 'go'; world.lightMats.forEach(m => { m.emissiveIntensity = 0; }); countdown('GO!', 4);
             player.lapStart = race.raceTime; rivals.forEach(r => { r.lapStart = race.raceTime; });
         }
     }
@@ -712,7 +741,9 @@ function renderMenu() {
                 <div class="track-cards">${TRACKS.map(trackCard).join('')}</div>
                 <h2 style="margin-top:12px">${TRACK.name}</h2>
                 <p class="small">${TRACK.about} ${(trackLen / 1000).toFixed(1)} km · ${TRACK.laps} laps · Best lap ${fmtTime(best)}</p>
-                <p class="b-label">Race against 3 rivals</p>
+                <p class="b-label">Rivals</p>
+                <div class="opts">${FIELD_SIZES.map(n => `<button class="opt ${n === fieldSize ? 'active' : ''}" data-field="${n}">${n}</button>`).join('')}</div>
+                <p class="b-label">Difficulty</p>
                 <div class="opts">${Object.keys(DIFF).map(k => `<button class="opt ${k === difficulty ? 'active' : ''}" data-diff="${k}">${k[0].toUpperCase() + k.slice(1)} ${medalFor(TRACK.id, k)}</button>`).join('')}</div>
                 <div class="rr-actions"><button class="big-btn" data-race="start-race">Start race</button><button class="act-btn" data-race="start-trial">Time trial (with ghost)</button></div>
             </div>
@@ -726,6 +757,7 @@ function renderMenu() {
 function onMenuClick(e) {
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.diff) { difficulty = b.dataset.diff; renderMenu(); return; }
+    if (b.dataset.field) { fieldSize = +b.dataset.field; storeSet('raceField', fieldSize); renderMenu(); return; }
     if (b.dataset.track) { loadTrack(b.dataset.track); renderMenu(); return; }
     if (b.dataset.time) { timeOfDay = b.dataset.time; storeSet('raceTime', timeOfDay); setAtmosphere(TRACK.theme); renderMenu(); return; }
     if (b.dataset.quality) {

@@ -420,6 +420,19 @@ body.racing .topbar { display: none; }
 .race-slip { position: absolute; left: 50%; bottom: 128px; transform: translateX(-50%); font-family: var(--display); font-weight: 900; font-size: .85rem; letter-spacing: .25em; color: var(--cyan); text-shadow: 0 0 10px rgba(0,229,255,.8); opacity: 0; transition: opacity .2s; pointer-events: none; }
 .race-slip.show { opacity: 1; }
 .race-flash.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+/* start countdown: near the top, starts big and shrinks away (each number a little smaller than the last) */
+.race-count { position: absolute; left: 50%; top: 20%; transform: translate(-50%, -50%); font-family: var(--display); font-weight: 900; font-size: clamp(3.5rem, 11vw, 7rem); line-height: 1;
+  color: #fff; -webkit-text-stroke: 3px #111; paint-order: stroke fill; text-shadow: 0 6px 18px rgba(0,0,0,.55); opacity: 0; pointer-events: none; }
+.race-count.go { color: var(--lime); }
+.race-count.run { animation: race-count .95s cubic-bezier(.2,.7,.3,1) forwards; }
+@keyframes race-count {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(var(--start)); }
+  12%  { opacity: 1; transform: translate(-50%, -50%) scale(calc(var(--start) * .9)); }
+  75%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(calc(var(--start) * .38)); }
+}
+@keyframes race-count-still { 0%, 85% { opacity: 1; transform: translate(-50%, -50%) scale(calc(var(--start) * .6)); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(calc(var(--start) * .6)); } }
+@media (prefers-reduced-motion: reduce) { .race-count.run { animation-name: race-count-still; } }
 .race-top { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
 .race-top .opt { background: rgba(17,19,23,.7); padding: 8px 10px; font-size: .8rem; }
 .race-top .opt.active { background: rgba(225,6,0,.85); }
