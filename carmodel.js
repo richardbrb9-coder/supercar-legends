@@ -33,10 +33,14 @@ export const PRESETS = {
                 cabinStyle: 'tallglass', cabinWB: 0.66, cabinWT: 0.48, grille: 'none', lamps: 'pods', bumpers: false, scoop: 'snorkel', exhaust: 'none',
                 mouth: true, sideIntake: true, rearGrille: true,
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'five', rimColour: 'silver' } },
-    // Inspired by the Italian carbon-fibre hypercars of around 2000: low nose, big front wings, glass bubble canopy, roof scoop, quad exhaust
-    hyper:    { label: 'Modern hypercar', L: 4.45, W: 2.05, nose: 0.40, deck: 0.78, roof: 1.13, tail: 0.96, cabin: [0.29, 0.62], fast: 0.8, ride: 0.10, wheel: 0.36,
-                wbFrac: 0.6, axleShift: 0.04, round: 0.42, fenderH: 0.16, fenderReach: 2.3, cabinStyle: 'bubble', cabinWB: 0.74, cabinWT: 0.46,
-                grille: 'none', lamps: 'pods', bumpers: false, scoop: 'roof', exhaust: 'quad',
+    // Inspired by the Italian carbon-fibre hypercars of around 2000: low pointed nose with a raised triangle on the bonnet, twin round
+    // lamps set into the tops of the front wings, a narrow waist between big wheel arches, glass bubble canopy, roof scoop, quad exhaust
+    // (shape measured from scaled side, top and front drawings)
+    hyper:    { label: 'Modern hypercar', L: 4.44, W: 2.06, nose: 0.34, deck: 0.82, roof: 1.14, tail: 0.84, cabin: [0.27, 0.68], fast: 0, ride: 0.10, wheel: 0.36,
+                rake: 0.42, screenBow: 0.6, roofLen: 0.6, roofDrop: 0.97, deckRear: 1.13, waist: 0.845, noseTip: 0.8, noseW: 0.42, noseW2: 0.86,
+                cross: 'vee', crossB: 0, crossW: 0.03,
+                wbFrac: 0.615, axleShift: 0.04, round: 0.42, fenderH: 0.08, fenderReach: 2.3, cabinStyle: 'bubble', cabinWB: 0.74, cabinWT: 0.46,
+                grille: 'none', lamps: 'twin', bumpers: false, scoop: 'roof', exhaust: 'quad',
                 style: { wing: 'none', splitter: true, skirts: true, rim: 'ten', rimColour: 'silver' } },
     // Inspired by the 2020s British streamliner: a teardrop with a very long tail tapering to a narrow tip, a long glass canopy,
     // covers over the front wheels, slim lamps and a light bar at the tip of the tail
@@ -78,7 +82,7 @@ export const ENGINES = {
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
-export const SHAPE_DEFAULTS = { rallyLights: false, rake: 0.34, screenBow: 0.74, roofDrop: 0.995, bulge: 0, deckRear: 1, roofLen: 0, noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
+export const SHAPE_DEFAULTS = { waist: 0.95, rallyLights: false, rake: 0.34, screenBow: 0.74, roofDrop: 0.995, bulge: 0, deckRear: 1, roofLen: 0, noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
     grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false, cornerIntakes: false, tailBar: false, diffuser: false, roofBar: false, tailBig: false, tailMid: 0.96, tailW: 0.88, wheelCovers: false };
 // Apply a body style: its shape, its details, and the parts that suit it
 export function applyPreset(design, key) {
@@ -135,7 +139,7 @@ function profiles(p) {
     const centre = curve(q.bulge > 0 && c0 > 0.26
         ? [[0, p.nose * q.noseTip], [0.025, p.nose], [0.11, lerp(p.nose, p.deck, 0.7)], [0.2, p.deck * 0.98 + q.bulge], [c0, p.deck * 0.98], [c1, deckR], [0.94, p.tail], [1, p.tail * 0.93]]
         : [[0, p.nose * q.noseTip], [0.025, p.nose], [0.14, lerp(p.nose, p.deck, 0.45)], [c0, p.deck * 0.98], [c1, deckR], [0.94, p.tail], [1, p.tail * 0.93]]);
-    const width = curve([[0, W2 * q.noseW], [0.05, W2 * Math.max(q.noseW2, q.noseW + 0.08)], [frontAxle, W2 * 0.99], [0.45, W2 * 0.95], [rearAxle, W2], [lerp(rearAxle, 0.95, 0.45), W2 * lerp(1, q.tailMid, 0.6)], [0.95, W2 * q.tailMid], [1, W2 * q.tailW]]);
+    const width = curve([[0, W2 * q.noseW], [0.05, W2 * Math.max(q.noseW2, q.noseW + 0.08)], [frontAxle, W2 * 0.99], [0.45, W2 * q.waist], [rearAxle, W2], [lerp(rearAxle, 0.95, 0.45), W2 * lerp(1, q.tailMid, 0.6)], [0.95, W2 * q.tailMid], [1, W2 * q.tailW]]);
     const archR = wheelR + 0.055;
     // how high the wheel arch reaches at this point (0 if not over a wheel)
     const arch = s => {
@@ -170,8 +174,14 @@ function profiles(p) {
     // rounded wing over each front wheel. It fades out where the bonnet meets the windscreen.
     const tripleAmt = s => q.cross !== 'triple' ? 0 : s < c0 - 0.06 ? 1 : s > c0 + 0.02 ? 0 : (c0 + 0.02 - s) / 0.08;
     const dome = (a, mid, half) => { const d = Math.abs(a - mid) / half; return d < 1 ? Math.cos(d * Math.PI / 2) ** 2 : 0; };
+    // 'vee' (modern hypercar): a raised triangle on the bonnet, its point at the nose and its base at the windscreen,
+    // with a crisp edge and a shallow channel each side before the wings
+    const veeAmt = s => q.cross !== 'vee' ? 0 : s > c0 + 0.01 ? 0 : s < c0 - 0.04 ? 1 : (c0 + 0.01 - s) / 0.05;
+    const veeHalf = s => lerp(0.12, 0.62, Math.min(1, s / Math.max(0.05, c0 - 0.02)));
+    const sstep = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
     const topAt = (s, u) => {
-        const c = centre(s), a = Math.abs(u), base = c + (shoulder(s) - c) * Math.pow(a, 3.2), t = tripleAmt(s);
+        const c = centre(s), a = Math.abs(u), base = c + (shoulder(s) - c) * Math.pow(a, 3.2), t = tripleAmt(s), v = veeAmt(s);
+        if (v) { const h = veeHalf(s), tip = sstep(0.02, 0.1, s); return base + v * tip * (q.crossB * sstep(h + 0.16, h - 0.04, a) - q.crossW * dome(a, h + 0.24, 0.2)); }
         if (!t) return base;
         return base + t * (q.crossB * (dome(a, 0, 0.44) - 1) + q.crossW * dome(a, 0.77, 0.3));
     };
@@ -182,7 +192,7 @@ function profiles(p) {
         const v = Math.pow(sn, 0.5 + (q.round - 0.38) * 0.6), yt = topAt(s, a), yb = Math.min(yt - 0.03, bottomAt(s, a));
         return lerp((yt + yb) / 2, yt, v);
     };
-    return { centre, width, arch, base, roof, topAt, bottomAt, surfAt, top: centre, c0, c1, frontAxle, rearAxle, wheelR, rakeEnd, roofEnd, q };
+    return { centre, width, arch, base, roof, topAt, bottomAt, surfAt, veeHalf, top: centre, c0, c1, frontAxle, rearAxle, wheelR, rakeEnd, roofEnd, q };
 }
 
 // Build a closed tube from rings of points, with caps at both ends
@@ -579,11 +589,23 @@ export function createCar(design, { merge = false, lite = false } = {}) {
             lamp.position.set(X(ls) + 0.005, y, z); car.add(lamp);
             const ring = new THREE.Mesh(new THREE.TorusGeometry(0.118, 0.014, 8, 24), mats.chrome); ring.rotation.y = Math.PI / 2; ring.position.set(X(ls) + 0.01, y, z); car.add(ring);
         } else if (q.lamps === 'pods') {    // two stacked lamps in a dark teardrop pod on each front wing
-            const ls = 0.05, z = side * pr.width(ls) * 0.66, y = pr.topAt(ls, 0.66) - 0.04;
+            // (the 90s supercar's lamps sit out towards the corners of its narrow nose, slightly further back)
+            const wide = p.preset === 'super90', ls = wide ? 0.075 : 0.05, f = wide ? 0.84 : 0.66;
+            const z = side * pr.width(ls) * f, y = pr.topAt(ls, f) - 0.04;
             const pod = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), mats.lens); pod.scale.set(p.preset === 'super90' ? 0.27 : 0.2, 0.075, 0.13);
             pod.position.set(X(ls), y, z); pod.rotation.z = -0.35; pod.rotation.y = side * 0.35; car.add(pod);
             for (const [dx, dy, dz] of [[0.06, 0.01, -0.04], [-0.05, 0.035, 0.03]]) {
                 const l = new THREE.Mesh(new THREE.SphereGeometry(0.045, 12, 8), mats.head); l.position.set(X(ls) + dx, y + dy, z + side * dz); car.add(l);
+            }
+        } else if (q.lamps === 'twin') {    // two separate round lamps side by side at the front corner of each wing, facing forwards and a little up
+            for (const [ls, f] of [[0.07, 0.6], [0.085, 0.8]]) {
+                const w = pr.width(ls), y = pr.surfAt(ls, f), z = side * w * f;
+                const n = new THREE.Vector3(1, 0.55, side * 0.28).normalize();     // which way the lamp faces
+                const base = new THREE.Vector3(X(ls), y, z).addScaledVector(n, -0.01);
+                const q4 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+                const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.078, 0.07, 0.07, 24), mats.dark); cup.quaternion.copy(q4); cup.position.copy(base); car.add(cup);
+                const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.012, 24), mats.head); lens.quaternion.copy(q4); lens.position.copy(base).addScaledVector(n, 0.036); car.add(lens);
+                const bezel = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.012, 8, 24), mats.chrome); bezel.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n); bezel.position.copy(base).addScaledVector(n, 0.038); car.add(bezel);
             }
         } else if (q.lamps === 'hidden') {  // closed pop-up lamps: a thin outline of the lid on each side of the nose
             const ls = 0.07, z = side * pr.width(ls) * 0.6, y = pr.topAt(ls, 0.6) + 0.004;
@@ -742,6 +764,23 @@ export function createCar(design, { merge = false, lite = false } = {}) {
         tl.position.set(X(0.995) - 0.01, lerp(pr.base(0.99), pr.centre(0.99), 0.72), 0); car.add(tl);
     }
     // aero
+    // the raised bonnet triangle: its own panel with a flat top and sharp sloping edges, its point near the nose and its base at
+    // the windscreen, following the shape of the bonnet underneath
+    if (q.cross === 'vee') {
+        const S = 26, sA = 0.025, sB = pr.c0 - 0.01, pos = [], idx = [];
+        const cols = [-1.25, -1, -0.5, 0, 0.5, 1, 1.25];      // across: outer foot, top edge, top, ..., top edge, outer foot
+        for (let i = 0; i <= S; i++) {
+            const t = i / S, ss = lerp(sA, sB, t), w = pr.width(ss), hw = lerp(0.015, pr.veeHalf(sB), t), lift = lerp(0.012, 0.075, Math.min(1, t * 1.5));   // tapers to a sharp point
+            for (const k of cols) {
+                const foot = Math.abs(k) > 1, u = Math.sign(k) * Math.min(0.95, hw * (foot ? 1 + 0.06 / Math.max(0.05, hw * w) : Math.abs(k)));
+                pos.push(X(ss), pr.surfAt(ss, u) + (foot ? -0.004 : lift), u * w);
+            }
+        }
+        const C = cols.length;
+        for (let i = 0; i < S; i++) for (let k = 0; k < C - 1; k++) { const a = i * C + k, b = a + C; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+        car.add(new THREE.Mesh(g, mats.paintPlain));
+    }
     // rally lights: a pod of four round driving lamps across the front of the bonnet
     if (p.rallyLights) {
         const s0 = 0.05, halfW = pr.width(s0), gap = Math.min(0.3, halfW * 0.44), r = Math.min(0.088, gap * 0.36);
@@ -843,7 +882,8 @@ const CODE_KEYS_5 = [...CODE_KEYS_4, 'roofBar', 'tailBig'];
 const CODE_KEYS_6 = [...CODE_KEYS_5, 'tailMid', 'tailW', 'wheelCovers', 'noseW2'];
 const CODE_KEYS_7 = [...CODE_KEYS_6, 'rake', 'screenBow', 'roofDrop', 'bulge'];
 const CODE_KEYS_8 = [...CODE_KEYS_7, 'deckRear'];
-const CODE_KEYS = [...CODE_KEYS_8, 'roofLen', 'rallyLights'];
+const CODE_KEYS_9 = [...CODE_KEYS_8, 'roofLen', 'rallyLights'];
+const CODE_KEYS = [...CODE_KEYS_9, 'waist'];
 export function encodeDesign(d) {
     const arr = CODE_KEYS.map(k => {
         const v = d[k];
@@ -853,12 +893,13 @@ export function encodeDesign(d) {
         return v;
     });
     const json = JSON.stringify(arr);
-    return 'SL9-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'SL10-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export function decodeDesign(code) {
-    const m = String(code || '').trim().match(/^SL([1-9])-([A-Za-z0-9_-]+)$/);
+    const m = String(code || '').trim().match(/^SL(\d{1,2})-([A-Za-z0-9_-]+)$/);
     if (!m) return null;
-    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS_6, 7: CODE_KEYS_7, 8: CODE_KEYS_8, 9: CODE_KEYS }[m[1]];
+    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS_6, 7: CODE_KEYS_7, 8: CODE_KEYS_8, 9: CODE_KEYS_9, 10: CODE_KEYS }[m[1]];
+    const ver = +m[1];
     try {
         let b = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
         const arr = JSON.parse(decodeURIComponent(escape(atob(b))));
@@ -883,24 +924,25 @@ export function decodeDesign(code) {
         // body-style details (version 2 codes); older codes get the plain defaults
         const oneOf = (v, list, def) => list.includes(v) ? v : def;
         Object.assign(d, SHAPE_DEFAULTS);
-        if (m[1] !== '1') {
+        if (ver > 1) {
             d.wbFrac = num(raw.wbFrac, 0.5, 0.65, 0.6); d.axleShift = num(raw.axleShift, -0.08, 0.08, 0); d.round = num(raw.round, 0.3, 0.7, 0.38);
             d.fenderH = num(raw.fenderH, 0, 0.25, 0.06); d.fenderReach = num(raw.fenderReach, 1.8, 3.5, 2.5);
             d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass', 'visor'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
-            d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade', 'hidden'], 'slim'); d.bumpers = !!raw.bumpers;
+            d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade', 'hidden', 'twin'], 'slim'); d.bumpers = !!raw.bumpers;
             d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof', 'snorkel', 'bonnetvent', 'louvres'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad'], 'none');
         }
-        if (m[1] >= '3') {
-            d.cross = oneOf(raw.cross, ['flat', 'triple'], 'flat'); d.crossB = num(raw.crossB, 0, 0.12, 0.07); d.crossW = num(raw.crossW, 0, 0.15, 0.09);
+        if (ver >= 3) {
+            d.cross = oneOf(raw.cross, ['flat', 'triple', 'vee'], 'flat'); d.crossB = num(raw.crossB, 0, 0.12, 0.07); d.crossW = num(raw.crossW, 0, 0.15, 0.09);
             d.noseW = num(raw.noseW, 0.35, 0.95, 0.72); d.noseTip = num(raw.noseTip, 0.4, 1, 0.78); d.noseLift = num(raw.noseLift, 0.5, 3, 2.4);
             d.mouth = !!raw.mouth; d.sideIntake = !!raw.sideIntake; d.rearGrille = !!raw.rearGrille;
         }
-        if (m[1] >= '4') { d.cornerIntakes = !!raw.cornerIntakes; d.tailBar = !!raw.tailBar; d.diffuser = !!raw.diffuser; }
-        if (m[1] >= '5') { d.roofBar = !!raw.roofBar; d.tailBig = !!raw.tailBig; }
-        if (m[1] >= '6') { d.tailMid = num(raw.tailMid, 0.4, 1, 0.96); d.tailW = num(raw.tailW, 0.2, 1, 0.88); d.wheelCovers = !!raw.wheelCovers; d.noseW2 = num(raw.noseW2, 0.6, 0.95, 0.9); }
-        if (m[1] >= '7') { d.rake = num(raw.rake, 0.12, 0.5, 0.34); d.screenBow = num(raw.screenBow, 0.4, 0.9, 0.74); d.roofDrop = num(raw.roofDrop, 0.9, 1, 0.995); d.bulge = num(raw.bulge, 0, 0.06, 0); }
-        if (m[1] >= '8') d.deckRear = num(raw.deckRear, 0.8, 1.3, 1);
-        if (m[1] >= '9') { d.roofLen = num(raw.roofLen, 0, 0.95, 0); d.rallyLights = !!raw.rallyLights; }
+        if (ver >= 4) { d.cornerIntakes = !!raw.cornerIntakes; d.tailBar = !!raw.tailBar; d.diffuser = !!raw.diffuser; }
+        if (ver >= 5) { d.roofBar = !!raw.roofBar; d.tailBig = !!raw.tailBig; }
+        if (ver >= 6) { d.tailMid = num(raw.tailMid, 0.4, 1, 0.96); d.tailW = num(raw.tailW, 0.2, 1, 0.88); d.wheelCovers = !!raw.wheelCovers; d.noseW2 = num(raw.noseW2, 0.6, 0.95, 0.9); }
+        if (ver >= 7) { d.rake = num(raw.rake, 0.12, 0.5, 0.34); d.screenBow = num(raw.screenBow, 0.4, 0.9, 0.74); d.roofDrop = num(raw.roofDrop, 0.9, 1, 0.995); d.bulge = num(raw.bulge, 0, 0.06, 0); }
+        if (ver >= 8) d.deckRear = num(raw.deckRear, 0.8, 1.3, 1);
+        if (ver >= 9) { d.roofLen = num(raw.roofLen, 0, 0.95, 0); d.rallyLights = !!raw.rallyLights; }
+        if (ver >= 10) d.waist = num(raw.waist, 0.8, 1, 0.95);
         return d;
     } catch (e) { return null; }
 }
