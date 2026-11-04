@@ -574,7 +574,7 @@ function placeCamera(snap = false, dt = 0.016) {
         if (efx) { const [sx, sy] = efx.shakeOffset(r.v / r.perf.vmax, elapsed); camera.position.y += sy * 0.25; ahead.x += sx * 0.5; }
         camera.lookAt(ahead);
         camera.fov = (camMode === 3 ? 66 : 62) + Math.min(10, Math.max(0, r.v - 30) * 0.18); camera.updateProjectionMatrix();
-        if (camMode === 3) { const gs = gearState(r), u = window.getUnits ? window.getUnits() : 'mph'; ck.update({ steer: r.steer, speed: Math.abs(r.v) * (u === 'mph' ? 2.23694 : 3.6), rpm: 0.18 + gs.inGear * 0.78, gear: gs.gear }, dt); }
+        if (camMode === 3) { const gs = gearState(r), u = window.getUnits ? window.getUnits() : 'mph'; ck.update({ steer: r.steer, speed: Math.abs(r.v) * (u === 'mph' ? 2.23694 : 3.6), mps: Math.abs(r.v), rpm: 0.18 + gs.inGear * 0.78, gear: gs.gear, weather: weatherKind }, dt); }
         camPos.copy(camera.position); camLook.copy(ahead);
         return;
     }
@@ -697,6 +697,7 @@ function updateEffects(dt) {
     if (weather) weather.update(dt, camera.position, r.v * fwdX, r.v * fwdZ);
     efx.update(dt);
     efx.drawSpeedLines(r.v / r.perf.vmax, r.slip, dt);
+    efx.lensDrops(dt, weatherKind === 'rain' && camMode < 2);
     if (headlight && headlight.visible) {
         headlight.position.set(r.x + fwdX * 1.8, 1.0, r.z + fwdZ * 1.8);
         headlight.target.position.set(r.x + fwdX * 25, 0, r.z + fwdZ * 25); headlight.target.updateMatrixWorld();

@@ -155,10 +155,13 @@ export function buildCockpit(design, units = 'mph') {
     glassGeo.setAttribute('position', new THREE.Float32BufferAttribute([xWS, yWS, -hb, xWS, yWS, hb, xTop, yRoof, ht, xTop, yRoof, -ht], 3));
     glassGeo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2)); glassGeo.setIndex([0, 1, 2, 0, 2, 3]); glassGeo.computeVertexNormals();
     const glass = new THREE.Mesh(glassGeo, mats.glass); glass.renderOrder = 2; g.add(glass);
+    // raindrops, snowflakes and the wipers are painted onto a see-through layer laid over the windscreen
+    const screenRain = windscreen(glassGeo, hb, ht, Math.hypot(xTop - xWS, yRoof - yWS), style); g.add(screenRain.mesh);
     g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
 
     // per frame: steering, needles, the digital display. info: { steer, speedFrac, mph, rpm (0..1), gear }
     function update(info, dt) {
+        screenRain.update(info, dt);
         spin.rotation.x = -info.steer * 2.4;
         for (const n of needles) n.arm.rotation.z = dialAngle(n.key === 'speed' ? info.speed / max : info.rpm * 8 / 9);
         if (screen) {
@@ -175,9 +178,74 @@ export function buildCockpit(design, units = 'mph') {
             screen.tex.needsUpdate = true;
         }
     }
-    function dispose() { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
+    function dispose() { screenRain.dispose(); g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
     // the bonnet camera: just ahead of the bottom of the windscreen, looking along the bonnet
     // (for long bonnets it sits further forward, over the middle of the bonnet, so scoops and bulges don't block the view)
     const sB = Math.max(0.12, pr.c0 * 0.8), bonnet = new THREE.Vector3(X(sB), pr.centre(sB) + 0.3, 0);
     return { group: g, eye, bonnet, style, glass, update, dispose };
+}
+
+// The windscreen in bad weather. Measurements in metres on the glass: x across (0 = middle), y up the glass from its bottom edge.
+// Drops land at random, grow a little, and at speed run up and outwards; snowflakes land and stay. Two wipers sweep side by
+// side from the bottom edge and clear whatever they pass over. Drawn on a canvas about 25 times a second.
+function windscreen(glassGeo, hb, ht, height, style) {
+    const CW = 1024, CH = 512, c = document.createElement('canvas'); c.width = CW; c.height = CH; const x = c.getContext('2d');
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const mesh = new THREE.Mesh(glassGeo, new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+    mesh.renderOrder = 3; mesh.visible = false;
+    const halfAt = y => lerp(hb, ht, y / height);                       // the glass narrows towards the top
+    const toPx = (px, py) => [(px / halfAt(py) * 0.5 + 0.5) * CW, (1 - py / height) * CH];
+    const drops = [], R = Math.min(hb, ht) * 0.95, pivots = [-hb * 0.42, hb * 0.18];   // wiper length and pivot points (offset like a real car)
+    let t = 0, paint = 0, wipe = 0, weather = 'sunny', prevAngle = 0;
+    // wiper angle: 0 lying flat along the bottom, up to ~105 degrees, out and back
+    const wiperAngle = s => { const k = (s % 1); return (k < 0.5 ? k * 2 : 2 - k * 2); };
+    function update(info, dt) {
+        weather = info.weather || 'sunny';
+        const wet = weather === 'rain', snow = weather === 'snow';
+        if (!wet && !snow && drops.length === 0) { mesh.visible = false; return; }
+        mesh.visible = true; t += dt;
+        const mps = info.mps || 0;
+        // new drops: more when it's raining hard and you're moving into the rain
+        const rate = wet ? 26 + mps * 2.2 : snow ? 9 + mps * 0.5 : 0;
+        for (let n = Math.floor(rate * dt + Math.random()); n > 0; n--) {
+            const py = Math.random() * height, w = halfAt(py);
+            drops.push({ x: (Math.random() * 2 - 1) * w, y: py, r: snow ? 0.007 + Math.random() * 0.012 : 0.007 + Math.random() * 0.012, snow, a: 0.55 + Math.random() * 0.4, run: 0 });
+        }
+        // at speed the air pushes raindrops up the glass and out to the sides (snow sticks)
+        const push = Math.max(0, mps - 7) * 0.02;
+        for (const d of drops) if (!d.snow) { d.y += push * dt * (0.6 + d.r * 80); d.x += d.x * push * dt * 0.5; if (push > 0.05) d.run = Math.min(0.06, d.run + push * dt * 0.4); }
+        // the wipers: faster in rain than snow; the blades clear what they sweep across
+        const period = wet ? 1.15 : 1.6; wipe += dt / period;
+        const ang = wiperAngle(wipe) * 1.83, a0 = Math.min(prevAngle, ang), a1 = Math.max(prevAngle, ang) + 0.02; prevAngle = ang;
+        for (let i = drops.length - 1; i >= 0; i--) {
+            const d = drops[i];
+            if (d.y > height || Math.abs(d.x) > halfAt(Math.min(height, d.y)) * 1.02) { drops.splice(i, 1); continue; }
+            for (const px of pivots) {
+                const dx = d.x - px, r = Math.hypot(dx, d.y); if (r > R || r < 0.04) continue;
+                const a = Math.atan2(d.y, -dx);                          // the blades sweep from the right-hand side round to the left
+                if (a >= a0 - 0.03 && a <= a1 + 0.03) { drops.splice(i, 1); break; }
+            }
+        }
+        if (drops.length > 700) drops.splice(0, drops.length - 700);
+        paint += dt; if (paint < 0.04) return; paint = 0;
+        x.clearRect(0, 0, CW, CH);
+        for (const d of drops) {
+            const [cx, cy] = toPx(d.x, d.y), rx = d.r / halfAt(d.y) * 0.5 * CW, ry = d.r / height * CH;
+            if (d.snow) { x.fillStyle = `rgba(250,252,255,${d.a})`; x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); x.fill(); continue; }
+            if (d.run > 0.005) { x.strokeStyle = `rgba(200,215,230,${d.a * 0.35})`; x.lineWidth = Math.max(1, rx * 0.7); x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx - (d.x * 0.3) / halfAt(d.y) * CW * 0.2, cy + d.run / height * CH); x.stroke(); }
+            const gr = x.createRadialGradient(cx - rx * 0.3, cy - ry * 0.3, 0, cx, cy, Math.max(rx, ry));
+            gr.addColorStop(0, `rgba(255,255,255,${d.a})`); gr.addColorStop(0.35, `rgba(215,225,238,${d.a * 0.55})`); gr.addColorStop(0.8, `rgba(120,135,155,${d.a * 0.5})`); gr.addColorStop(1, `rgba(20,26,36,${d.a * 0.7})`);
+            x.fillStyle = gr; x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); x.fill();
+        }
+        // the wiper blades and arms
+        for (const px of pivots) {
+            const ex = px - Math.cos(ang) * R, ey = Math.sin(ang) * R;
+            const [ax, ay] = toPx(px, 0.01), [bx, by] = toPx(ex, ey), [mx, my] = toPx(px - Math.cos(ang) * R * 0.15, Math.sin(ang) * R * 0.15);
+            x.strokeStyle = '#0b0c0e'; x.lineCap = 'round';
+            x.lineWidth = 12; x.beginPath(); x.moveTo(mx, my); x.lineTo(bx, by); x.stroke();             // the rubber blade
+            x.lineWidth = 7; x.beginPath(); x.moveTo(ax, ay); x.lineTo((ax + bx) / 2, (ay + by) / 2 - 3); x.stroke();   // the arm
+        }
+        tex.needsUpdate = true;
+    }
+    return { mesh, update, dispose: () => { tex.dispose(); mesh.material.dispose(); } };
 }

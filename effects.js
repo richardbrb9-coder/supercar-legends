@@ -105,7 +105,21 @@ export class Effects {
             x.beginPath(); x.moveTo(cx + Math.cos(l.a) * r0, cy + Math.sin(l.a) * r0 * 0.7); x.lineTo(cx + Math.cos(l.a) * r1, cy + Math.sin(l.a) * r1 * 0.7); x.stroke();
         }
     }
+    // in the chase cameras in the rain, now and then a drop lands on the 'camera lens' and fades away (call after drawSpeedLines)
+    lensDrops(dt, raining) {
+        this.lens = this.lens || [];
+        if (raining && this.enabled && Math.random() < dt * 0.9 && this.lens.length < 6) this.lens.push({ x: Math.random(), y: Math.random() * 0.7, r: 14 + Math.random() * 26, life: 0, max: 2.5 + Math.random() * 2 });
+        const c = this.overlay, x = this.ctx2d, w = c.clientWidth, h = c.clientHeight;
+        for (let i = this.lens.length - 1; i >= 0; i--) {
+            const d = this.lens[i]; d.life += dt; if (d.life > d.max) { this.lens.splice(i, 1); continue; }
+            const a = Math.min(1, d.life * 6) * (1 - d.life / d.max), cx = d.x * w, cy = d.y * h + d.life * 6;
+            const g = x.createRadialGradient(cx - d.r * 0.25, cy - d.r * 0.3, 0, cx, cy, d.r);
+            g.addColorStop(0, `rgba(255,255,255,${0.55 * a})`); g.addColorStop(0.6, `rgba(210,222,235,${0.2 * a})`); g.addColorStop(0.92, `rgba(40,50,65,${0.4 * a})`); g.addColorStop(1, 'rgba(40,50,65,0)');
+            x.fillStyle = g; x.beginPath(); x.ellipse(cx, cy, d.r, d.r * 1.08, 0, 0, Math.PI * 2); x.fill();
+        }
+    }
     clear() {
+        this.lens = [];
         for (const p of this.puffs) p.s.visible = false;
         this.sparkLife.fill(0); for (let i = 0; i < this.SPARKS; i++) this.sparkPos[i * 3 + 1] = -100;
         this.sparks.geometry.attributes.position.needsUpdate = true;
