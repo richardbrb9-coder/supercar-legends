@@ -65,7 +65,7 @@ export function buildCockpit(design, units = 'mph') {
         wood: new THREE.MeshStandardMaterial({ map: woodTex(), roughness: 0.35 }),
         paint: new THREE.MeshStandardMaterial({ color: design.paint, metalness: 0.4, roughness: 0.35 }),
         glass: new THREE.MeshPhysicalMaterial({ color: 0xbfd6e6, transparent: true, opacity: 0.07, roughness: 0.05, metalness: 0, depthWrite: false, side: THREE.DoubleSide }),
-        mirror: new THREE.MeshStandardMaterial({ color: 0x9aa6b2, metalness: 1, roughness: 0.1 }),
+        mirror: new THREE.MeshBasicMaterial({ color: 0x9aa6b2 }),   // shows the view behind once the race gives it a picture (setMirror)
         accent: new THREE.MeshStandardMaterial({ color: design.stripeColour && design.stripeColour !== design.paint ? design.stripeColour : '#E10600', roughness: 0.5 })
     };
     // dashboard: a shaped slab right across the car, from the bottom of the windscreen back towards the driver
@@ -181,8 +181,11 @@ export function buildCockpit(design, units = 'mph') {
     function dispose() { screenRain.dispose(); g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
     // the bonnet camera: just ahead of the bottom of the windscreen, looking along the bonnet
     // (for long bonnets it sits further forward, over the middle of the bonnet, so scoops and bulges don't block the view)
-    const sB = Math.max(0.12, pr.c0 * 0.8), bonnet = new THREE.Vector3(X(sB), pr.centre(sB) + 0.3, 0);
-    return { group: g, eye, bonnet, style, glass, update, dispose };
+    // (cars with a short low bonnet get it just ahead of the windscreen, a little higher, so the bonnet stays in view)
+    const short = pr.c0 < 0.33, sB = short ? pr.c0 - 0.02 : Math.max(0.12, pr.c0 * 0.8), bonnet = new THREE.Vector3(X(sB) + (short ? 0.05 : 0), pr.centre(sB) + (short ? 0.4 : 0.3), 0);
+    // the mirrors show the picture from a camera looking backwards (flipped left to right, like a real mirror)
+    function setMirror(tex) { const m = mats.mirror; if (m.map === tex) return; m.map = tex; m.color.set(0xffffff); m.needsUpdate = true; }
+    return { group: g, eye, bonnet, style, glass, update, dispose, setMirror };
 }
 
 // The windscreen in bad weather. Measurements in metres on the glass: x across (0 = middle), y up the glass from its bottom edge.

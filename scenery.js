@@ -379,6 +379,8 @@ function marshalPosts(ctx, every = 280) {
 // cantilever roof on trusses) with soft shadows baked in, placed side by side. The crowd is pictures of seated
 // spectators (also made in Blender), one strip per row.
 const standGeo = {};
+// a roof material that turns white when it snows (see applyWeatherToGround in race.js)
+const snowRoof = m => { m.userData.snowRoof = true; return m; };
 function standPart(rows, name) { return bakedPart(STANDS[rows], name, 'stand' + rows); }
 // a part of a building made in Blender, as a geometry (turned so the side that faced the track faces local -z)
 function bakedPart(data, name, key, turn = true) {
@@ -406,7 +408,7 @@ function grandstand(ctx, d, lateral, length = 70, rows = 8, roofColour = 0xE1060
     const mats = {
         concrete: new THREE.MeshStandardMaterial({ color: 0xc9ccd1, vertexColors: true, roughness: 0.92 }),
         steel: new THREE.MeshStandardMaterial({ color: 0x59616e, vertexColors: true, metalness: 0.6, roughness: 0.45 }),
-        roof: new THREE.MeshStandardMaterial({ color: roofColour, vertexColors: true, metalness: 0.25, roughness: 0.5, side: THREE.DoubleSide }),
+        roof: snowRoof(new THREE.MeshStandardMaterial({ color: roofColour, vertexColors: true, metalness: 0.25, roughness: 0.5, side: THREE.DoubleSide })),
         glass: new THREE.MeshStandardMaterial({ color: 0xa8c8dc, transparent: true, opacity: 0.28, roughness: 0.1, metalness: 0.2, depthWrite: false })
     };
     for (const name of Object.keys(S.parts)) {
@@ -450,7 +452,7 @@ function pitBuilding(sections) {
         steel: new THREE.MeshStandardMaterial({ color: 0x6a717c, vertexColors: true, metalness: 0.6, roughness: 0.45 }),
         door: new THREE.MeshStandardMaterial({ color: 0xa9b0ba, vertexColors: true, metalness: 0.5, roughness: 0.45 }),
         glass: new THREE.MeshStandardMaterial({ color: 0x1c2b3a, metalness: 0.7, roughness: 0.08 }),
-        roof: new THREE.MeshStandardMaterial({ color: 0xE10600, vertexColors: true, roughness: 0.5 })
+        roof: snowRoof(new THREE.MeshStandardMaterial({ color: 0xE10600, vertexColors: true, roughness: 0.5 }))
     };
     const picks = Array.from({ length: sections }, () => ['a', 'b', 'c'][Math.floor(Math.random() * 3)]);
     const teams = Array.from({ length: sections }, () => TEAM_COLOURS[Math.floor(Math.random() * TEAM_COLOURS.length)]);
@@ -475,7 +477,7 @@ function footbridge(group, span) {
         concrete: new THREE.MeshStandardMaterial({ color: 0xd4d7dc, vertexColors: true, roughness: 0.85 }),
         steel: new THREE.MeshStandardMaterial({ color: 0xF4F6F8, vertexColors: true, metalness: 0.4, roughness: 0.4 }),
         deck: new THREE.MeshStandardMaterial({ color: 0x2a2f39, vertexColors: true, roughness: 0.7 }),
-        roof: new THREE.MeshStandardMaterial({ color: 0x2a2f39, vertexColors: true, metalness: 0.3, roughness: 0.5 }),
+        roof: snowRoof(new THREE.MeshStandardMaterial({ color: 0x2a2f39, vertexColors: true, metalness: 0.3, roughness: 0.5 })),
         glass: new THREE.MeshStandardMaterial({ color: 0x9fc0d6, transparent: true, opacity: 0.3, metalness: 0.3, roughness: 0.1, depthWrite: false })
     };
     for (const name of Object.keys(B.parts)) {

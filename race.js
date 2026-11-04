@@ -299,9 +299,27 @@ function applyCameraView() {
 // can never poke through the dashboard. It has its own copies of the lights, kept in step with the sun and sky.
 let cockpitScene = null, ckHemi = null, ckSun = null;
 let post = null; const postSize = new THREE.Vector2();
+// the cockpit mirrors: a small, low-detail picture looking backwards, refreshed every third frame (cheap on tablets)
+let mirrorRT = null, mirrorCam = null, mirrorTick = 0;
+function drawMirror() {
+    if (mirrorTick++ % 3) return;
+    if (!mirrorRT) {
+        mirrorRT = new THREE.WebGLRenderTarget(256, 96); mirrorRT.texture.colorSpace = THREE.SRGBColorSpace;
+        mirrorRT.texture.repeat.x = -1; mirrorRT.texture.offset.x = 1;                 // a mirror swaps left and right
+        mirrorCam = new THREE.PerspectiveCamera(32, 256 / 96, 0.5, 600);
+    }
+    // (from just above the driver's head, looking level, so it sees over your own tail to the cars behind)
+    const r = player, eye = r.cockpit.eye.clone().add(new THREE.Vector3(-0.2, 0.22, 0)); r.holder.updateMatrixWorld(); r.holder.localToWorld(eye);
+    const back = new THREE.Vector3(r.cockpit.eye.x - 12, r.cockpit.eye.y + 0.05, r.cockpit.eye.z); r.holder.localToWorld(back);
+    mirrorCam.position.copy(eye); mirrorCam.lookAt(back);
+    const was = renderer.getRenderTarget(), sh = renderer.shadowMap.autoUpdate; renderer.shadowMap.autoUpdate = false;
+    renderer.setRenderTarget(mirrorRT); renderer.render(scene, mirrorCam); renderer.setRenderTarget(was); renderer.shadowMap.autoUpdate = sh;
+    r.cockpit.setMirror(mirrorRT.texture);
+}
 function drawFrame() {
     // Medium and High graphics: the picture goes through the film-camera effects (glow, motion blur, grade); Low draws directly
     const usePost = quality !== 'low' && !window.__noPost;
+    if (camMode === 3 && player && player.cockpit && quality !== 'low' && !(race && race.replay)) drawMirror();
     if (usePost) {
         if (!post) { try { post = new Post(renderer); } catch (e) { post = false; } }
         if (post) { renderer.getDrawingBufferSize(postSize); post.setSize(postSize.x, postSize.y); post.begin(); }
@@ -723,7 +741,7 @@ function placeCamera(snap = false, dt = 0.016) {
         // bonnet and cockpit: fixed to the car, looking down the road (the cockpit view glances a little into corners)
         const ck = r.cockpit, eye = (camMode === 3 ? ck.eye : ck.bonnet).clone();
         const turn = camMode === 3 ? r.steer * 0.35 : 0;
-        const ahead = new THREE.Vector3(eye.x + Math.cos(turn) * 10, eye.y - (camMode === 3 ? 0.75 : 1.25), eye.z - Math.sin(turn) * 10);
+        const ahead = new THREE.Vector3(eye.x + Math.cos(turn) * 10, eye.y - (camMode === 3 ? 0.75 : r.design.cabin[0] < 0.33 ? 1.9 : 1.25), eye.z - Math.sin(turn) * 10);   // (low bonnets: look a little more down, so the bonnet shows)
         r.holder.updateMatrixWorld(); r.holder.localToWorld(eye); r.holder.localToWorld(ahead);
         camera.position.copy(eye);
         if (efx) { const [sx, sy] = efx.shakeOffset(r.v / r.perf.vmax, elapsed); camera.position.y += sy * 0.25; ahead.x += sx * 0.5; }
@@ -1120,7 +1138,7 @@ function buildCity(group, nearTrack) {
     const unit = new THREE.BoxGeometry(1, 1, 1), n = extras.length;
     const awnings = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ roughness: 0.8 }), n);
     const ledges = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.9 }), n);
-    const acs = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.4, roughness: 0.5 }), n * 3);
+    const acs = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.4, roughness: 0.5 }), n * 3); acs.material.userData.snowRoof = true;
     const tt = windowTexture();
     const towers = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ map: tt, roughness: 0.75, emissive: 0xffd890, emissiveMap: tt.userData.glow, emissiveIntensity: 0.05 }), n);
     const awningCols = [0xc0392b, 0x1e8449, 0x1f4e8c, 0xd68910, 0x6c3483, 0x117a65].map(c => new THREE.Color(c));
@@ -1145,6 +1163,14 @@ function buildCity(group, nearTrack) {
         }
     });
     acs.count = na; towers.count = nt;
+    // a layer of snow on every roof and tower top (shown only when it snows)
+    const snowCaps = new THREE.InstancedMesh(unit, new THREE.MeshStandardMaterial({ color: 0xf2f5fa, roughness: 0.95 }), n * 2); let ns = 0;
+    extras.forEach((b, i) => {
+        q2.setFromAxisAngle(up, b.heading);
+        snowCaps.setMatrixAt(ns++, M.compose(V(b.x, b.h + 0.66, b.z), q2, V(b.w + 0.5, 0.14, b.dpt + 0.5)));
+        if (i % 4 === 0) { const th = BAY_H * (3 + (i % 3) * 2); snowCaps.setMatrixAt(ns++, M.compose(V(b.x, b.h + th + 0.06, b.z), q2, V(b.w * 0.6 + 0.1, 0.14, b.dpt * 0.6 + 0.1))); }
+    });
+    snowCaps.count = ns; snowCaps.userData.snowOnly = true; snowCaps.visible = false; group.add(snowCaps);
     // windows on the towers: scale the repeating texture to the tower's size (approximate: one repeat per 4 m by 3.5 m)
     towers.material.map.repeat.set(4, 6); tt.userData.glow.repeat.set(4, 6);
     [awnings, ledges, acs, towers].forEach(o => { o.castShadow = true; o.receiveShadow = true; group.add(o); });
@@ -1288,6 +1314,12 @@ function setAtmosphere(theme) {
 // Each photo material remembers how it started, so going back to sunny puts it back exactly.
 function applyWeatherToGround(kind) {
     world.group.traverse(o => { if (o.userData.snowOnly) o.visible = kind === 'snow'; });
+    // grandstand, pit and bridge roofs (and the city's rooftop units) are covered in snow
+    world.group.traverse(o => { if (o.material) [].concat(o.material).forEach(m => {
+        if (!m.userData.snowRoof) return;
+        if (m.userData.roofColour === undefined) m.userData.roofColour = m.color.getHex();
+        m.color.set(kind === 'snow' ? 0xeef2f7 : m.userData.roofColour);
+    }); });
     world.group.traverse(o => { if (o.userData.cols) { o.geometry.attributes.color.array.set(kind === 'snow' ? o.userData.cols.snow : o.userData.cols.normal); o.geometry.attributes.color.needsUpdate = true; } });
     world.group.traverse(o => { if (o.material) [].concat(o.material).forEach(m => {
         const b = m.userData.base; if (!b) return;

@@ -19,7 +19,7 @@ export const PRESETS = {
     //  roof that ends sharply, then the engine cover sloping down to a low chopped tail)
     wedge70:  { label: '70s wedge',       L: 3.71, W: 1.75, nose: 0.42, deck: 0.80, roof: 1.11, tail: 0.86, cabin: [0.27, 0.72], fast: 0, ride: 0.12, wheel: 0.33,
                 rake: 0.5, screenBow: 0.62, roofLen: 0.86, deckRear: 1.11,
-                noseW: 0.62, noseW2: 0.82, noseTip: 0.45, noseLift: 3.0, wbFrac: 0.588, axleShift: 0.045, round: 0.32, fenderH: 0.03, fenderReach: 2.2,
+                noseW: 0.62, noseW2: 0.82, noseTip: 0.4, noseLift: 3.0, wbFrac: 0.588, axleShift: 0.045, round: 0.27, fenderH: 0.03, fenderReach: 2.2,
                 cabinStyle: 'visor', cabinWB: 0.84, cabinWT: 0.66, grille: 'none', lamps: 'hidden', bumpers: false, scoop: 'louvres', exhaust: 'twin',
                 roofBar: true, tailBig: true,
                 style: { wing: 'none', splitter: false, skirts: false, rim: 'five', rimColour: 'bronze', rallyLights: true } },
@@ -315,7 +315,7 @@ function cabinTexture(d, pr) {
         // it ends at the front of the roof in the middle, and wraps further back round each side
         x.beginPath(); x.moveTo(0.02 * W, Y(0.262)); x.lineTo(0.02 * W, Y(0.738)); x.lineTo((rake + 0.12) * W, Y(0.738));
         x.quadraticCurveTo((rake - 0.06) * W, Y(0.5), (rake + 0.12) * W, Y(0.262)); x.closePath(); x.fill();
-        rect(rake + 0.16, 0.74, 0.262, 0.38); rect(rake + 0.16, 0.74, 0.62, 0.738);   // side windows behind it
+        rect(rake + 0.16, 0.74, 0.262, 0.425); rect(rake + 0.16, 0.74, 0.575, 0.738);   // side windows behind it
     }
     if (style === 'tallglass') {                                 // big windscreen, tall side glass, painted roof and engine cover
         x.fillStyle = glass;
@@ -780,8 +780,11 @@ export function createCar(design, { merge = false, lite = false } = {}) {
         }
         const C = cols.length;
         for (let i = 0; i < S; i++) for (let k = 0; k < C - 1; k++) { const a = i * C + k, b = a + C; idx.push(a, b, a + 1, a + 1, b, b + 1); }
-        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
-        car.add(new THREE.Mesh(g, mats.paintPlain));
+        // each point takes the paint-map position of the bonnet straight below it, so stripes and liveries carry on over the panel
+        const uv = [], ray = new THREE.Raycaster(), from = new THREE.Vector3(), down = new THREE.Vector3(0, -1, 0); body.updateMatrixWorld(true);
+        for (let i = 0; i < pos.length; i += 3) { ray.set(from.set(pos[i], 3, pos[i + 2]), down); const hit = ray.intersectObject(body)[0]; uv.push(hit && hit.uv ? hit.uv.x : 0, hit && hit.uv ? hit.uv.y : 0.5); }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+        car.add(new THREE.Mesh(g, mats.paint));
     }
     // rally lights: a pod of four round driving lamps across the front of the bonnet
     if (p.rallyLights) {
