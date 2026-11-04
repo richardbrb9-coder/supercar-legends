@@ -5,6 +5,7 @@ import * as SC from './scenery.js';
 import { Effects } from './effects.js';
 import { buildCockpit } from './cockpit.js';
 import { Weather, WEATHERS, weatherLook } from './weather.js';
+import { Post } from './post.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
 
 // =====================================================================
@@ -255,7 +256,22 @@ function applyCameraView() {
 // The cockpit is drawn in a second pass over the outside world, so the car's own body (whose top runs under the cabin)
 // can never poke through the dashboard. It has its own copies of the lights, kept in step with the sun and sky.
 let cockpitScene = null, ckHemi = null, ckSun = null;
+let post = null; const postSize = new THREE.Vector2();
 function drawFrame() {
+    // Medium and High graphics: the picture goes through the film-camera effects (glow, motion blur, grade); Low draws directly
+    const usePost = quality !== 'low' && !window.__noPost;
+    if (usePost) {
+        if (!post) { try { post = new Post(renderer); } catch (e) { post = false; } }
+        if (post) { renderer.getDrawingBufferSize(postSize); post.setSize(postSize.x, postSize.y); post.begin(); }
+    }
+    drawScenes();
+    if (usePost && post) {
+        const glow = (timeOfDay === 'night' ? 0.85 : timeOfDay === 'sunset' ? 0.65 : 0.45) * (quality === 'high' ? 1 : 0.8);
+        // (no motion blur from the driver's seat: the dashboard and the drops on the glass stay sharp)
+        post.finish(player && camMode !== 3 ? Math.abs(player.v) / player.perf.vmax : 0, glow);
+    }
+}
+function drawScenes() {
     renderer.render(scene, camera);
     if (camMode !== 3 || !player || !player.cockpit) return;
     if (!cockpitScene) {
