@@ -335,7 +335,7 @@ function setupRace() {
         }
     }
     if (efx) efx.clear();
-    race = { phase: 'lights', t: 0, lightsT: 0, raceTime: 0, results: null, recording: [], lapTimes: [] };
+    race = { phase: 'lights', t: 0, lightsT: 0, raceTime: 0, results: null, recording: [], lapTimes: [], tape: [] };
     updateCars(0); placeCamera(true);
     hud();
 }
@@ -546,7 +546,7 @@ function updateGhost() {
     ghost.holder.visible = true; ghost.holder.position.set(x, 0, z); ghost.holder.rotation.y = h;
 }
 function finishRace() {
-    race.phase = 'done';
+    race.phase = 'done'; race.tapeEnd = race.raceTime + 4;     // keep filming for a few seconds after the line
     clearTimeout(flashTimer); document.getElementById('race-flash').classList.remove('show');
     const pos = positionOf(player);
     const medal = ['🥇 Gold', '🥈 Silver', '🥉 Bronze'][pos - 1] || 'No medal this time';
@@ -564,8 +564,104 @@ function finishRace() {
         ${after > before ? `<p class="rr-unlock">+${after - before} medal point${after - before > 1 ? 's' : ''} (${after} in total)</p>` : ''}
         ${unlocked.map(u => `<p class="rr-unlock">🔓 Unlocked in Build: <b>${u.label}</b></p>`).join('')}
         ${next ? `<p class="small">Next unlock at ${next.pts} points: ${next.label}</p>` : ''}
-        <div class="rr-actions"><button class="big-btn" data-race="again">Race again</button><button class="act-btn ghost" data-race="menu">Menu</button></div></div>`;
+        <div class="rr-actions"><button class="big-btn" data-race="again">Race again</button><button class="act-btn" data-race="replay">🎬 Watch replay</button><button class="act-btn ghost" data-race="menu">Menu</button></div></div>`;
     el.hidden = false;
+}
+
+// =====================================================================
+//  REPLAYS: the race played back through TV cameras
+// =====================================================================
+// Shots: a fixed trackside camera that pans and zooms as the cars pass, a helicopter view from high above, a low camera
+// on the car, one looking back from in front of it, and one travelling alongside. The director cuts between them.
+const SHOTS = ['heli', 'trackside', 'low', 'trackside', 'front', 'side', 'trackside', 'heli', 'trackside'];
+let tvCams = null;
+function buildTvCams() {
+    // trackside cameras every 110 m, on alternating sides, on poles behind the barriers
+    tvCams = [];
+    for (let d = 40, k = 0; d < trackLen; d += 110, k++) {
+        const side = k % 2 ? 1 : -1, p = pathAt(d, side * (HW + RUNOFF + 1.5), 0);   // just behind the barrier
+        tvCams.push({ d, pos: new THREE.Vector3(p.x, 3.5 + (k % 3) * 1.8, p.z) });
+    }
+    // keep only the cameras that can actually see the road coming towards them (not hidden behind stands, buildings or trees)
+    const ray = new THREE.Raycaster(), dir = new THREE.Vector3(), objs = world.group.children;
+    tvCams = tvCams.filter(c => {
+        let clear = 0;
+        for (let a = 20; a <= 80; a += 15) {
+            const q = pathAt(c.d - a, 0, 0), to = new THREE.Vector3(q.x, 0.8, q.z), dist = c.pos.distanceTo(to);
+            ray.set(c.pos, dir.subVectors(to, c.pos).normalize()); ray.far = dist - 1;
+            if (!ray.intersectObjects(objs, true).length) clear++;
+        }
+        return clear >= 4;
+    });
+}
+function startReplay() {
+    if (!race || !race.tape || race.tape.length < 20) return;
+    if (!tvCams) buildTvCams();
+    race.replay = { t: 0, shot: -1, shotT: 0, cam: null, saveCam: camMode };
+    camMode = 0; applyCameraView();
+    document.getElementById('race-result').hidden = true;
+    let bar = document.getElementById('race-replay');
+    if (!bar) { bar = document.createElement('div'); bar.id = 'race-replay'; bar.className = 'race-replay'; document.getElementById('race-canvas-wrap').appendChild(bar); }
+    bar.innerHTML = `<span class="rp-badge">● REPLAY</span><span class="rp-shot" id="rp-shot"></span><button class="opt" data-race="replay-exit">✕ Close replay</button>`;
+    bar.hidden = false; document.getElementById('race-stage').classList.add('replaying');
+    stopEngine();
+    if (efx) efx.clear();
+    nextShot(race.replay);
+}
+function stopReplay() {
+    if (!race || !race.replay) return;
+    camMode = race.replay.saveCam; race.replay = null; applyCameraView();
+    const bar = document.getElementById('race-replay'); if (bar) bar.hidden = true;
+    document.getElementById('race-stage').classList.remove('replaying');
+}
+// where the cars were at replay time t (smoothly between the tape's samples)
+function replayPose(t) {
+    const tape = race.tape, f = Math.min(tape.length - 1.001, t / 0.1), i = Math.floor(f), u = f - i, A = tape[i], B = tape[i + 1];
+    [player, ...rivals].forEach((c, k) => {
+        const a = A[k], b = B[k]; if (!a || !b) return;
+        c.x = a[0] + (b[0] - a[0]) * u; c.z = a[1] + (b[1] - a[1]) * u; c.heading = a[2] + wrapAngle(b[2] - a[2]) * u;
+        c.steer = a[3] + (b[3] - a[3]) * u; c.v = a[4] + (b[4] - a[4]) * u;
+    });
+}
+function replayFrame(dt) {
+    const R = race.replay, len = (race.tape.length - 1) * 0.1;
+    R.t += dt; if (R.t >= len) { R.t = 0; R.cam = null; }       // loops round to the start
+    replayPose(R.t); updateCars(dt);
+    // the director: cut to the next shot every few seconds (a trackside shot lasts until the cars have passed)
+    R.shotT += dt;
+    const shot = SHOTS[R.shot % SHOTS.length], r = player;
+    const pd = ((pathAtNearest(r)) % trackLen + trackLen) % trackLen;
+    if (shot === 'trackside') {
+        if (!R.cam) { R.cam = tvCams.reduce((best, c) => { const ahead = ((c.d - pd) % trackLen + trackLen) % trackLen; return ahead > 20 && ahead < 90 && ahead < (best ? best.ahead : 1e9) ? { c, ahead } : best; }, null); }
+        const past = R.cam ? ((pd - R.cam.c.d) % trackLen + trackLen) % trackLen : 0;
+        if (!R.cam || (past < trackLen / 2 && past > 45) || R.shotT > 9) nextShot(R);
+    } else if (R.shotT > 5.5) nextShot(R);
+    placeReplayCamera(SHOTS[R.shot % SHOTS.length], R, dt);
+    [player, ...rivals].forEach(c => { c.sliding = false; c.onGrass = false; });
+    followSun(); world.update(dt); updateEffects(dt); drawMap();
+    document.getElementById('race-hud').innerHTML = '';
+    drawFrame();
+}
+function nextShot(R) { R.shot++; R.shotT = 0; R.cam = null; R.side = Math.random() < 0.5 ? 1 : -1; const el = document.getElementById('rp-shot'); if (el) el.textContent = { trackside: 'Trackside camera', heli: 'Helicopter', low: 'On-board camera', front: 'Front camera', side: 'Tracking camera' }[SHOTS[R.shot % SHOTS.length]]; }
+// where along the track a car is (searching the whole track, since a replay can jump anywhere)
+function pathAtNearest(r) {
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < N; i += 2) { const p = samples[i].p, dx = r.x - p.x, dz = r.z - p.z, dd = dx * dx + dz * dz; if (dd < bd) { bd = dd; best = i; } }
+    return samples[best].d;
+}
+function placeReplayCamera(shot, R, dt) {
+    const r = player, fx = Math.cos(r.heading), fz = -Math.sin(r.heading), car = new THREE.Vector3(r.x, 0.7, r.z);
+    let pos, look = car.clone(), fov = 50;
+    if (shot === 'trackside' && R.cam) { pos = R.cam.c.pos.clone(); const dist = pos.distanceTo(car); fov = Math.max(9, Math.min(45, Math.atan(5.5 / dist) * 2 * 180 / Math.PI)); }
+    else if (shot === 'heli') { const a = R.shotT * 0.12; pos = new THREE.Vector3(r.x - fx * 26 + Math.sin(a) * 12, 24, r.z - fz * 26 + Math.cos(a) * 12); fov = 42; look.addScaledVector(new THREE.Vector3(fx, 0, fz), 10); }
+    else if (shot === 'low') { pos = new THREE.Vector3(r.x - fx * 6.5 + fz * 1.4, 0.8, r.z - fz * 6.5 - fx * 1.4); look = new THREE.Vector3(r.x + fx * 5, 0.7, r.z + fz * 5); fov = 58; }
+    else if (shot === 'front') { pos = new THREE.Vector3(r.x + fx * 15 + fz * 2, 1.7, r.z + fz * 15 - fx * 2); fov = 40; }
+    else { const sd = R.side || 1; pos = new THREE.Vector3(r.x - fz * sd * 6 + fx * 1.5, 1.3, r.z + fx * sd * 6 + fz * 1.5); fov = 55; }
+    if (!R.camPos || R.shotT < 0.02) { R.camPos = pos.clone(); R.camLook = look.clone(); }
+    const k = shot === 'trackside' ? 1 : Math.min(1, dt * 5);
+    R.camPos.lerp(pos, k); R.camLook.lerp(look, shot === 'trackside' ? Math.min(1, dt * 8) : Math.min(1, dt * 10));
+    camera.position.copy(R.camPos); camera.lookAt(R.camLook); camera.fov = fov; camera.updateProjectionMatrix();
+    camPos.copy(camera.position); camLook.copy(R.camLook);
 }
 
 // =====================================================================
@@ -740,6 +836,7 @@ function frame(now) {
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - lastT) / 1000 || 0); lastT = now;
     if (!race || race.paused) { if (sky) sky.position.copy(camera.position); drawFrame(); return; }
+    if (race.replay) { replayFrame(dt); return; }
     race.t += dt;
     if (race.phase === 'lights') {
         // the gantry lights come on one by one while the countdown runs: 3, 2, 1, GO!
@@ -756,6 +853,11 @@ function frame(now) {
     // fixed small steps keep the driving stable
     const steps = Math.ceil(dt / 0.01), h = dt / steps;
     for (let i = 0; i < steps; i++) { drivePlayer(h); rivals.forEach(r => driveRival(r, h)); collisions(); }
+    // the replay tape: every car, ten times a second, from the start until a few seconds after you finish
+    if ((race.phase === 'go' || race.phase === 'done') && (race.tapeEnd == null || race.raceTime < race.tapeEnd)) {
+        race.tapeT = (race.tapeT || 0) + dt;
+        if (race.tapeT >= 0.1) { race.tapeT -= 0.1; race.tape.push([player, ...rivals].map(c => [c.x, c.z, c.heading, c.steer, c.v])); }
+    }
     if (mode === 'trial' && race.phase === 'go') {
         race.recT = (race.recT || 0) + dt;
         while (race.recT >= 0.05) { race.recording.push([+player.x.toFixed(2), +player.z.toFixed(2), +player.heading.toFixed(3)]); race.recT -= 0.05; }
@@ -1169,8 +1271,10 @@ export function enter() {
         document.getElementById('race-menu').addEventListener('click', onMenuClick);
         document.getElementById('race-stage').addEventListener('click', e => {
             const b = e.target.closest('button'); if (!b) return;
-            if (b.dataset.race === 'again') showStage();
-            if (b.dataset.race === 'menu') showMenu();
+            if (b.dataset.race === 'again') { stopReplay(); showStage(); }
+            if (b.dataset.race === 'menu') { stopReplay(); showMenu(); }
+            if (b.dataset.race === 'replay') startReplay();
+            if (b.dataset.race === 'replay-exit') { stopReplay(); document.getElementById('race-result').hidden = false; }
             if (b.dataset.race === 'pause') togglePause();
             if (b.dataset.race === 'resume') togglePause();
             if (b.id === 'race-tilt') toggleTilt();

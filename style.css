@@ -478,3 +478,10 @@ body.racing .topbar { display: none; }
 }
 /* in the cockpit view the dashboard shows the speed, so the big on-screen number steps aside */
 .in-cockpit .hud-speed { opacity: 0; }
+/* replays */
+.race-replay { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; z-index: 5; }
+.race-replay[hidden] { display: none; }
+.rp-badge { font-family: var(--display); font-weight: 900; letter-spacing: .15em; color: #fff; background: #E10600; padding: 6px 10px; animation: rp-blink 1.2s steps(2) infinite; }
+.rp-shot { font-family: var(--display); font-size: .85rem; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.7); }
+@keyframes rp-blink { 50% { opacity: .55; } }
+.replaying .race-top, .replaying .pad, .replaying .race-slip, .replaying .race-map, .replaying .race-fx { display: none; }
