@@ -831,12 +831,18 @@ function loadSounds(ctx) {
     soundsLoading = Promise.all(Object.entries(SOUND_FILES).map(([k, url]) => fetch(url).then(r => r.arrayBuffer()).then(b => new Promise((res, rej) => ctx.decodeAudioData(b, res, rej))).then(buf => { soundBufs[k] = buf; }).catch(() => {})));
     return soundsLoading;
 }
-function loopSource(ctx, buf, dest) { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const g = ctx.createGain(); g.gain.value = 0; s.connect(g); g.connect(dest); s.start(0, Math.random() * buf.duration); return { s, g }; }
+function loopSource(ctx, buf, dest, extra) { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const g = ctx.createGain(); g.gain.value = 0; s.connect(g); g.connect(dest); if (extra) g.connect(extra); s.start(0, Math.random() * buf.duration); return { s, g }; }
 function startEngine() {
     const ctx = window.getAudio && window.getAudio(); if (!ctx || engine || !soundOn) return;
     const ev = player.stats.engine.sound === 0, kind = player.design.engine;
-    const master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
-    engine = { ctx, ev, master, kind };
+    // everything goes through a gentle compressor, so the engine can be loud without crackling
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(ctx.destination);
+    const master = ctx.createGain(); master.gain.value = 1.6; master.connect(comp);
+    // small speakers (laptops, tablets) can't play the deep engine note, so a copy of it with only the higher tones
+    // ('presence') is added on top: the same engine, but you can hear it on any speaker
+    const presence = ctx.createBiquadFilter(); presence.type = 'highpass'; presence.frequency.value = 380; const pg = ctx.createGain(); pg.gain.value = 1.8;
+    presence.connect(pg); pg.connect(master);
+    engine = { ctx, ev, master, kind, presence };
     // the made-up tones (used for electric cars, and until the recordings have loaded)
     const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
     o1.type = ev ? 'sine' : 'sawtooth'; o2.type = ev ? 'triangle' : 'square';
@@ -850,8 +856,8 @@ function startEngine() {
     engine.squeal = ng;
     if (!ev) loadSounds(ctx).then(() => {
         if (!engine || engine.ctx !== ctx || !soundBufs.v8 || !soundBufs.high) return;
-        engine.low = loopSource(ctx, kind === 'v12' || kind === 'v10' ? soundBufs.v12 || soundBufs.v8 : soundBufs.v8, master);
-        engine.high = loopSource(ctx, soundBufs.high, master);
+        engine.low = loopSource(ctx, kind === 'v12' || kind === 'v10' ? soundBufs.v12 || soundBufs.v8 : soundBufs.v8, master, engine.presence);
+        engine.high = loopSource(ctx, soundBufs.high, master, engine.presence);
         engine.real = true;
     });
     if (weather) weather.startSound(ctx, soundOn);
@@ -876,7 +882,7 @@ function updateEngine() {
         engine.low.s.playbackRate.setTargetAtTime(rate, t, 0.04); engine.high.s.playbackRate.setTargetAtTime(0.55 + rpm * 0.75 + (gs.gear - 1) * 0.02, t, 0.04);
         const hi = Math.max(0, (rpm - 0.45) / 0.55);
         engine.low.g.gain.setTargetAtTime((0.24 - hi * 0.1) * on, t, 0.08); engine.high.g.gain.setTargetAtTime(hi * 0.2 * on, t, 0.08);
-        engine.g.gain.setTargetAtTime(0.012 * on, t, 0.1);          // a little of the made-up tone adds body
+        engine.g.gain.setTargetAtTime(0.02 * on, t, 0.1);          // a little of the made-up tone adds body
     } else engine.g.gain.setTargetAtTime(input.gas ? 0.07 : 0.035, t, 0.1);
     engine.squeal.gain.setTargetAtTime(player.sliding && v > 12 ? 0.05 : 0, t, 0.06);
 }
