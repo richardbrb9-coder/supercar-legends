@@ -823,7 +823,7 @@ function bump(vol) {
 // Engine sound: real engine recordings (Wikimedia Commons, see Credits) looped and sped up and down with the revs through
 // six imaginary gears. A low loop for the engine's own note fades into a high-revs loop near the top of each gear. Electric
 // cars, and any device that can't load the recordings, use the made-up tones instead. Tyres squeal when you slide.
-let engine = null, soundOn = store('raceSound', true);
+let engine = null, soundOn = store('raceSound', true), engineOn = store('raceEngine', true);   // (Sound is everything; Engine is just the engine)
 const SOUND_FILES = { v8: 'sounds/v8_loop.wav', v12: 'sounds/v12_loop.wav', high: 'sounds/high_loop.wav', roar: 'sounds/roar.wav' };
 const soundBufs = {}; let soundsLoading = null;
 function loadSounds(ctx) {
@@ -864,13 +864,13 @@ function startEngine() {
 }
 // the roar as the lights go out
 function startRoar() {
-    if (!engine || !soundBufs.roar || engine.ev) return;
+    if (!engine || !soundBufs.roar || engine.ev || !engineOn) return;
     const ctx = engine.ctx, s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = soundBufs.roar; g.gain.value = 0.32; s.playbackRate.value = engine.kind === 'v8' ? 0.85 : 1;
     s.connect(g); g.connect(engine.master); s.start();
 }
 function updateEngine() {
     if (!engine) return;
-    const v = Math.abs(player.v), vmax = player.perf.vmax, t = engine.ctx.currentTime, on = input.gas ? 1 : 0.55;
+    const v = Math.abs(player.v), vmax = player.perf.vmax, t = engine.ctx.currentTime, on = engineOn ? (input.gas ? 1 : 0.55) : 0;
     const gs = gearState(player), rpm = 0.18 + gs.inGear * 0.78;
     let f;
     if (engine.ev) f = 200 + v / vmax * 1600;
@@ -883,7 +883,7 @@ function updateEngine() {
         const hi = Math.max(0, (rpm - 0.45) / 0.55);
         engine.low.g.gain.setTargetAtTime((0.24 - hi * 0.1) * on, t, 0.08); engine.high.g.gain.setTargetAtTime(hi * 0.2 * on, t, 0.08);
         engine.g.gain.setTargetAtTime(0.02 * on, t, 0.1);          // a little of the made-up tone adds body
-    } else engine.g.gain.setTargetAtTime(input.gas ? 0.07 : 0.035, t, 0.1);
+    } else engine.g.gain.setTargetAtTime((input.gas ? 0.07 : 0.035) * (engineOn ? 1 : 0), t, 0.1);
     engine.squeal.gain.setTargetAtTime(player.sliding && v > 12 ? 0.05 : 0, t, 0.06);
 }
 function stopEngine() {
@@ -1006,7 +1006,7 @@ function togglePause() {
     if (!race || race.phase === 'done') return;
     race.paused = !race.paused;
     document.getElementById('race-pause-panel').hidden = !race.paused;
-    if (race.paused) stopEngine();
+    if (race.paused) stopEngine(); else startEngine();   // the engine comes back when you carry on racing
 }
 
 // =====================================================================
@@ -1404,9 +1404,11 @@ export function enter() {
             if (b.id === 'race-tilt') toggleTilt();
             if (b.id === 'race-cam') nextCamera();
             if (b.id === 'race-help') { help = !help; storeSet('raceHelp', help); b.classList.toggle('active', help); flash(help ? 'Driving help on' : 'Driving help off'); }
+            if (b.id === 'race-engine') { engineOn = !engineOn; storeSet('raceEngine', engineOn); b.classList.toggle('active', engineOn); flash(engineOn ? 'Engine sound on' : 'Engine sound off'); }
             if (b.id === 'race-sound') { soundOn = !soundOn; storeSet('raceSound', soundOn); b.classList.toggle('active', soundOn); soundOn ? startEngine() : stopEngine(); }
         });
         document.getElementById('race-sound').classList.toggle('active', soundOn);
+        document.getElementById('race-engine').classList.toggle('active', engineOn);
         document.getElementById('race-help').classList.toggle('active', help);
     }
     if (!renderer) return;
