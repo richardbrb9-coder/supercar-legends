@@ -1086,6 +1086,7 @@ function setAtmosphere(theme) {
 // rain makes the road dark and shiny and the grass darker; snow covers the grass and sand, and leaves the road pale.
 // Each photo material remembers how it started, so going back to sunny puts it back exactly.
 function applyWeatherToGround(kind) {
+    world.group.traverse(o => { if (o.userData.snowOnly) o.visible = kind === 'snow'; });
     world.group.traverse(o => { if (o.userData.cols) { o.geometry.attributes.color.array.set(kind === 'snow' ? o.userData.cols.snow : o.userData.cols.normal); o.geometry.attributes.color.needsUpdate = true; } });
     world.group.traverse(o => { if (o.material) [].concat(o.material).forEach(m => {
         const b = m.userData.base; if (!b) return;

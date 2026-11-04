@@ -1,7 +1,7 @@
 // Supercar Legends: the look of the race world. Sky, distant hills, reflections, shadows, quality levels,
 // and the scenery for each circuit. Made in code plus a few saved pictures (skies, trees, textures), so it works offline.
 import * as THREE from './lib/three.module.min.js';
-import { STANDS, PITS, BRIDGE } from './standdata.js';
+import { STANDS, PITS, BRIDGE, PARKED } from './standdata.js';
 
 // =====================================================================
 //  QUALITY LEVELS (chosen automatically, or by the player in the race menu)
@@ -600,27 +600,43 @@ function cityExtras(ctx) {
     // parked cars: a body and a cabin each, instanced, in many colours
     const spots = [];
     for (let d = 8; d < trackLen; d += 7.5) for (const side of [1, -1]) {
-        if (Math.random() < 0.35) continue;
+        if (Math.random() > 0.65 * Math.max(0.6, ctx.quality.density)) continue;   // fewer parked cars on lower graphics settings
         const i = Math.floor(d / trackLen * N); if (Math.abs(samples[i].ks) > 0.003) continue;
         const p = pathAt(d, side * curb, 0); if (nearTrack(p.x, p.z) < curb - 0.5) continue;
         spots.push([p, side]);
     }
-    const body = new THREE.InstancedMesh(new THREE.BoxGeometry(4.2, 0.8, 1.8), new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.4 }), spots.length);
-    const cabin = new THREE.InstancedMesh(new THREE.BoxGeometry(2.2, 0.6, 1.6), new THREE.MeshStandardMaterial({ color: 0x1a2028, roughness: 0.15, metalness: 0.5 }), spots.length);
-    const wheels = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.34, 0.34, 1.86, 10), new THREE.MeshStandardMaterial({ color: 0x111111 }), spots.length * 2);
-    const carCols = [0xc0392b, 0x2c3e50, 0xecf0f1, 0x7f8c8d, 0x2980b9, 0xf1c40f, 0x16a085, 0x8e44ad, 0x34495e, 0xd35400].map(c => new THREE.Color(c));
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1);
-    spots.forEach(([p, side], i) => {
-        q.setFromAxisAngle(up, p.heading);
-        body.setMatrixAt(i, m.compose(new THREE.Vector3(p.x, 0.75, p.z), q, one)); body.setColorAt(i, carCols[Math.floor(Math.random() * carCols.length)]);
-        const off = new THREE.Vector3(-0.2, 0, 0).applyQuaternion(q);
-        cabin.setMatrixAt(i, m.compose(new THREE.Vector3(p.x + off.x, 1.45, p.z + off.z), q, one));
-        for (const [w, dx] of [[0, 1.35], [1, -1.35]]) {
-            const o = new THREE.Vector3(dx, 0, 0).applyQuaternion(q), wq = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
-            wheels.setMatrixAt(i * 2 + w, m.compose(new THREE.Vector3(p.x + o.x, 0.34, p.z + o.z), wq, one));
+    // five kinds of everyday car modelled in Blender (hatchback, saloon, estate, van, taxi), in everyday colours
+    const carCols = [0xc0392b, 0x2c3e50, 0xecf0f1, 0x7f8c8d, 0x2980b9, 0x16a085, 0x8e44ad, 0x34495e, 0xd35400, 0x1b1f26, 0xb8bcc4, 0x6d2a2a].map(c => new THREE.Color(c));
+    const kinds = ['hatch', 'saloon', 'estate', 'hatch', 'saloon', 'van', 'taxi'], byKind = {};
+    spots.forEach(sp => { const k = kinds[Math.floor(Math.random() * kinds.length)]; (byKind[k] = byKind[k] || []).push(sp); });
+    const pmats = {
+        body: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.45 }),
+        glass: new THREE.MeshStandardMaterial({ color: 0x1a222c, roughness: 0.08, metalness: 0.7, vertexColors: true }),
+        trim: new THREE.MeshStandardMaterial({ color: 0x15171a, roughness: 0.7, vertexColors: true }),
+        tyre: new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.9 }),
+        hub: new THREE.MeshStandardMaterial({ color: 0xc9ced6, metalness: 0.8, roughness: 0.3 }),
+        head: new THREE.MeshStandardMaterial({ color: 0xf4f6f8, emissive: 0xfff4d8, emissiveIntensity: 0.1 }),
+        tail: new THREE.MeshStandardMaterial({ color: 0x6a0a08, emissive: 0xff1a10, emissiveIntensity: 0.12 }),
+        sign: new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffc400, emissiveIntensity: 0.25 }),
+        snow: new THREE.MeshStandardMaterial({ color: 0xf4f7fb, roughness: 0.95, vertexColors: true })
+    };
+    pmats.paint = pmats.body;
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), white = new THREE.Color(1, 1, 1);
+    for (const [k, list] of Object.entries(byKind)) {
+        const cols = list.map(() => k === 'taxi' ? new THREE.Color(0xf2c200) : carCols[Math.floor(Math.random() * carCols.length)]);
+        for (const name of Object.keys(PARKED[k].parts)) {
+            const geo = bakedPart(PARKED[k], name, 'parked' + k, false);
+            const mesh = new THREE.InstancedMesh(geo, pmats[name] || pmats.trim, list.length);
+            list.forEach(([p, side], i) => {
+                q.setFromAxisAngle(up, p.heading + (side > 0 ? Math.PI : 0));      // cars on each side face their own way
+                mesh.setMatrixAt(i, m.compose(new THREE.Vector3(p.x, 0, p.z), q, one));
+                if (name === 'body' || name === 'paint') mesh.setColorAt(i, cols[i]);
+            });
+            mesh.castShadow = name === 'body' || name === 'glass'; mesh.receiveShadow = name !== 'head' && name !== 'tail';
+            if (name === 'snow') { mesh.userData.snowOnly = true; mesh.visible = false; }
+            ctx.group.add(mesh);
         }
-    });
-    [body, cabin, wheels].forEach(o => { o.castShadow = true; ctx.group.add(o); });
+    }
     // pavement trees
     const tspots = [];
     for (let d = 14; d < trackLen; d += 26) for (const side of [1, -1]) {
