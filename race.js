@@ -4,6 +4,7 @@ import * as THREE from './lib/three.module.min.js';
 import * as SC from './scenery.js';
 import { Effects } from './effects.js';
 import { buildCockpit } from './cockpit.js';
+import { Weather, WEATHERS, weatherLook } from './weather.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
 
 // =====================================================================
@@ -119,8 +120,13 @@ function buildTrack(scene) {
     // kerbs on the corners: red and white blocks
     const kerbMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
     const kerbCol = i => Math.abs(samples[i].ks) < 0.004 ? (city ? [0.07, 0.078, 0.095] : [0.047, 0.196, 0.043]) : (Math.floor(i / 6) % 2 ? [0.92, 0.92, 0.92] : [0.86, 0.04, 0.02]);
-    group.add(ribbon(HW + 1.3, HW, 0.03, 0.05, kerbMat, 0.1, kerbCol));
-    group.add(ribbon(-HW, -HW - 1.3, 0.05, 0.03, kerbMat, 0.1, kerbCol));
+    // (on the straights the strip is grass; it keeps a snowy version of its colours for when it snows)
+    const snowCol = i => Math.abs(samples[i].ks) < 0.004 ? (city ? [0.62, 0.64, 0.68] : [0.86, 0.89, 0.93]) : kerbCol(i);
+    for (const k of [ribbon(HW + 1.3, HW, 0.03, 0.05, kerbMat, 0.1, kerbCol), ribbon(-HW, -HW - 1.3, 0.05, 0.03, kerbMat, 0.1, kerbCol)]) {
+        const c = k.geometry.attributes.color, alt = new Float32Array(c.array.length);
+        for (let i = 0; i <= N; i++) { const v = snowCol(i % N); alt.set([...v, ...v], i * 6); }
+        k.userData.cols = { normal: c.array.slice(), snow: alt }; group.add(k);
+    }
     // barriers (both sides), white with a blue stripe made with vertex colours
     const barMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide });
     for (const off of [HW + RUNOFF, -HW - RUNOFF]) {
@@ -227,6 +233,7 @@ function rivalDesign(i) {
 let renderer, scene, camera, raf = null, started = false, lastT = 0;
 let sky = null, sun = null, hemi = null, efx = null, headlight = null, carGlow = null, look = null, elapsed = 0, puffT = 0;
 let timeOfDay = store('raceTime', 'day');
+let weatherKind = Object.keys(WEATHERS).includes(store('raceWeather', 'sunny')) ? store('raceWeather', 'sunny') : 'sunny', weather = null;
 // graphics quality: 'auto' picks a level and steps down if the frame rate drops
 let qualitySetting = store('raceQuality', 'auto'), quality = qualitySetting === 'auto' ? SC.guessQuality() : qualitySetting;
 let world = null, player = null, rivals = [], ghost = null, mode = 'race', difficulty = 'medium';
@@ -650,6 +657,7 @@ function startEngine() {
     f.type = 'lowpass'; f.frequency.value = ev ? 3000 : 900; g.gain.value = 0.0;
     o1.connect(f); o2.connect(f); f.connect(g); g.connect(ctx.destination); o1.start(); o2.start();
     engine = { ctx, o1, o2, g, ev };
+    if (weather) weather.startSound(ctx, soundOn);
 }
 function updateEngine() {
     if (!engine) return;
@@ -662,6 +670,7 @@ function updateEngine() {
     engine.g.gain.setTargetAtTime(input.gas ? 0.07 : 0.035, t, 0.1);
 }
 function stopEngine() {
+    if (weather) weather.stopSound();
     if (!engine) return;
     try { engine.g.gain.setTargetAtTime(0, engine.ctx.currentTime, 0.05); engine.o1.stop(engine.ctx.currentTime + 0.3); engine.o2.stop(engine.ctx.currentTime + 0.3); } catch (e) { /* already stopped */ }
     engine = null;
@@ -678,7 +687,14 @@ function updateEffects(dt) {
         puffT = 0;
         const kind = r.onGrass && r.v > 8 ? 'dust' : r.sliding && r.v > 12 ? 'smoke' : null;
         if (kind) for (const side of [-1, 1]) efx.puff(r.x - fwdX * back + fwdZ * side * 0.8, r.z - fwdZ * back - fwdX * side * 0.8, kind, r.v * fwdX, r.v * fwdZ);
+        // spray off the tyres in the rain, a powdery cloud in the snow: behind you and any rival close by
+        if (weatherKind !== 'sunny') for (const c of [player, ...rivals]) {
+            if (c.v < 12 || Math.hypot(c.x - r.x, c.z - r.z) > 45 || Math.random() > (c === player ? 0.9 : 0.5)) continue;
+            const cx = Math.cos(c.heading), cz = -Math.sin(c.heading), cb = c.design.L * 0.45, sd = Math.random() < 0.5 ? -1 : 1;
+            efx.puff(c.x - cx * cb + cz * sd * 0.75, c.z - cz * cb - cx * sd * 0.75, weatherKind === 'rain' ? 'spray' : 'powder', c.v * cx, c.v * cz);
+        }
     }
+    if (weather) weather.update(dt, camera.position, r.v * fwdX, r.v * fwdZ);
     efx.update(dt);
     efx.drawSpeedLines(r.v / r.perf.vmax, r.slip, dt);
     if (headlight && headlight.visible) {
@@ -803,6 +819,8 @@ function renderMenu() {
         </div>
         <div class="panel how"><h3>Time of day</h3><p>Race in daylight, at sunset, or at night with your headlights on.</p>
             <div class="opts">${Object.entries(SC.TIMES).map(([k, v]) => `<button class="opt ${k === timeOfDay ? 'active' : ''}" data-time="${k}">${v}</button>`).join('')}</div></div>
+        <div class="panel how"><h3>Weather</h3><p>Sunshine, rain or snow. It changes how the race looks and sounds; the car grips just the same.</p>
+            <div class="opts">${Object.entries(WEATHERS).map(([k, v]) => `<button class="opt ${k === weatherKind ? 'active' : ''}" data-weather="${k}">${{ sunny: '☀️', rain: '🌧️', snow: '❄️' }[k]} ${v}</button>`).join('')}</div></div>
         <div class="panel how"><h3>Graphics</h3><p>Higher quality looks better; lower is smoother on older tablets. Auto starts at a sensible level and steps down if racing gets jerky.</p>
             <div class="opts">${['auto', 'low', 'medium', 'high'].map(k => `<button class="opt ${k === qualitySetting ? 'active' : ''}" data-quality="${k}">${k === 'auto' ? `Auto (${SC.QUALITY[quality].label})` : SC.QUALITY[k].label}</button>`).join('')}</div></div>
         <div class="panel how"><h3>How to drive</h3><p><b>Tablet and phone:</b> hold the arrow buttons on the left to steer, and the pedals on the right to go and brake. You can also turn on tilt steering. <b>Driving help</b> (on at the start) slows you down before tight corners and nudges you back onto the road. <b>Laptop:</b> arrow keys or W A S D, C changes the camera, Esc pauses.</p></div>`;
@@ -812,6 +830,7 @@ function onMenuClick(e) {
     if (b.dataset.diff) { difficulty = b.dataset.diff; renderMenu(); return; }
     if (b.dataset.field) { fieldSize = +b.dataset.field; storeSet('raceField', fieldSize); renderMenu(); return; }
     if (b.dataset.track) { loadTrack(b.dataset.track); renderMenu(); return; }
+    if (b.dataset.weather) { weatherKind = b.dataset.weather; storeSet('raceWeather', weatherKind); setAtmosphere(TRACK.theme); renderMenu(); return; }
     if (b.dataset.time) { timeOfDay = b.dataset.time; storeSet('raceTime', timeOfDay); setAtmosphere(TRACK.theme); renderMenu(); return; }
     if (b.dataset.quality) {
         qualitySetting = b.dataset.quality; storeSet('raceQuality', qualitySetting);
@@ -1037,7 +1056,7 @@ function loadTrack(id) {
 }
 // sky, haze, sun direction and reflections for a circuit's theme
 function setAtmosphere(theme) {
-    const th = look = SC.lookFor(theme, timeOfDay);
+    const th = look = weatherLook(SC.lookFor(theme, timeOfDay), weatherKind);
     if (sky) { scene.remove(sky); sky.geometry.dispose(); sky.material.dispose(); }
     sky = SC.makeSky(th); scene.add(sky);
     const haze = SC.horizonColour(th);
@@ -1060,6 +1079,28 @@ function setAtmosphere(theme) {
     }); });
     sun.userData.dir = new THREE.Vector3(...th.sun).normalize();
     camera.far = th.fog[1] + 900; camera.updateProjectionMatrix();
+    applyWeatherToGround(weatherKind);
+    if (weather) { weather.set(weatherKind, SC.QUALITY[quality].density, timeOfDay === 'night'); if (engine) weather.startSound(engine.ctx, soundOn); }
+}
+// rain makes the road dark and shiny and the grass darker; snow covers the grass and sand, and leaves the road pale.
+// Each photo material remembers how it started, so going back to sunny puts it back exactly.
+function applyWeatherToGround(kind) {
+    world.group.traverse(o => { if (o.userData.cols) { o.geometry.attributes.color.array.set(kind === 'snow' ? o.userData.cols.snow : o.userData.cols.normal); o.geometry.attributes.color.needsUpdate = true; } });
+    world.group.traverse(o => { if (o.material) [].concat(o.material).forEach(m => {
+        const b = m.userData.base; if (!b) return;
+        const road = m.userData.photo === 'asphalt_02', soft = m.userData.photo === 'leafy_grass' || m.userData.photo === 'coast_sand_01';
+        m.map = b.map; m.color.set(b.color); m.roughness = b.rough; m.metalness = 0;
+        if (kind === 'rain') {
+            if (road) { m.color.multiplyScalar(0.62); m.roughness = 0.18; m.metalness = 0.25; }
+            else { m.color.multiplyScalar(0.78); m.roughness = Math.min(b.rough, 0.7); }
+        }
+        if (kind === 'snow') {
+            if (soft) { m.map = null; m.color.set(0xeef2f7); m.roughness = 0.92; }
+            else if (road) { m.color.set(0xd6dbe2); m.roughness = 0.6; }
+            else { m.color.lerp(new THREE.Color(0xffffff), 0.45); }
+        }
+        m.needsUpdate = true;
+    }); });
 }
 // apply a quality level: sharpness and shadows
 function applyQuality(q) {
@@ -1092,7 +1133,7 @@ function init() {
     // the speed lines are drawn on a see-through layer over the 3D view
     const overlay = document.createElement('canvas'); overlay.className = 'race-fx';
     canvas.after(overlay);
-    efx = new Effects(scene, overlay);
+    efx = new Effects(scene, overlay); weather = new Weather(scene);
     // headlights for night races (one light that follows your car)
     headlight = new THREE.SpotLight(0xfff4e0, 60, 90, 0.45, 0.5, 1.4); headlight.visible = false;
     carGlow = new THREE.PointLight(0xc8d8ff, 18, 14, 1.6); carGlow.visible = false;   // like light from street lamps falling on your car

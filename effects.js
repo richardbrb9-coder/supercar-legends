@@ -16,7 +16,7 @@ export class Effects {
         // smoke and dust: soft sprites that grow and fade
         this.puffs = [];
         const smokeTex = softDot('rgba(255,255,255,0.9)', 'rgba(255,255,255,0)');
-        for (let i = 0; i < 48; i++) {
+        for (let i = 0; i < 90; i++) {   // (enough for spray behind several cars in the rain)
             const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeTex, transparent: true, depthWrite: false, opacity: 0 }));
             s.visible = false; scene.add(s); this.puffs.push({ s, life: 0, max: 1, vx: 0, vy: 0, vz: 0, grow: 1 });
         }
@@ -52,8 +52,8 @@ export class Effects {
         if (!this.enabled) return;
         const p = this.puffs[this.puffIdx = (this.puffIdx + 1) % this.puffs.length];
         p.s.position.set(x, 0.4, z); p.s.visible = true;
-        p.s.material.color.set(kind === 'dust' ? 0xb59a6a : 0xe6e8ec);
-        p.life = 0; p.max = kind === 'dust' ? 1.1 : 0.9; p.grow = kind === 'dust' ? 3.5 : 2.6;
+        p.s.material.color.set({ dust: 0xb59a6a, spray: 0xc3cad3, powder: 0xffffff }[kind] || 0xe6e8ec);
+        p.life = 0; p.max = { dust: 1.1, spray: 0.55, powder: 0.8 }[kind] || 0.9; p.grow = { dust: 3.5, spray: 3.2, powder: 3.0 }[kind] || 2.6;
         p.vx = vx * 0.2 + (Math.random() - 0.5); p.vy = 0.6 + Math.random() * 0.5; p.vz = vz * 0.2 + (Math.random() - 0.5);
         p.s.scale.setScalar(0.8);
     }

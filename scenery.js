@@ -78,12 +78,12 @@ for (const [time, url] of Object.entries(SKY_FILES)) {
 }
 // call f once a photo sky that wasn't ready yet has arrived (so the race can swap the drawn sky for the photo)
 export function whenSkyLoads(f) { skyWaiters.push(f); }
-export function hasPhotoSky(t) { return !!(photoSkies[t.time] && photoSkies[t.time].tex); }
+export function hasPhotoSky(t) { return !!t.weather || !!(photoSkies[t.time] && photoSkies[t.time].tex); }   // (rain and snow use the drawn overcast sky)
 // the haze colour that blends the distant scenery into the sky
-export function horizonColour(t) { const p = photoSkies[t.time]; return p && p.horizon ? p.horizon.clone() : new THREE.Color(t.horizon); }
+export function horizonColour(t) { const p = photoSkies[t.time]; return !t.weather && p && p.horizon ? p.horizon.clone() : new THREE.Color(t.horizon); }
 export function makeSky(t) {
     const photo = photoSkies[t.time];
-    if (photo && photo.tex) {
+    if (!t.weather && photo && photo.tex) {
         const sky = new THREE.Mesh(new THREE.SphereGeometry(2000, 48, 24),
             new THREE.MeshBasicMaterial({ map: photo.tex, side: THREE.BackSide, depthWrite: false, fog: false, toneMapped: false }));
         // turn the photo so its sun sits where the scene's sunlight comes from
@@ -142,6 +142,7 @@ export function photoTex(name, kind = 'col') {
 export function photoMat(name, rx, ry, tint = 0xffffff, rough = 0.95) {
     const map = photoTex(name, 'col'); map.repeat.set(rx, ry);
     const m = new THREE.MeshStandardMaterial({ map, color: tint, roughness: rough });
+    m.userData.photo = name; m.userData.base = { map, color: tint, rough };   // so the weather can change it and put it back
     if (useDetailMaps) { const n = photoTex(name, 'nor'); n.repeat.set(rx, ry); m.normalMap = n; m.normalScale.set(0.8, 0.8); }
     return m;
 }
@@ -252,7 +253,9 @@ function treeMaterial(name) {
 }
 // trees get a little darker and warmer at sunset, and dim at night
 export function setTreeLight(t) {
-    const c = t.time === 'night' ? [0.2, 0.23, 0.33] : t.time === 'sunset' ? [0.92, 0.76, 0.62] : [1, 1, 1];
+    let c = t.time === 'night' ? [0.2, 0.23, 0.33] : t.time === 'sunset' ? [0.92, 0.76, 0.62] : [1, 1, 1];
+    if (t.weather === 'rain') c = c.map(v => v * 0.78);                         // darker and duller in the rain
+    if (t.weather === 'snow') c = [c[0] * 1.2 + 0.08, c[1] * 1.22 + 0.1, c[2] * 1.28 + 0.14];   // frosted, paler
     treeTint.setRGB(...c); Object.values(treeMats).forEach(m => m.color.copy(treeTint));
 }
 let shadowTex = null;
