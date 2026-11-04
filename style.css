@@ -476,3 +476,5 @@ body.racing .topbar { display: none; }
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+/* in the cockpit view the dashboard shows the speed, so the big on-screen number steps aside */
+.in-cockpit .hud-speed { opacity: 0; }

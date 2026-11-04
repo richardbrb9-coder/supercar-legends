@@ -3,6 +3,7 @@
 import * as THREE from './lib/three.module.min.js';
 import * as SC from './scenery.js';
 import { Effects } from './effects.js';
+import { buildCockpit } from './cockpit.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
 
 // =====================================================================
@@ -232,7 +233,43 @@ let world = null, player = null, rivals = [], ghost = null, mode = 'race', diffi
 let fieldSize = [3, 5, 7].includes(store('raceField', 5)) ? store('raceField', 5) : 5;   // how many rivals (3, 5 or 7)
 let race = null;                                  // { phase: 'grid'|'lights'|'go'|'done', t, lightsT, results }
 const input = { left: false, right: false, gas: false, brake: false, tilt: 0 };
-let camMode = 0, help = store('raceHelp', true);
+// camera views: 0 chase, 1 close chase, 2 bonnet, 3 cockpit (from the driver's seat)
+const CAM_NAMES = ['Chase camera', 'Close chase camera', 'Bonnet camera', 'Cockpit view'];
+let camMode = [0, 1, 2, 3].includes(store('raceCam', 0)) ? store('raceCam', 0) : 0, help = store('raceHelp', true);
+function nextCamera() { camMode = (camMode + 1) % 4; storeSet('raceCam', camMode); applyCameraView(); flash(CAM_NAMES[camMode], 1100); }
+// show the cockpit (and hide the car's own cabin shell) only in the cockpit view
+function applyCameraView() {
+    if (!player) return;
+    const inside = camMode === 3;
+    player.model.group.traverse(o => { if (o.isMesh && o.material === player.model.mats.cabin) o.visible = !inside; });
+    camera.near = camMode === 2 ? 0.06 : 0.5; camera.updateProjectionMatrix();
+    const st = document.getElementById('race-stage'); if (st) st.classList.toggle('in-cockpit', inside);   // the dash has its own speedometer
+}
+// The cockpit is drawn in a second pass over the outside world, so the car's own body (whose top runs under the cabin)
+// can never poke through the dashboard. It has its own copies of the lights, kept in step with the sun and sky.
+let cockpitScene = null, ckHemi = null, ckSun = null;
+function drawFrame() {
+    renderer.render(scene, camera);
+    if (camMode !== 3 || !player || !player.cockpit) return;
+    if (!cockpitScene) {
+        cockpitScene = new THREE.Scene(); ckHemi = new THREE.HemisphereLight(); ckSun = new THREE.DirectionalLight(); cockpitScene.add(ckHemi, ckSun, ckSun.target);
+    }
+    const ck = player.cockpit.group;
+    if (ck.parent !== cockpitScene) { cockpitScene.add(ck); ck.matrixAutoUpdate = false; }
+    ck.visible = true; ck.matrix.copy(player.model.group.matrixWorld); ck.matrixWorldNeedsUpdate = true;
+    ckHemi.color.copy(hemi.color); ckHemi.groundColor.set(0x2a2b2e); ckHemi.intensity = hemi.intensity;
+    ckSun.color.copy(sun.color); ckSun.intensity = sun.intensity * 0.6;
+    ckSun.position.copy(camera.position).addScaledVector(sun.userData.dir || new THREE.Vector3(0.5, 0.8, 0.3), 50); ckSun.target.position.copy(camera.position);
+    cockpitScene.environment = scene.environment; cockpitScene.environmentIntensity = scene.environmentIntensity;
+    const near = camera.near; camera.near = 0.04; camera.updateProjectionMatrix();
+    renderer.autoClear = false; renderer.clearDepth(); renderer.render(cockpitScene, camera); renderer.autoClear = true;
+    camera.near = near; camera.updateProjectionMatrix();
+}
+// the gear and engine speed the sounds and dials share (six imaginary gears)
+function gearState(r) {
+    const v = Math.abs(r.v), vmax = r.perf.vmax, gearW = vmax / 6, gear = Math.min(5, Math.floor(v / gearW));
+    return { gear: gear + 1, inGear: gear === 5 ? Math.min(1, (v - gearW * 5) / gearW) : (v % gearW) / gearW };
+}
 const DIFF = { easy: 0.8, medium: 0.88, hard: 0.96 };
 const GRID = Array.from({ length: 8 }, (_, k) => [-12 - k * 8, k % 2 ? -3.5 : 3.5]);   // [metres behind the line, metres from the middle of the road]
 const FIELD_SIZES = [3, 5, 7];
@@ -242,10 +279,12 @@ function storeSet(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); 
 
 function setupRace() {
     // remove old cars
-    [player, ...rivals, ghost].forEach(r => { if (r) { scene.remove(r.holder); r.model.dispose(); } });
+    [player, ...rivals, ghost].forEach(r => { if (r) { scene.remove(r.holder); r.model.dispose(); if (r.cockpit) { if (r.cockpit.group.parent) r.cockpit.group.parent.remove(r.cockpit.group); r.cockpit.dispose(); } } });
     rivals = []; ghost = null;
     player = makeRacer(loadDesign(), 1, true);
     scene.add(player.holder);
+    player.cockpit = buildCockpit(player.design, window.getUnits ? window.getUnits() : 'mph');   // drawn by drawFrame, in its own pass
+    applyCameraView();
     // grid: two staggered columns behind the start line, F1 style; you start at the back in a race
     const slots = GRID;
     const place = (r, [back, side]) => {
@@ -518,6 +557,20 @@ function placeCamera(snap = false, dt = 0.016) {
     const look = new THREE.Vector3(r.x + fx * ahead, 0.9, r.z + fz * ahead);
     if (snap) { camPos.copy(want); camLook.copy(look); }
     else { const k = Math.min(1, dt * 6); camPos.lerp(want, k); camLook.lerp(look, Math.min(1, dt * 10)); }
+    if (camMode >= 2 && !window.__camAt && !window.__aerial) {
+        // bonnet and cockpit: fixed to the car, looking down the road (the cockpit view glances a little into corners)
+        const ck = r.cockpit, eye = (camMode === 3 ? ck.eye : ck.bonnet).clone();
+        const turn = camMode === 3 ? r.steer * 0.35 : 0;
+        const ahead = new THREE.Vector3(eye.x + Math.cos(turn) * 10, eye.y - (camMode === 3 ? 0.75 : 1.25), eye.z - Math.sin(turn) * 10);
+        r.holder.updateMatrixWorld(); r.holder.localToWorld(eye); r.holder.localToWorld(ahead);
+        camera.position.copy(eye);
+        if (efx) { const [sx, sy] = efx.shakeOffset(r.v / r.perf.vmax, elapsed); camera.position.y += sy * 0.25; ahead.x += sx * 0.5; }
+        camera.lookAt(ahead);
+        camera.fov = (camMode === 3 ? 66 : 62) + Math.min(10, Math.max(0, r.v - 30) * 0.18); camera.updateProjectionMatrix();
+        if (camMode === 3) { const gs = gearState(r), u = window.getUnits ? window.getUnits() : 'mph'; ck.update({ steer: r.steer, speed: Math.abs(r.v) * (u === 'mph' ? 2.23694 : 3.6), rpm: 0.18 + gs.inGear * 0.78, gear: gs.gear }, dt); }
+        camPos.copy(camera.position); camLook.copy(ahead);
+        return;
+    }
     if (window.__camAt) { const c = window.__camAt, a = pathAt(c.d, c.lat, 0), b = pathAt(c.d2, c.lat2, 0); camPos.set(a.x, c.h, a.z); camLook.set(b.x, c.h2, b.z); }   // testing only
     else if (window.__aerial) { camPos.set(r.x + window.__aerial * 0.6, window.__aerial, r.z + window.__aerial * 0.6); camLook.set(r.x, 0, r.z); }   // testing only
     camera.position.copy(camPos);
@@ -603,7 +656,7 @@ function updateEngine() {
     const v = Math.abs(player.v), vmax = player.perf.vmax;
     let f;
     if (engine.ev) f = 200 + v / vmax * 1600;
-    else { const gearW = vmax / 6, inGear = (v % gearW) / gearW, gear = Math.min(5, Math.floor(v / gearW)); f = (player.stats.engine.sound || 90) * (0.55 + inGear * 1.1 + gear * 0.05); }
+    else { const gs = gearState(player); f = (player.stats.engine.sound || 90) * (0.55 + gs.inGear * 1.1 + (gs.gear - 1) * 0.05); }
     const t = engine.ctx.currentTime;
     engine.o1.frequency.setTargetAtTime(f, t, 0.05); engine.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
     engine.g.gain.setTargetAtTime(input.gas ? 0.07 : 0.035, t, 0.1);
@@ -653,7 +706,7 @@ function watchFrameRate(dt) {
 function frame(now) {
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - lastT) / 1000 || 0); lastT = now;
-    if (!race || race.paused) { if (sky) sky.position.copy(camera.position); renderer.render(scene, camera); return; }
+    if (!race || race.paused) { if (sky) sky.position.copy(camera.position); drawFrame(); return; }
     race.t += dt;
     if (race.phase === 'lights') {
         // the gantry lights come on one by one while the countdown runs: 3, 2, 1, GO!
@@ -679,7 +732,7 @@ function frame(now) {
     followSun(); world.update(dt); watchFrameRate(dt);
     updateEffects(dt);
     hud(); drawMap();
-    renderer.render(scene, camera);
+    drawFrame();
 }
 
 // =====================================================================
@@ -694,7 +747,7 @@ function bindControls() {
         btn.addEventListener('contextmenu', e => e.preventDefault());
     });
     const keys = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'gas', KeyW: 'gas', ArrowDown: 'brake', KeyS: 'brake', Space: 'brake' };
-    window.addEventListener('keydown', e => { if (!isRacing()) return; if (keys[e.code]) { input[keys[e.code]] = true; e.preventDefault(); getAudioStart(); } if (e.code === 'KeyC') camMode = 1 - camMode; if (e.code === 'Escape') togglePause(); });
+    window.addEventListener('keydown', e => { if (!isRacing()) return; if (keys[e.code]) { input[keys[e.code]] = true; e.preventDefault(); getAudioStart(); } if (e.code === 'KeyC') nextCamera(); if (e.code === 'Escape') togglePause(); });
     window.addEventListener('keyup', e => { if (keys[e.code]) input[keys[e.code]] = false; });
     window.addEventListener('blur', () => { Object.keys(input).forEach(k => { if (k !== 'tilt') input[k] = false; }); });
 }
@@ -1062,7 +1115,7 @@ export function enter() {
             if (b.dataset.race === 'pause') togglePause();
             if (b.dataset.race === 'resume') togglePause();
             if (b.id === 'race-tilt') toggleTilt();
-            if (b.id === 'race-cam') camMode = 1 - camMode;
+            if (b.id === 'race-cam') nextCamera();
             if (b.id === 'race-help') { help = !help; storeSet('raceHelp', help); b.classList.toggle('active', help); flash(help ? 'Driving help on' : 'Driving help off'); }
             if (b.id === 'race-sound') { soundOn = !soundOn; storeSet('raceSound', soundOn); b.classList.toggle('active', soundOn); soundOn ? startEngine() : stopEngine(); }
         });

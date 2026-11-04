@@ -552,6 +552,8 @@ function mergeByMaterial(root) {
         root.add(new THREE.Mesh(merged, mat));
     }
 }
+// The measurements of a design's body (for the cockpit view): the profile curves, plus X(s), the position along the car
+export function carFrame(design) { const pr = profiles(design); return { pr, X: s => design.L / 2 - s * design.L }; }
 // Build a whole car as a group. Returns { group, mats, wheels, dispose }. The car points along +x and sits on y = 0.
 // merge: combine parts for speed (used in races, where the car doesn't change)
 // lite: a lighter build with fewer points on the curves (the same shape and paint), for the rival cars in a race
