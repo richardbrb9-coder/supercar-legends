@@ -485,3 +485,13 @@ body.racing .topbar { display: none; }
 .rp-shot { font-family: var(--display); font-size: .85rem; color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.7); }
 @keyframes rp-blink { 50% { opacity: .55; } }
 .replaying .race-top, .replaying .pad, .replaying .race-slip, .replaying .race-map, .replaying .race-fx { display: none; }
+/* championship */
+.champ-card { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 16px; padding: 12px 14px; border: 1px solid var(--line-2); background: rgba(255,179,0,.06); }
+.champ-card b { display: block; font-family: var(--head); font-size: 1.1rem; margin-bottom: 4px; }
+.champ-card span { font-size: .85rem; color: var(--muted, #aab); }
+.champ-box { max-width: 560px; }
+.champ-table { width: 100%; border-collapse: collapse; margin: 10px 0 4px; font-size: .9rem; text-align: left; }
+.champ-table th { font-size: .7rem; letter-spacing: .15em; text-transform: uppercase; opacity: .7; padding: 4px 6px; }
+.champ-table td { padding: 5px 6px; border-top: 1px solid rgba(255,255,255,.08); }
+.champ-table tr.me td { background: rgba(225,6,0,.18); font-weight: 700; }
+.champ-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; box-shadow: 0 0 0 1px rgba(255,255,255,.4); }

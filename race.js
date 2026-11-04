@@ -216,6 +216,48 @@ function makeRacer(design, factor, isPlayer) {
 const TEAM_COLOURS = [['#F4F6F8', '#E10600', '#00A86B'], ['#1E3A8A', '#FFB300', '#F4F6F8'], ['#00A86B', '#F4F6F8', '#1B1F26'],
     ['#E10600', '#F4F6F8', '#1B1F26'], ['#FFB300', '#1B1F26', '#E10600'], ['#1B1F26', '#C6FF00', '#9AA3AF'], ['#7E57C2', '#F4F6F8', '#00B8D9']];
 const RIVAL_NUMBERS = [4, 24, 7, 11, 33, 18, 5];
+// =====================================================================
+//  CHAMPIONSHIP: three races, the same rival teams, F1-style points, a trophy for the winner
+// =====================================================================
+const CHAMP_TRACKS = ['coast', 'city', 'lemans'];
+const CHAMP_POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
+const TEAM_NAMES = ['Team Apex', 'Nitro Racing', 'Velocity GP', 'Bolt Motorsport', 'Rocket Racing', 'Comet Speed', 'Peak Performance'];
+let champ = null;   // { round, designs, points: [you, rival 0, rival 1, ...], last: [results of the last race] }
+function startChampionship() {
+    champ = { round: 0, designs: Array.from({ length: fieldSize }, (_, i) => rivalDesign(i)), points: new Array(fieldSize + 1).fill(0), last: null };
+    mode = 'race'; loadTrack(CHAMP_TRACKS[0]); showStage();
+}
+function champNames() { return ['You', ...champ.designs.map((_, i) => TEAM_NAMES[i % TEAM_NAMES.length])]; }
+function standingsTable(highlight) {
+    const names = champNames(), order = names.map((n, i) => i).sort((a, b) => champ.points[b] - champ.points[a] || a - b);
+    return `<table class="champ-table"><thead><tr><th></th><th>Driver</th><th>Last race</th><th>Points</th></tr></thead><tbody>${order.map((i, k) => {
+        const last = champ.last && champ.last.find(x => x.idx === i);
+        const col = i === 0 ? player.design.paint : champ.designs[i - 1].paint;
+        return `<tr class="${i === 0 ? 'me' : ''}"><td>${k + 1}</td><td><span class="champ-dot" style="background:${col}"></span>${escapeHtml(names[i])}</td><td>${last ? `P${last.pos} +${last.pts}` : ''}</td><td><b>${champ.points[i]}</b></td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+// finishing order of everyone, when you cross the line (rivals still racing are placed by how far round they are)
+function champScore() {
+    const all = [player, ...rivals].sort((a, b) => (a.finished ?? Infinity) - (b.finished ?? Infinity) || progressOf(b) - progressOf(a));
+    champ.last = all.map((c, k) => { const idx = c === player ? 0 : rivals.indexOf(c) + 1, pts = CHAMP_POINTS[k] || 0; champ.points[idx] += pts; return { idx, pos: k + 1, pts }; });
+    champ.round++;
+}
+function champResultHtml(pos) {
+    const done = champ.round >= CHAMP_TRACKS.length, names = champNames();
+    const leader = champ.points.indexOf(Math.max(...champ.points)), you = [...champ.points].sort((a, b) => b - a).indexOf(champ.points[0]) + 1;
+    let head = `<span class="kicker">Championship · race ${champ.round} of ${CHAMP_TRACKS.length} · ${difficulty}</span><h2>You finished ${ordinal(pos)}</h2>`;
+    const nextTrack = TRACKS.find(t => t.id === CHAMP_TRACKS[champ.round]);
+    let actions = `<button class="big-btn" data-race="champ-next">Next race: ${nextTrack ? nextTrack.name : ''}</button><button class="act-btn" data-race="replay">🎬 Watch replay</button><button class="act-btn ghost" data-race="champ-quit">Leave championship</button>`;
+    if (done) {
+        const won = leader === 0 && champ.points.filter(p => p === champ.points[0]).length === 1 || you === 1;
+        if (won) { const t = store('raceTrophies', {}); t[difficulty] = (t[difficulty] || 0) + 1; storeSet('raceTrophies', t); }
+        head = `<span class="kicker">Championship · final standings · ${difficulty}</span><h2>${won ? '🏆 You are the champion!' : `You finished ${ordinal(you)} overall`}</h2>${won ? '<p class="rr-medal">Champion\'s trophy</p>' : `<p class="small">${escapeHtml(names[leader])} won it this time. Try again?</p>`}`;
+        actions = `<button class="big-btn" data-race="champ-again">New championship</button><button class="act-btn" data-race="replay">🎬 Watch replay</button><button class="act-btn ghost" data-race="champ-quit">Menu</button>`;
+        window.playSound && window.playSound(won ? 'win' : 'lose');
+    }
+    return `<div class="rr-box champ-box">${head}${standingsTable()}<div class="rr-actions">${actions}</div></div>`;
+}
+const ordinal = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10] || 'th');
 function rivalDesign(i) {
     const keys = Object.keys(PRESETS), preset = keys[(i * 2 + 1 + Math.floor(Math.random() * 2)) % keys.length];
     const paint = PAINTS.filter(c => c !== loadDesign().paint)[(i * 3 + Math.floor(Math.random() * 3)) % 10];
@@ -318,12 +360,12 @@ function setupRace() {
     };
     if (mode === 'race') {
         // the rivals spread from quickest (at the front) to slowest, and you start at the back
-        for (let i = 0; i < fieldSize; i++) {
-            const r = makeRacer(rivalDesign(i), DIFF[difficulty] * (1 - i * 0.06 / fieldSize), false);
+        for (let i = 0; i < (champ ? champ.designs.length : fieldSize); i++) {
+            const r = makeRacer(champ ? champ.designs[i] : rivalDesign(i), DIFF[difficulty] * (1 - i * 0.06 / fieldSize), false);
             r.lineOffset = ((i % 3) - 1) * 1.6;
             rivals.push(r); scene.add(r.holder); place(r, slots[i]);
         }
-        place(player, slots[fieldSize]);
+        place(player, slots[champ ? champ.designs.length : fieldSize]);
     } else {
         place(player, [-12, 0]);
         const g = store('ghost_' + TRACK.id, null);
@@ -558,13 +600,14 @@ function finishRace() {
     window.playSound && window.playSound(pos === 1 ? 'win' : 'lose');
     const el = document.getElementById('race-result');
     el.innerHTML = `<div class="rr-box"><span class="kicker">${TRACK.name} · ${difficulty}</span>
-        <h2>${pos === 1 ? 'You win!' : `You finished ${['1st', '2nd', '3rd', '4th'][pos - 1]}`}</h2>
+        <h2>${pos === 1 ? 'You win!' : `You finished ${ordinal(pos)}`}</h2>
         <p class="rr-medal">${medal}</p>
         <p>Race time <b>${fmtTime(player.finished)}</b> · Best lap <b>${fmtTime(player.best)}</b></p>
         ${after > before ? `<p class="rr-unlock">+${after - before} medal point${after - before > 1 ? 's' : ''} (${after} in total)</p>` : ''}
         ${unlocked.map(u => `<p class="rr-unlock">🔓 Unlocked in Build: <b>${u.label}</b></p>`).join('')}
         ${next ? `<p class="small">Next unlock at ${next.pts} points: ${next.label}</p>` : ''}
         <div class="rr-actions"><button class="big-btn" data-race="again">Race again</button><button class="act-btn" data-race="replay">🎬 Watch replay</button><button class="act-btn ghost" data-race="menu">Menu</button></div></div>`;
+    if (champ) { champScore(); el.innerHTML = champResultHtml(pos); }
     el.hidden = false;
 }
 
@@ -759,33 +802,71 @@ function bump(vol) {
     const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.value = vol * 0.5;
     src.connect(g); g.connect(ctx.destination); src.start();
 }
-// engine: two oscillators whose pitch follows the speed through six imaginary gears
+// Engine sound: real engine recordings (Wikimedia Commons, see Credits) looped and sped up and down with the revs through
+// six imaginary gears. A low loop for the engine's own note fades into a high-revs loop near the top of each gear. Electric
+// cars, and any device that can't load the recordings, use the made-up tones instead. Tyres squeal when you slide.
 let engine = null, soundOn = store('raceSound', true);
+const SOUND_FILES = { v8: 'sounds/v8_loop.wav', v12: 'sounds/v12_loop.wav', high: 'sounds/high_loop.wav', roar: 'sounds/roar.wav' };
+const soundBufs = {}; let soundsLoading = null;
+function loadSounds(ctx) {
+    if (soundsLoading) return soundsLoading;
+    soundsLoading = Promise.all(Object.entries(SOUND_FILES).map(([k, url]) => fetch(url).then(r => r.arrayBuffer()).then(b => new Promise((res, rej) => ctx.decodeAudioData(b, res, rej))).then(buf => { soundBufs[k] = buf; }).catch(() => {})));
+    return soundsLoading;
+}
+function loopSource(ctx, buf, dest) { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const g = ctx.createGain(); g.gain.value = 0; s.connect(g); g.connect(dest); s.start(0, Math.random() * buf.duration); return { s, g }; }
 function startEngine() {
     const ctx = window.getAudio && window.getAudio(); if (!ctx || engine || !soundOn) return;
-    const ev = player.stats.engine.sound === 0;
+    const ev = player.stats.engine.sound === 0, kind = player.design.engine;
+    const master = ctx.createGain(); master.gain.value = 1; master.connect(ctx.destination);
+    engine = { ctx, ev, master, kind };
+    // the made-up tones (used for electric cars, and until the recordings have loaded)
     const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
     o1.type = ev ? 'sine' : 'sawtooth'; o2.type = ev ? 'triangle' : 'square';
     f.type = 'lowpass'; f.frequency.value = ev ? 3000 : 900; g.gain.value = 0.0;
-    o1.connect(f); o2.connect(f); f.connect(g); g.connect(ctx.destination); o1.start(); o2.start();
-    engine = { ctx, o1, o2, g, ev };
+    o1.connect(f); o2.connect(f); f.connect(g); g.connect(master); o1.start(); o2.start();
+    Object.assign(engine, { o1, o2, g });
+    // tyre squeal: filtered noise, silent until you slide
+    const len = ctx.sampleRate, nb = ctx.createBuffer(1, len, ctx.sampleRate), nd = nb.getChannelData(0); for (let i = 0; i < len; i++) nd[i] = Math.random() * 2 - 1;
+    const ns = ctx.createBufferSource(); ns.buffer = nb; ns.loop = true; const nf = ctx.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 1700; nf.Q.value = 6;
+    const ng = ctx.createGain(); ng.gain.value = 0; ns.connect(nf); nf.connect(ng); ng.connect(master); ns.start();
+    engine.squeal = ng;
+    if (!ev) loadSounds(ctx).then(() => {
+        if (!engine || engine.ctx !== ctx || !soundBufs.v8 || !soundBufs.high) return;
+        engine.low = loopSource(ctx, kind === 'v12' || kind === 'v10' ? soundBufs.v12 || soundBufs.v8 : soundBufs.v8, master);
+        engine.high = loopSource(ctx, soundBufs.high, master);
+        engine.real = true;
+    });
     if (weather) weather.startSound(ctx, soundOn);
+}
+// the roar as the lights go out
+function startRoar() {
+    if (!engine || !soundBufs.roar || engine.ev) return;
+    const ctx = engine.ctx, s = ctx.createBufferSource(), g = ctx.createGain(); s.buffer = soundBufs.roar; g.gain.value = 0.32; s.playbackRate.value = engine.kind === 'v8' ? 0.85 : 1;
+    s.connect(g); g.connect(engine.master); s.start();
 }
 function updateEngine() {
     if (!engine) return;
-    const v = Math.abs(player.v), vmax = player.perf.vmax;
+    const v = Math.abs(player.v), vmax = player.perf.vmax, t = engine.ctx.currentTime, on = input.gas ? 1 : 0.55;
+    const gs = gearState(player), rpm = 0.18 + gs.inGear * 0.78;
     let f;
     if (engine.ev) f = 200 + v / vmax * 1600;
-    else { const gs = gearState(player); f = (player.stats.engine.sound || 90) * (0.55 + gs.inGear * 1.1 + (gs.gear - 1) * 0.05); }
-    const t = engine.ctx.currentTime;
+    else f = (player.stats.engine.sound || 90) * (0.55 + gs.inGear * 1.1 + (gs.gear - 1) * 0.05);
     engine.o1.frequency.setTargetAtTime(f, t, 0.05); engine.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
-    engine.g.gain.setTargetAtTime(input.gas ? 0.07 : 0.035, t, 0.1);
+    if (engine.real) {
+        // a higher-pitched engine for the V10 and V12, and each gear starts a touch higher than the last
+        const base = { v8: 0.82, hybrid: 0.86, v10: 1.0, v12: 1.08 }[engine.kind] || 0.9, rate = base * (0.72 + rpm * 1.15 + (gs.gear - 1) * 0.03);
+        engine.low.s.playbackRate.setTargetAtTime(rate, t, 0.04); engine.high.s.playbackRate.setTargetAtTime(0.55 + rpm * 0.75 + (gs.gear - 1) * 0.02, t, 0.04);
+        const hi = Math.max(0, (rpm - 0.45) / 0.55);
+        engine.low.g.gain.setTargetAtTime((0.24 - hi * 0.1) * on, t, 0.08); engine.high.g.gain.setTargetAtTime(hi * 0.2 * on, t, 0.08);
+        engine.g.gain.setTargetAtTime(0.012 * on, t, 0.1);          // a little of the made-up tone adds body
+    } else engine.g.gain.setTargetAtTime(input.gas ? 0.07 : 0.035, t, 0.1);
+    engine.squeal.gain.setTargetAtTime(player.sliding && v > 12 ? 0.05 : 0, t, 0.06);
 }
 function stopEngine() {
     if (weather) weather.stopSound();
     if (!engine) return;
-    try { engine.g.gain.setTargetAtTime(0, engine.ctx.currentTime, 0.05); engine.o1.stop(engine.ctx.currentTime + 0.3); engine.o2.stop(engine.ctx.currentTime + 0.3); } catch (e) { /* already stopped */ }
-    engine = null;
+    const e = engine, t = e.ctx.currentTime; engine = null;
+    try { e.master.gain.setTargetAtTime(0, t, 0.05); setTimeout(() => { try { e.master.disconnect(); e.o1.stop(); e.o2.stop(); if (e.low) { e.low.s.stop(); e.high.s.stop(); } } catch (err) { /* already stopped */ } }, 400); } catch (err) { /* already stopped */ }
 }
 
 // =====================================================================
@@ -845,7 +926,7 @@ function frame(now) {
         const step = Math.floor(race.t);                    // 1 = "3", 2 = "2", 3 = "1", 4 = GO
         if (step >= 1 && step <= 3 && step !== race.countShown) { race.countShown = step; countdown(String(4 - step), step); }
         if (race.t > 4.0) {
-            race.phase = 'go'; world.lightMats.forEach(m => { m.emissiveIntensity = 0; }); countdown('GO!', 4);
+            race.phase = 'go'; world.lightMats.forEach(m => { m.emissiveIntensity = 0; }); countdown('GO!', 4); startRoar();
             player.lapStart = race.raceTime; rivals.forEach(r => { r.lapStart = race.raceTime; });
         }
     }
@@ -934,6 +1015,7 @@ function renderMenu() {
                 <p class="b-label">Difficulty</p>
                 <div class="opts">${Object.keys(DIFF).map(k => `<button class="opt ${k === difficulty ? 'active' : ''}" data-diff="${k}">${k[0].toUpperCase() + k.slice(1)} ${medalFor(TRACK.id, k)}</button>`).join('')}</div>
                 <div class="rr-actions"><button class="big-btn" data-race="start-race">Start race</button><button class="act-btn" data-race="start-trial">Time trial (with ghost)</button></div>
+                <div class="champ-card"><div><b>🏆 Championship</b><span>Three races (Coastline, City Streets, Le Mans) against the same ${fieldSize} rival teams. Points for every finish: the most points wins the trophy.${(() => { const t = store('raceTrophies', {}); const n = Object.values(t).reduce((a, b) => a + b, 0); return n ? ` <b>Trophies won: ${'🏆'.repeat(Math.min(n, 9))}</b>` : ''; })()}</span></div><button class="big-btn" data-race="start-champ">Start championship</button></div>
             </div>
         </div>
         <div class="panel how"><h3>Time of day</h3><p>Race in daylight, at sunset, or at night with your headlights on.</p>
@@ -955,7 +1037,8 @@ function onMenuClick(e) {
         qualitySetting = b.dataset.quality; storeSet('raceQuality', qualitySetting);
         applyQuality(qualitySetting === 'auto' ? SC.guessQuality() : qualitySetting); renderMenu(); return;
     }
-    if (b.dataset.race === 'start-race' || b.dataset.race === 'start-trial') { mode = b.dataset.race === 'start-race' ? 'race' : 'trial'; showStage(); }
+    if (b.dataset.race === 'start-champ') { startChampionship(); return; }
+    if (b.dataset.race === 'start-race' || b.dataset.race === 'start-trial') { champ = null; mode = b.dataset.race === 'start-race' ? 'race' : 'trial'; showStage(); }
 }
 function showStage() {
     document.getElementById('race-menu').hidden = true;
@@ -1272,8 +1355,11 @@ export function enter() {
         document.getElementById('race-stage').addEventListener('click', e => {
             const b = e.target.closest('button'); if (!b) return;
             if (b.dataset.race === 'again') { stopReplay(); showStage(); }
-            if (b.dataset.race === 'menu') { stopReplay(); showMenu(); }
+            if (b.dataset.race === 'menu') { stopReplay(); champ = null; showMenu(); }
             if (b.dataset.race === 'replay') startReplay();
+            if (b.dataset.race === 'champ-next') { stopReplay(); loadTrack(CHAMP_TRACKS[champ.round]); showStage(); }
+            if (b.dataset.race === 'champ-again') { stopReplay(); startChampionship(); }
+            if (b.dataset.race === 'champ-quit') { stopReplay(); champ = null; showMenu(); }
             if (b.dataset.race === 'replay-exit') { stopReplay(); document.getElementById('race-result').hidden = false; }
             if (b.dataset.race === 'pause') togglePause();
             if (b.dataset.race === 'resume') togglePause();
