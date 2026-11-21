@@ -195,14 +195,16 @@ function blobShadow() {
     const g = x.createRadialGradient(64, 64, 8, 64, 64, 64); g.addColorStop(0, 'rgba(0,0,0,.6)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     x.fillStyle = g; x.fillRect(0, 0, 128, 128);
     const m = new THREE.Mesh(new THREE.PlaneGeometry(6, 3.2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
-    m.rotation.x = -Math.PI / 2; m.position.y = 0.06;
+    m.rotation.x = -Math.PI / 2; m.position.y = 0.075;   // (just above the kerb tops)
+    m.material.polygonOffset = true; m.material.polygonOffsetFactor = -2; m.material.polygonOffsetUnits = -2;
     return m;
 }
 function makeRacer(design, factor, isPlayer) {
     const model = createCar(design, { merge: true, lite: !isPlayer }), stats = carStats(design);   // rivals use the lighter build
     const holder = new THREE.Group(), blob = blobShadow(); holder.add(model.group, blob);
     model.group.traverse(o => { if (o.isMesh) o.castShadow = o.material !== model.mats.spinBlur; });
-    blob.visible = !(renderer && renderer.shadowMap.enabled);
+    // a soft contact shadow right under the car (with the sun's shadows on, a lighter one, so the car sits on the road)
+    blob.material.opacity = renderer && renderer.shadowMap.enabled ? 0.55 : 1;
     const racer = { design, model, holder, blob, stats, perf: perf(stats, factor), isPlayer, x: 0, z: 0, heading: 0, v: 0, steer: 0, d: 0, idx: 0, lap: 0,
              lapStart: 0, lastLat: 0, finished: null, best: null, half: false, wheelSpin: 0, lineOffset: 0, lat: 0, latV: 0 };
     fitSuspension(racer, isPlayer && quality !== 'low');     // the body rides on springs; your own car shows its suspension parts
@@ -327,6 +329,16 @@ function updateReflections() {
     }
     if (tex) probe.update(scene, player.holder.position, [player.holder, weather && weather.group].filter(Boolean), sky);
 }
+// where the sun is in the picture, and how strongly its lens flare shows (sunny days and sunsets only)
+const sunTmp = new THREE.Vector3(), sunUV = new THREE.Vector2(), SUN_SUNSET = new THREE.Color(1, 0.62, 0.32), SUN_DAY = new THREE.Color(1, 0.93, 0.8);
+function sunOnScreen() {
+    if (!sun || !sun.userData.dir || weatherKind !== 'sunny' || timeOfDay === 'night') return null;
+    sunTmp.copy(sun.userData.dir).multiplyScalar(1000).add(camera.position).project(camera);
+    if (sunTmp.z > 1 || Math.abs(sunTmp.x) > 1.3 || Math.abs(sunTmp.y) > 1.3) return null;
+    const edge = Math.max(Math.abs(sunTmp.x), Math.abs(sunTmp.y)), vis = Math.max(0, Math.min(1, (1.3 - edge) / 0.4)) * (timeOfDay === 'sunset' ? 1 : 0.8);
+    sunUV.set(sunTmp.x * 0.5 + 0.5, sunTmp.y * 0.5 + 0.5);
+    return { uv: sunUV, vis, colour: timeOfDay === 'sunset' ? SUN_SUNSET : SUN_DAY };
+}
 function drawFrame() {
     // Medium and High graphics: the picture goes through the film-camera effects (glow, motion blur, grade); Low draws directly
     const usePost = quality !== 'low' && !window.__noPost;
@@ -340,7 +352,7 @@ function drawFrame() {
     if (usePost && post) {
         const glow = (timeOfDay === 'night' ? 0.85 : timeOfDay === 'sunset' ? 0.65 : 0.45) * (quality === 'high' ? 1 : 0.8);
         // (no motion blur from the driver's seat: the dashboard and the drops on the glass stay sharp)
-        post.finish(player && camMode !== 3 ? Math.abs(player.v) / player.perf.vmax : 0, glow);
+        post.finish(player && camMode !== 3 && !(race && race.replay) ? Math.abs(player.v) / player.perf.vmax : 0, glow, camMode === 3 ? { camera } : { camera, sun: sunOnScreen(), focus: race && race.replay && player ? camera.position.distanceTo(player.holder.position) : 0 });   // (not from the cockpit: its second pass replaces the depth picture)
     }
 }
 function drawScenes() {
@@ -761,7 +773,7 @@ function placeCamera(snap = false, dt = 0.016) {
     const look = new THREE.Vector3(r.x + fx * ahead, 0.9, r.z + fz * ahead);
     if (snap) { camPos.copy(want); camLook.copy(look); }
     else { const k = Math.min(1, dt * 6); camPos.lerp(want, k); camLook.lerp(look, Math.min(1, dt * 10)); }
-    if (camMode >= 2 && !window.__camAt && !window.__aerial && !window.__camRel) {
+    if (camMode >= 2 && !window.__camAt && !window.__aerial && !window.__camRel && !window.__camSun) {
         // bonnet and cockpit: fixed to the car, looking down the road (the cockpit view glances a little into corners)
         const ck = r.cockpit, eye = (camMode === 3 ? ck.eye : ck.bonnet).clone();
         const turn = camMode === 3 ? r.steer * 0.35 : 0;
@@ -778,6 +790,7 @@ function placeCamera(snap = false, dt = 0.016) {
     }
     if (window.__camAt) { const c = window.__camAt, a = pathAt(c.d, c.lat, 0), b = pathAt(c.d2, c.lat2, 0); camPos.set(a.x, c.h, a.z); camLook.set(b.x, c.h2, b.z); }   // testing only
     else if (window.__camRel) { const [cx, cy, cz, lx = 0, ly = 0.4, lz = 0] = window.__camRel, c = Math.cos(r.heading), sn = Math.sin(r.heading); camPos.set(r.x + cx * c + cz * sn, cy, r.z - cx * sn + cz * c); camLook.set(r.x + lx * c + lz * sn, ly, r.z - lx * sn + lz * c); }   // testing only: a camera fixed beside the car
+    else if (window.__camSun) { const d = sun.userData.dir; camPos.set(r.x - Math.cos(r.heading) * 7, 2.2, r.z + Math.sin(r.heading) * 7); camLook.set(camPos.x + d.x * 50 + window.__camSun * 20, camPos.y + d.y * 50 - 12, camPos.z + d.z * 50); }   // testing only: look towards the sun
     else if (window.__aerial) { camPos.set(r.x + window.__aerial * 0.6, window.__aerial, r.z + window.__aerial * 0.6); camLook.set(r.x, 0, r.z); }   // testing only
     camera.position.copy(camPos);
     if (efx) { const [sx, sy] = efx.shakeOffset(r.v / r.perf.vmax, elapsed); camera.position.x += sx; camera.position.y += sy; }
@@ -1404,7 +1417,7 @@ function applyQuality(q) {
         sun.shadow.mapSize.set(Q.shadows, Q.shadows);
         const c = sun.shadow.camera; c.left = c.bottom = -Q.shadowSize; c.right = c.top = Q.shadowSize; c.near = 10; c.far = 400; c.updateProjectionMatrix();
     }
-    [player, ...rivals].forEach(r => { if (r) r.blob.visible = !wantShadows; });
+    [player, ...rivals].forEach(r => { if (r) r.blob.material.opacity = wantShadows ? 0.55 : 1; });
     resize();
 }
 function init() {
@@ -1474,3 +1487,4 @@ export function autopilot(on) { window.__autopilot = on; }
 export function suspDebug() { const s = player && player.susp; return s && { pitch: +s.pitch.toFixed(4), roll: +s.roll.toFixed(4), heave: +s.heave.toFixed(4), heat: +s.heat.toFixed(2), bumps: s.bumps.map(b => +b.toFixed(3)), parts: s.corners.length }; }
 export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), rivalLat: rivals.map(r => [+r.lat.toFixed(2), +r.latV.toFixed(2)]), trackLen, ghost: !!(ghost && ghost.holder.visible), slip: player && player.slip, time: timeOfDay, quality, shadows: renderer.shadowMap.enabled, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
 export function setHelp(on) { help = on; }
+export function testReplay() { if (race && race.tape && race.tape.length >= 20) { startReplay(); return true; } return false; }   // testing only
