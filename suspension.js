@@ -5,6 +5,7 @@
 // The player's car also gets the real parts you can see through the wheels and under the car: wishbones, coil springs
 // and dampers, which move with each wheel.
 import * as THREE from './lib/three.module.min.js';
+import { carFrame } from './carmodel.js';
 
 const PIVOT_Y = 0.45;                         // the body leans around a point about this high (roughly its centre of weight)
 // springiness: how fast the body settles (rad/s) and how much it is damped (1 = no bounce)
@@ -21,7 +22,7 @@ export function fitSuspension(racer, parts = false) {
     const R = racer.design.wheel;
     const s = { sprung, pitch: 0, pitchV: 0, roll: 0, rollV: 0, heave: 0, heaveV: 0, lastV: 0, lastH: null, accel: 0, lat: 0,
         bumps: wheels.map(() => 0), heat: 0, corners: [], R };
-    if (parts) s.corners = wheels.map(w => buildCorner(g, w, racer.model.mats, R));
+    if (parts) { const fr = carFrame(racer.design); s.corners = wheels.map(w => buildCorner(g, w, racer.model.mats, R, racer.design, fr.pr)); }
     racer.susp = s;
     return s;
 }
@@ -69,15 +70,19 @@ function shared() {
 }
 // The parts at one corner: they live on the car (not on the body), so each frame they're stretched between the
 // body's mounting points and the wheel
-function buildCorner(g, wheel, mats, R) {
+function buildCorner(g, wheel, mats, R, design, pr) {
     const S = shared(), side = wheel.userData.side, x = wheel.position.x, zo = wheel.position.z - side * 0.13, zi = wheel.position.z - side * 0.5;
     const mk = (geo, mat) => { const m = new THREE.Mesh(geo, mat); m.castShadow = false; m.frustumCulled = false; g.add(m); return m; };
+    // the spring's top mount must stay under the bodywork (a low bonnet is well below the usual mounting height): the lowest
+    // point of the body's skin around where the spring ends
+    let skin = Infinity; const zt = Math.abs(zi + side * 0.08);
+    for (const dx of [-0.07, 0, 0.07]) for (const dz of [-0.05, 0.05]) { const sAt = Math.min(1, Math.max(0, (design.L / 2 - x - dx) / design.L)); skin = Math.min(skin, pr.surfAt(sAt, Math.min(0.98, (zt + dz) / pr.width(sAt)))); }
     const springMat = mats.caliper;                            // springs painted the same colour as the brake callipers
     return {
         side, x, zo, zi, wheel,
         lower: mk(S.arm, S.metal), upper: mk(S.arm, S.metal), coil: mk(S.coil, springMat), damper: mk(S.damper, S.black), rod: mk(S.rod, S.rodMat), upright: mk(S.upright, S.metal),
         // heights at rest (y up from the ground)
-        lo: R - 0.13, li: R - 0.1, uo: R + 0.12, ui: R + 0.15, top: R + 0.44
+        lo: R - 0.13, li: R - 0.1, uo: R + 0.12, ui: R + 0.15, top: Math.min(R + 0.44, skin - 0.06)
     };
 }
 // stretch a part (whose length runs along +z, or +y for springs) from point a to point b, keeping it square to the car's length
