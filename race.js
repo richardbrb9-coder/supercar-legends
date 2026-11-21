@@ -6,7 +6,7 @@ import { Effects } from './effects.js';
 import { buildCockpit } from './cockpit.js';
 import { fitSuspension, updateSuspension, jolt } from './suspension.js';
 import { ReflectionProbe, reflectiveMaterials } from './reflections.js';
-import { roadMarks, kerbs, kerbHeight } from './trackdetail.js';
+import { roadMarks, kerbs, kerbHeight, barriers } from './trackdetail.js';
 import { Weather, WEATHERS, weatherLook } from './weather.js';
 import { Post } from './post.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
@@ -134,20 +134,8 @@ function buildTrack(scene) {
     // raised red and white kerbs on the corners, and the rubber and tyre marks on the road (the same every time for a track)
     { let seed = [...TRACK.id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0; const rand = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
       group.add(kerbs({ samples, N, HW, trackLen }), roadMarks({ samples, N, HW, trackLen, rand })); }
-    // barriers (both sides), white with a blue stripe made with vertex colours
-    const barMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide });
-    for (const off of [HW + RUNOFF, -HW - RUNOFF]) {
-        const pos = [], col = [], idx = [];
-        for (let i = 0; i <= N; i++) {
-            const s = samples[i % N], p = s.p.clone().addScaledVector(s.n, off);
-            const c = city ? (Math.floor(i / 6) % 2 ? [0.6, 0.6, 0.62] : [0.75, 0.05, 0.03]) : (Math.floor(i / 10) % 2 ? [0.95, 0.95, 0.95] : [0.12, 0.35, 0.85]);
-            pos.push(p.x, 0, p.z, p.x, city ? 1.4 : 1.0, p.z); col.push(...c, ...c);
-            if (i < N) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
-        }
-        const g = new THREE.BufferGeometry();
-        g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-        g.setIndex(idx); g.computeVertexNormals(); group.add(new THREE.Mesh(g, barMat));
-    }
+    // barriers: steel crash barriers (concrete blocks in the city) and a catch fence (see trackdetail.js)
+    group.add(barriers({ samples, N, trackLen, HW, RUNOFF, city }));
     // F1-style grid boxes: a white bar in front of each starting spot with short legs back along each side
     {
         const pos = [], idx = [];
@@ -675,7 +663,7 @@ function buildTvCams() {
     tvCams = [];
     for (let d = 40, k = 0; d < trackLen; d += 110, k++) {
         const side = k % 2 ? 1 : -1, p = pathAt(d, side * (HW + RUNOFF + 1.5), 0);   // just behind the barrier
-        tvCams.push({ d, pos: new THREE.Vector3(p.x, 3.5 + (k % 3) * 1.8, p.z) });
+        tvCams.push({ d, pos: new THREE.Vector3(p.x, 4.8 + (k % 3) * 1.6, p.z) });   // (above the catch fence)
     }
     // keep only the cameras that can actually see the road coming towards them (not hidden behind stands, buildings or trees)
     const ray = new THREE.Raycaster(), dir = new THREE.Vector3(), objs = world.group.children;
@@ -684,7 +672,7 @@ function buildTvCams() {
         for (let a = 20; a <= 80; a += 15) {
             const q = pathAt(c.d - a, 0, 0), to = new THREE.Vector3(q.x, 0.8, q.z), dist = c.pos.distanceTo(to);
             ray.set(c.pos, dir.subVectors(to, c.pos).normalize()); ray.far = dist - 1;
-            if (!ray.intersectObjects(objs, true).length) clear++;
+            if (!ray.intersectObjects(objs, true).some(h => !h.object.userData.seeThrough)) clear++;   // (the wire catch fence doesn't block the view)
         }
         return clear >= 4;
     });
