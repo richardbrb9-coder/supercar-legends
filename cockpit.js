@@ -3,7 +3,7 @@
 // Three styles: classic (60s and 70s), 90s, and modern. Everything is in the car's own space (x forward, y up, z to the right),
 // so it moves with the car. The car's own cabin shell is hidden while you're inside it; its bonnet stays, seen through the glass.
 import * as THREE from './lib/three.module.min.js';
-import { carFrame, lerp } from './carmodel.js';
+import { carFrame, lerp, centreSeat } from './carmodel.js';
 
 export const COCKPIT_STYLE = { gt60: 'classic', wedge70: 'classic', super90: 'nineties' };   // everything else is 'modern'
 
@@ -49,9 +49,9 @@ function woodTex() {
 export function buildCockpit(design, units = 'mph') {
     const { pr, X } = carFrame(design), q = pr.q, style = COCKPIT_STYLE[design.preset] || 'modern', L = design.L;
     const g = new THREE.Group();
-    // where the driver sits: behind the top of the windscreen, under the roof; the 90s supercar has a centre seat
+    // where the driver sits: behind the top of the windscreen, under the roof; the 90s supercar and the Longtail have a centre seat
     const sEye = Math.min(pr.c1 - 0.05, Math.max(pr.rakeEnd + 0.3 / L, pr.c0 + 0.38 * (pr.c1 - pr.c0)));
-    const xe = X(sEye), ye = pr.roof(sEye) - 0.12, ze = design.preset === 'super90' ? 0 : -pr.width(sEye) * q.cabinWB * 0.3;
+    const xe = X(sEye), ye = pr.roof(sEye) - 0.12, ze = centreSeat(q) ? 0 : -pr.width(sEye) * q.cabinWB * 0.3;
     const eye = new THREE.Vector3(xe, ye, ze);
     // the windscreen: its base on the bonnet line, its top where the roof begins
     const xWS = X(pr.c0 + 0.01), yWS = pr.roof(pr.c0 + 0.01), xTop = X(pr.rakeEnd), yRoof = pr.roof(pr.rakeEnd) - 0.03;
