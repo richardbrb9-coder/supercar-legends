@@ -6,6 +6,7 @@ import { Effects } from './effects.js';
 import { buildCockpit } from './cockpit.js';
 import { fitSuspension, updateSuspension, jolt } from './suspension.js';
 import { ReflectionProbe, reflectiveMaterials } from './reflections.js';
+import { roadMarks, kerbs, kerbHeight } from './trackdetail.js';
 import { Weather, WEATHERS, weatherLook } from './weather.js';
 import { Post } from './post.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
@@ -125,11 +126,14 @@ function buildTrack(scene) {
     const kerbCol = i => Math.abs(samples[i].ks) < 0.004 ? (city ? [0.07, 0.078, 0.095] : [0.047, 0.196, 0.043]) : (Math.floor(i / 6) % 2 ? [0.92, 0.92, 0.92] : [0.86, 0.04, 0.02]);
     // (on the straights the strip is grass; it keeps a snowy version of its colours for when it snows)
     const snowCol = i => Math.abs(samples[i].ks) < 0.004 ? (city ? [0.62, 0.64, 0.68] : [0.86, 0.89, 0.93]) : kerbCol(i);
-    for (const k of [ribbon(HW + 1.3, HW, 0.03, 0.05, kerbMat, 0.1, kerbCol), ribbon(-HW, -HW - 1.3, 0.05, 0.03, kerbMat, 0.1, kerbCol)]) {
+    for (const k of [ribbon(HW + 1.3, HW, 0.03, 0.03, kerbMat, 0.1, kerbCol), ribbon(-HW, -HW - 1.3, 0.03, 0.03, kerbMat, 0.1, kerbCol)]) {
         const c = k.geometry.attributes.color, alt = new Float32Array(c.array.length);
         for (let i = 0; i <= N; i++) { const v = snowCol(i % N); alt.set([...v, ...v], i * 6); }
         k.userData.cols = { normal: c.array.slice(), snow: alt }; group.add(k);
     }
+    // raised red and white kerbs on the corners, and the rubber and tyre marks on the road (the same every time for a track)
+    { let seed = [...TRACK.id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0; const rand = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+      group.add(kerbs({ samples, N, HW, trackLen }), roadMarks({ samples, N, HW, trackLen, rand })); }
     // barriers (both sides), white with a blue stripe made with vertex colours
     const barMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, side: THREE.DoubleSide });
     for (const off of [HW + RUNOFF, -HW - RUNOFF]) {
@@ -594,8 +598,7 @@ function roadHeight(wx, wz, r) {
     if (lat < HW) return 0.003 + 0.003 * Math.sin(d * 0.9) * Math.sin(lat * 0.7 + d * 0.37);
     if (lat < HW + 1.3) {
         if (Math.abs(s.ks) < 0.004) return 0;
-        const t = (lat - HW) / 1.3;
-        return 0.028 + 0.012 * (1 - t) + 0.016 * Math.abs(Math.sin(d * Math.PI / 0.55));   // the kerb's ridges: a quick rumble
+        return kerbHeight(lat - HW, d);   // the kerb's sloped edge and ridged top: a quick rumble
     }
     return 0.008 + 0.008 * (Math.sin(d * 1.7 + lat * 2.3) * 0.6 + Math.sin(d * 4.1 - lat * 1.1) * 0.4);   // grass: a gentle jiggle
 }
@@ -1314,7 +1317,7 @@ function buildCity(group, nearTrack) {
 function loadTrack(id) {
     const t = TRACKS.find(x => x.id === id) || TRACKS[0];
     if (world && TRACK === t) return;
-    if (world) { scene.remove(world.group); world.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }); }
+    if (world) { scene.remove(world.group); world.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => { if (m.map) m.map.dispose(); for (const k of ['alphaMap', 'normalMap']) if (m[k] && m[k].isCanvasTexture) m[k].dispose(); m.dispose(); }); }); }
     TRACK = t; storeSet('raceTrack', t.id);
     buildSamples();
     world = buildTrack(scene);
@@ -1359,6 +1362,8 @@ function applyWeatherToGround(kind) {
         if (m.userData.roofColour === undefined) m.userData.roofColour = m.color.getHex();
         m.color.set(kind === 'snow' ? 0xeef2f7 : m.userData.roofColour);
     }); });
+    // tyre marks are fainter on a snowy road (they'd look like heavy black tracks)
+    scene.traverse(o => { if (o.material && o.material.userData && o.material.userData.roadMarks) o.material.opacity = kind === 'snow' ? 0.45 : 1; });
     world.group.traverse(o => { if (o.userData.cols) { o.geometry.attributes.color.array.set(kind === 'snow' ? o.userData.cols.snow : o.userData.cols.normal); o.geometry.attributes.color.needsUpdate = true; } });
     world.group.traverse(o => { if (o.material) [].concat(o.material).forEach(m => {
         const b = m.userData.base; if (!b) return;
