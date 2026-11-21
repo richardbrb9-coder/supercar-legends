@@ -5,6 +5,7 @@ import * as SC from './scenery.js';
 import { Effects } from './effects.js';
 import { buildCockpit } from './cockpit.js';
 import { fitSuspension, updateSuspension, jolt } from './suspension.js';
+import { ReflectionProbe, reflectiveMaterials } from './reflections.js';
 import { Weather, WEATHERS, weatherLook } from './weather.js';
 import { Post } from './post.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
@@ -319,9 +320,24 @@ function drawMirror() {
     renderer.setRenderTarget(mirrorRT); renderer.render(scene, mirrorCam); renderer.setRenderTarget(was); renderer.shadowMap.autoUpdate = sh;
     r.cockpit.setMirror(mirrorRT.texture);
 }
+// Live reflections (Medium and High graphics): the cars' paint, glass and chrome reflect the real surroundings.
+// Low graphics, or a device that can't, keeps the simple sky-and-ground reflections.
+let probe = null;
+function updateReflections() {
+    const want = quality !== 'low' && !window.__noProbe && player;
+    if (want && probe === null) { try { probe = new ReflectionProbe(renderer, quality === 'high' ? 128 : 48, quality === 'high' ? 1 : 3); } catch (e) { probe = false; } }
+    const tex = want && probe ? probe.texture : null;
+    for (const r of [player, ...rivals]) {
+        if (!r) continue;
+        if (r.envTex !== tex) { r.envTex = tex; for (const m of reflectiveMaterials(r.model)) { m.envMap = tex; m.needsUpdate = true; } }
+        if (tex) for (const m of reflectiveMaterials(r.model)) m.envMapIntensity = scene.environmentIntensity * 1.35;   // (the real surroundings are darker than the old plain sky, so a little brighter)
+    }
+    if (tex) probe.update(scene, player.holder.position, [player.holder, weather && weather.group].filter(Boolean), sky);
+}
 function drawFrame() {
     // Medium and High graphics: the picture goes through the film-camera effects (glow, motion blur, grade); Low draws directly
     const usePost = quality !== 'low' && !window.__noPost;
+    if (race) updateReflections();
     if (camMode === 3 && player && player.cockpit && quality !== 'low' && !(race && race.replay)) drawMirror();
     if (usePost) {
         if (!post) { try { post = new Post(renderer); } catch (e) { post = false; } }
@@ -1362,6 +1378,7 @@ function applyWeatherToGround(kind) {
 }
 // apply a quality level: sharpness and shadows
 function applyQuality(q) {
+    if (probe && q !== quality) { probe.dispose(); probe = null; }   // (made again at the right size)
     quality = q; SC.setDetail(q !== 'low');
     const Q = SC.QUALITY[q];
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pixelRatio));

@@ -104,7 +104,8 @@ export function makeSky(t) {
 export function makeEnvironment(renderer, t) {
     const env = new THREE.Scene();
     env.add(makeSky(t));
-    const ground = new THREE.Mesh(new THREE.CircleGeometry(1900, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(t.ground).multiplyScalar(t.stars ? 0.15 : 1) }));
+    // (the ground is mostly grey road and run-off near a car, with only a little of the grass colour, so paint isn't tinted green)
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(1900, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(0x4a4d52).lerp(new THREE.Color(t.ground), 0.3).multiplyScalar(t.stars ? 0.15 : 1) }));
     ground.material.toneMapped = false;
     ground.rotation.x = -Math.PI / 2; ground.position.y = -20; env.add(ground);
     const pmrem = new THREE.PMREMGenerator(renderer);

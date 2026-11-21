@@ -1,6 +1,7 @@
 // Supercar Legends: the car model shared by the builder and the race.
 // Everything is made in code: no model files, no textures to download, so it works offline and stays small.
 import * as THREE from './lib/three.module.min.js';
+import { flakeTexture } from './reflections.js';
 
 // =====================================================================
 //  DESIGN SETTINGS
@@ -549,7 +550,9 @@ function paintMaterial(design, plain = false) {
     const f = FINISHES[design.finish], useMap = !plain && hasLivery(design);
     return new THREE.MeshPhysicalMaterial({ color: useMap ? '#ffffff' : design.paint, map: useMap ? liveryTexture(design) : null,
         metalness: f.metalness, roughness: f.roughness, clearcoat: f.clearcoat, clearcoatRoughness: 0.08,
-        iridescence: f.iridescence, iridescenceIOR: 1.6, side: THREE.DoubleSide });
+        iridescence: f.iridescence, iridescenceIOR: 1.6, side: THREE.DoubleSide,
+        // metallic and pearl paint: tiny flakes under the smooth clear coat glint in the light
+        ...(design.finish === 'metallic' || design.finish === 'pearl' ? { normalMap: flakeTexture(), normalScale: new THREE.Vector2(0.22, 0.22) } : {}) });
 }
 function buildMaterials(design) {
     const rc = RIM_COLOURS[design.rimColour];
