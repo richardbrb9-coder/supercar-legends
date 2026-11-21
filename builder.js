@@ -3,7 +3,7 @@ import * as THREE from './lib/three.module.min.js';
 import { OrbitControls } from './lib/addons/OrbitControls.js';
 import { RoomEnvironment } from './lib/addons/RoomEnvironment.js';
 import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, LIVERIES, TEAM_LIVERIES, UNLOCKS, loadDesign, saveDesign as saveDesignTo, createCar, carStats,
-    medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign, applyPreset } from './carmodel.js';
+    medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign, applyPreset, clearPaintPool } from './carmodel.js';
 
 // =====================================================================
 //  SCENE
@@ -12,9 +12,12 @@ let renderer, scene, camera, controls, car = null, ground, raf = null, started =
 let design = loadDesign();
 const saveDesign = () => saveDesignTo(design);
 const stats = () => carStats(design);
-function buildCar() {
+let sharpTimer = null;
+// draft: a quicker build with a smaller paint picture, used while a slider is being dragged; the sharp one follows when it stops
+function buildCar(draft = false) {
     if (car) { scene.remove(car.group); car.dispose(); }
-    car = createCar(design); mats = car.mats;
+    car = createCar(design, { draft: draft === true }); mats = car.mats;
+    clearTimeout(sharpTimer); if (car.draft) sharpTimer = setTimeout(() => buildCar(false), 450);
     setLights(lightsMode);
     scene.add(car.group);
 }
@@ -151,10 +154,10 @@ function renderStats() {
         bar('Braking', s.braking, s.braking);
 }
 let rebuildTimer = null;
-function changed(rebuild = true) {
+function changed(rebuild = true, draft = false) {
     saveDesign(); renderStats();
     if (!rebuild) return;
-    clearTimeout(rebuildTimer); rebuildTimer = setTimeout(buildCar, 30);
+    clearTimeout(rebuildTimer); rebuildTimer = setTimeout(() => buildCar(draft), 30);
 }
 function engineSound() {
     const e = ENGINES[design.engine], ctx = window.getAudio && window.getAudio(); if (!ctx) return;
@@ -233,7 +236,7 @@ function onPanelClick(e) {
 let textTimer = null;
 function onPanelInput(e) {
     const t = e.target;
-    if (t.dataset.slider) { design[t.dataset.slider] = parseFloat(t.value); design.preset = 'custom'; changed(); }
+    if (t.dataset.slider) { design[t.dataset.slider] = parseFloat(t.value); design.preset = 'custom'; changed(true, true); }
     if (t.dataset.paintpick !== undefined) { design.paint = t.value; t.parentElement.style.setProperty('--sw', t.value); changed(); }
     if (t.dataset.text) {
         let v = t.value;
@@ -278,13 +281,15 @@ export function enter() {
     resize();
     if (!raf && renderer) frame();
 }
-export function leave() { if (raf) { cancelAnimationFrame(raf); raf = null; } }
+export function leave() { if (raf) { cancelAnimationFrame(raf); raf = null; } clearPaintPool(); }   // (and give back the spare paint canvases)
 export function refreshUnits() { if (started) renderStats(); }
 // Put the camera at a fixed angle (used for photo angles and testing)
-export function setView(azimuthDeg, elevationDeg = 14, dist = 9) {
+// (zoom, targetY: testing only, for close-up photos of small details)
+export function setView(azimuthDeg, elevationDeg = 14, dist = 9, zoom, targetY = 0.6) {
     if (!controls) return;
     controls.autoRotate = false; syncTurntableButton();
     const az = azimuthDeg * Math.PI / 180, el = elevationDeg * Math.PI / 180;
     camera.position.set(Math.cos(az) * Math.cos(el) * dist, 0.6 + Math.sin(el) * dist, Math.sin(az) * Math.cos(el) * dist);
-    controls.target.set(0, 0.6, 0); controls.update();
+    controls.target.set(0, targetY, 0); controls.update();
+    if (zoom) { camera.zoom = zoom; camera.updateProjectionMatrix(); }   // (left alone in normal use)
 }

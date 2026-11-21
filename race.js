@@ -290,7 +290,7 @@ function nextCamera() { camMode = (camMode + 1) % 4; storeSet('raceCam', camMode
 function applyCameraView() {
     if (!player) return;
     const inside = camMode === 3;
-    player.model.group.traverse(o => { if (o.isMesh && o.material === player.model.mats.cabin) o.visible = !inside; });
+    player.model.group.traverse(o => { if (o.isMesh && (o.material === player.model.mats.cabin || o.material === player.model.mats.interior)) o.visible = !inside; });   // (and the seats, driver, wiper and door mirrors, which the cockpit model replaces)
     camera.near = camMode === 2 ? 0.06 : 0.5; camera.updateProjectionMatrix();
     const st = document.getElementById('race-stage'); if (st) st.classList.toggle('in-cockpit', inside);   // the dash has its own speedometer
 }
