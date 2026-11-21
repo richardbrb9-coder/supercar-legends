@@ -4,6 +4,7 @@ import * as THREE from './lib/three.module.min.js';
 import * as SC from './scenery.js';
 import { Effects } from './effects.js';
 import { buildCockpit } from './cockpit.js';
+import { fitSuspension, updateSuspension, jolt } from './suspension.js';
 import { Weather, WEATHERS, weatherLook } from './weather.js';
 import { Post } from './post.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
@@ -206,10 +207,12 @@ function blobShadow() {
 function makeRacer(design, factor, isPlayer) {
     const model = createCar(design, { merge: true, lite: !isPlayer }), stats = carStats(design);   // rivals use the lighter build
     const holder = new THREE.Group(), blob = blobShadow(); holder.add(model.group, blob);
-    model.group.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    model.group.traverse(o => { if (o.isMesh) o.castShadow = o.material !== model.mats.spinBlur; });
     blob.visible = !(renderer && renderer.shadowMap.enabled);
-    return { design, model, holder, blob, stats, perf: perf(stats, factor), isPlayer, x: 0, z: 0, heading: 0, v: 0, steer: 0, d: 0, idx: 0, lap: 0,
+    const racer = { design, model, holder, blob, stats, perf: perf(stats, factor), isPlayer, x: 0, z: 0, heading: 0, v: 0, steer: 0, d: 0, idx: 0, lap: 0,
              lapStart: 0, lastLat: 0, finished: null, best: null, half: false, wheelSpin: 0, lineOffset: 0, lat: 0, latV: 0 };
+    fitSuspension(racer, isPlayer && quality !== 'low');     // the body rides on springs; your own car shows its suspension parts
+    return racer;
 }
 // Rival cars are designed in code from the builder presets, so they're original designs too
 // team colours for rivals: [paint, stripes, second colour]
@@ -339,7 +342,7 @@ function drawScenes() {
     }
     const ck = player.cockpit.group;
     if (ck.parent !== cockpitScene) { cockpitScene.add(ck); ck.matrixAutoUpdate = false; }
-    ck.visible = true; ck.matrix.copy(player.model.group.matrixWorld); ck.matrixWorldNeedsUpdate = true;
+    ck.visible = true; ck.matrix.copy((player.susp ? player.susp.sprung : player.model.group).matrixWorld); ck.matrixWorldNeedsUpdate = true;
     ckHemi.color.copy(hemi.color); ckHemi.groundColor.set(0x2a2b2e); ckHemi.intensity = hemi.intensity;
     ckSun.color.copy(sun.color); ckSun.intensity = sun.intensity * 0.6;
     ckSun.position.copy(camera.position).addScaledVector(sun.userData.dir || new THREE.Vector3(0.5, 0.8, 0.3), 50); ckSun.target.position.copy(camera.position);
@@ -390,7 +393,7 @@ function setupRace() {
         if (g && g.frames && g.frames.length) {
             ghost = makeRacer(g.design || loadDesign(), 1, false);
             ghost.frames = g.frames; ghost.time = g.time;
-            ghost.model.group.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.35; o.material.depthWrite = false; } });
+            ghost.model.group.traverse(o => { if (o.material === ghost.model.mats.spinBlur) { o.visible = false; return; } if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.35; o.material.depthWrite = false; } });
             ghost.holder.visible = false; scene.add(ghost.holder);
         }
     }
@@ -497,7 +500,7 @@ function drivePlayer(dt) {
         let rel = r.heading - s2.heading; while (rel > Math.PI) rel -= Math.PI * 2; while (rel < -Math.PI) rel += Math.PI * 2;
         if (Math.abs(rel) < Math.PI / 2) r.heading -= rel * 0.6; else r.heading -= (rel - Math.sign(rel) * Math.PI) * 0.6;
         if (r.v > 8) {
-            bump(0.35);
+            bump(0.35); jolt(r, Math.min(0.6, r.v / 60));
             const sg = Math.sign(lat2);   // sparks where the car scrapes the barrier
             efx.sparksAt(r.x + s2.n.x * sg * 1.0, 0.4, r.z + s2.n.z * sg * 1.0, Math.cos(r.heading), -Math.sin(r.heading), Math.min(40, 8 + r.v));
             efx.bump(Math.min(0.8, r.v / 60));
@@ -544,7 +547,7 @@ function collisions() {
         const a = all[i], b = all[j], dx = b.x - a.x, dz = b.z - a.z, dist = Math.hypot(dx, dz), min = 2.6;
         if (dist < min && dist > 0.01) {
             const push = (min - dist) / 2, nx = dx / dist, nz = dz / dist;
-            if (a.isPlayer) { a.x -= nx * push * 2; a.z -= nz * push * 2; a.v *= 0.97; if (Math.abs(a.v - b.v) > 4) { bump(0.2); efx.sparksAt((a.x + b.x) / 2, 0.5, (a.z + b.z) / 2, -nx, -nz, 14); } }
+            if (a.isPlayer) { a.x -= nx * push * 2; a.z -= nz * push * 2; a.v *= 0.97; if (Math.abs(a.v - b.v) > 4) { bump(0.2); jolt(a, 0.25); efx.sparksAt((a.x + b.x) / 2, 0.5, (a.z + b.z) / 2, -nx, -nz, 14); } }
             else if (b.isPlayer) { b.x += nx * push * 2; b.z += nz * push * 2; b.v *= 0.97; }
             else { a.v *= 0.995; }
         }
@@ -563,10 +566,22 @@ function updateCars(dt) {
         r.wheelSpin += r.v * dt / r.design.wheel;
         for (const w of r.model.wheels) {
             const { front, side } = w.userData;
-            w.rotation.z = side > 0 ? -r.wheelSpin : r.wheelSpin;
+            w.userData.spin.rotation.z = side > 0 ? -r.wheelSpin : r.wheelSpin;
             w.rotation.y = (side < 0 ? Math.PI : 0) + (front ? r.steer : 0);
         }
+        updateSuspension(r, dt, race && race.replay ? null : roadHeight);   // (replays: the body still leans and dips, without road bumps)
     }
+}
+// How high the ground is under a wheel: flat road with the faintest ripple, ridged kerbs on the corners, bumpy grass
+function roadHeight(wx, wz, r) {
+    const s = samples[r.idx], dx = wx - s.p.x, dz = wz - s.p.z, lat = Math.abs(dx * s.n.x + dz * s.n.z), d = s.d + dx * s.t.x + dz * s.t.z;
+    if (lat < HW) return 0.003 + 0.003 * Math.sin(d * 0.9) * Math.sin(lat * 0.7 + d * 0.37);
+    if (lat < HW + 1.3) {
+        if (Math.abs(s.ks) < 0.004) return 0;
+        const t = (lat - HW) / 1.3;
+        return 0.028 + 0.012 * (1 - t) + 0.016 * Math.abs(Math.sin(d * Math.PI / 0.55));   // the kerb's ridges: a quick rumble
+    }
+    return 0.008 + 0.008 * (Math.sin(d * 1.7 + lat * 2.3) * 0.6 + Math.sin(d * 4.1 - lat * 1.1) * 0.4);   // grass: a gentle jiggle
 }
 
 // =====================================================================
@@ -592,7 +607,7 @@ function setupGhostFromStore() {
     const g = store('ghost_' + TRACK.id, null); if (!g) return;
     if (!ghost) {
         ghost = makeRacer(g.design || loadDesign(), 1, false);
-        ghost.model.group.traverse(o => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.35; o.material.depthWrite = false; } });
+        ghost.model.group.traverse(o => { if (o.material === ghost.model.mats.spinBlur) { o.visible = false; return; } if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.35; o.material.depthWrite = false; } });
         scene.add(ghost.holder);
     }
     ghost.frames = g.frames; ghost.time = g.time; ghost.lapT0 = race.raceTime;
@@ -737,12 +752,13 @@ function placeCamera(snap = false, dt = 0.016) {
     const look = new THREE.Vector3(r.x + fx * ahead, 0.9, r.z + fz * ahead);
     if (snap) { camPos.copy(want); camLook.copy(look); }
     else { const k = Math.min(1, dt * 6); camPos.lerp(want, k); camLook.lerp(look, Math.min(1, dt * 10)); }
-    if (camMode >= 2 && !window.__camAt && !window.__aerial) {
+    if (camMode >= 2 && !window.__camAt && !window.__aerial && !window.__camRel) {
         // bonnet and cockpit: fixed to the car, looking down the road (the cockpit view glances a little into corners)
         const ck = r.cockpit, eye = (camMode === 3 ? ck.eye : ck.bonnet).clone();
         const turn = camMode === 3 ? r.steer * 0.35 : 0;
         const ahead = new THREE.Vector3(eye.x + Math.cos(turn) * 10, eye.y - (camMode === 3 ? 0.75 : r.design.cabin[0] < 0.33 ? 1.9 : 1.25), eye.z - Math.sin(turn) * 10);   // (low bonnets: look a little more down, so the bonnet shows)
-        r.holder.updateMatrixWorld(); r.holder.localToWorld(eye); r.holder.localToWorld(ahead);
+        // the camera rides with the body (like a camera fixed inside a real car), so the dash and bonnet stay still in view
+        r.holder.updateMatrixWorld(); const onBody = r.susp ? r.susp.sprung : r.holder; onBody.localToWorld(eye); onBody.localToWorld(ahead);
         camera.position.copy(eye);
         if (efx) { const [sx, sy] = efx.shakeOffset(r.v / r.perf.vmax, elapsed); camera.position.y += sy * 0.25; ahead.x += sx * 0.5; }
         camera.lookAt(ahead);
@@ -752,6 +768,7 @@ function placeCamera(snap = false, dt = 0.016) {
         return;
     }
     if (window.__camAt) { const c = window.__camAt, a = pathAt(c.d, c.lat, 0), b = pathAt(c.d2, c.lat2, 0); camPos.set(a.x, c.h, a.z); camLook.set(b.x, c.h2, b.z); }   // testing only
+    else if (window.__camRel) { const [cx, cy, cz, lx = 0, ly = 0.4, lz = 0] = window.__camRel, c = Math.cos(r.heading), sn = Math.sin(r.heading); camPos.set(r.x + cx * c + cz * sn, cy, r.z - cx * sn + cz * c); camLook.set(r.x + lx * c + lz * sn, ly, r.z - lx * sn + lz * c); }   // testing only: a camera fixed beside the car
     else if (window.__aerial) { camPos.set(r.x + window.__aerial * 0.6, window.__aerial, r.z + window.__aerial * 0.6); camLook.set(r.x, 0, r.z); }   // testing only
     camera.position.copy(camPos);
     if (efx) { const [sx, sy] = efx.shakeOffset(r.v / r.perf.vmax, elapsed); camera.position.x += sx; camera.position.y += sy; }
@@ -1423,5 +1440,6 @@ export function leave() {
 }
 // for testing: drive automatically along the racing line
 export function autopilot(on) { window.__autopilot = on; }
+export function suspDebug() { const s = player && player.susp; return s && { pitch: +s.pitch.toFixed(4), roll: +s.roll.toFixed(4), heave: +s.heave.toFixed(4), heat: +s.heat.toFixed(2), bumps: s.bumps.map(b => +b.toFixed(3)), parts: s.corners.length }; }
 export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), rivalLat: rivals.map(r => [+r.lat.toFixed(2), +r.latV.toFixed(2)]), trackLen, ghost: !!(ghost && ghost.holder.visible), slip: player && player.slip, time: timeOfDay, quality, shadows: renderer.shadowMap.enabled, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
 export function setHelp(on) { help = on; }

@@ -333,24 +333,73 @@ function cabinTexture(d, pr) {
 // =====================================================================
 //  WHEELS
 // =====================================================================
+// Tyre and brake disc pictures, drawn once and shared by every car
+let TYRE_TEX = null, DISC_TEX = null;
+function tyreTexture() {
+    if (TYRE_TEX) return TYRE_TEX;
+    // across the picture = around the tyre; down = from one sidewall, over the tread, to the other sidewall
+    const c = document.createElement('canvas'); c.width = 512; c.height = 64; const x = c.getContext('2d');
+    x.fillStyle = '#242529'; x.fillRect(0, 0, 512, 64);
+    x.fillStyle = '#1a1b1e'; x.fillRect(0, 18, 512, 28);                      // the tread, a touch darker and worn smooth
+    x.fillStyle = '#0a0a0c'; for (const y of [23, 31.5, 40]) x.fillRect(0, y, 512, 2);   // grooves round the tyre
+    x.strokeStyle = '#0d0d0f'; x.lineWidth = 1.5;
+    for (let i = 0; i < 512; i += 9) { x.beginPath(); x.moveTo(i, 18); x.lineTo(i + 5, 23); x.moveTo(i + 4, 42); x.lineTo(i + 9, 46); x.stroke(); }   // little cuts at the shoulders
+    x.fillStyle = '#34363b'; x.fillRect(0, 7, 512, 1.5); x.fillRect(0, 56, 512, 1.5);   // raised rings on the sidewalls
+    x.fillStyle = '#2c2e33'; for (let i = 0; i < 512; i += 64) { x.fillRect(i + 10, 10, 30, 2); x.fillRect(i + 42, 52, 30, 2); }   // moulded marks (no names)
+    TYRE_TEX = new THREE.CanvasTexture(c); TYRE_TEX.colorSpace = THREE.SRGBColorSpace; TYRE_TEX.wrapS = THREE.RepeatWrapping; TYRE_TEX.anisotropy = 4;
+    return TYRE_TEX;
+}
+function discTexture() {
+    if (DISC_TEX) return DISC_TEX;
+    // a drilled, grooved brake disc with its darker centre "hat"
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'), m = 128;
+    x.fillStyle = '#000'; x.fillRect(0, 0, 256, 256);
+    const g = x.createRadialGradient(m, m, 40, m, m, 128); g.addColorStop(0, '#8d929b'); g.addColorStop(0.6, '#b9bec6'); g.addColorStop(1, '#7d828b');
+    x.fillStyle = g; x.beginPath(); x.arc(m, m, 127, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = 'rgba(60,64,70,.35)'; x.lineWidth = 1; for (let r = 62; r < 126; r += 3.5) { x.beginPath(); x.arc(m, m, r, 0, Math.PI * 2); x.stroke(); }   // polished rings
+    x.fillStyle = '#16171a';
+    for (let i = 0; i < 36; i++) for (const [r, off] of [[80, 0], [96, 0.5], [112, 0]]) { const a = (i + off) / 36 * Math.PI * 2; x.beginPath(); x.arc(m + Math.cos(a) * r, m + Math.sin(a) * r, 3.2, 0, Math.PI * 2); x.fill(); }   // drilled holes
+    x.strokeStyle = '#3a3d43'; x.lineWidth = 2.5; for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; x.beginPath(); x.arc(m, m, 104, a, a + 0.35); x.stroke(); }   // curved slots
+    x.fillStyle = '#4a4e56'; x.beginPath(); x.arc(m, m, 58, 0, Math.PI * 2); x.fill();   // the hat
+    x.fillStyle = '#2a2c31'; for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2; x.beginPath(); x.arc(m + Math.cos(a) * 30, m + Math.sin(a) * 30, 6, 0, Math.PI * 2); x.fill(); }
+    DISC_TEX = new THREE.CanvasTexture(c); DISC_TEX.colorSpace = THREE.SRGBColorSpace; DISC_TEX.anisotropy = 4;
+    return DISC_TEX;
+}
+// A wheel: the group steers; its 'spin' group (tyre, rim, disc) turns as the car rolls; the calliper stays put, gripping the disc
+function spinBlurMaterial(design) {
+    const rc = RIM_COLOURS[design.rimColour], col = rc === 'chrome' ? '#e8ebef' : rc;
+    const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'), m = 64;
+    const g = x.createRadialGradient(m, m, 0, m, m, 64);
+    g.addColorStop(0, col); g.addColorStop(0.2, col); g.addColorStop(0.3, 'rgba(40,42,46,0.9)'); g.addColorStop(0.75, 'rgba(70,72,78,0.55)'); g.addColorStop(0.94, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = g; x.fillRect(0, 0, 128, 128);
+    x.globalAlpha = 0.25; x.strokeStyle = col; for (let r = 22; r < 58; r += 5) { x.lineWidth = 1 + (r % 3); x.beginPath(); x.arc(m, m, r, 0, Math.PI * 2); x.stroke(); }   // the blur of the spokes
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    return new THREE.MeshStandardMaterial({ map: t, transparent: true, opacity: 0, depthWrite: false, metalness: 0.15, roughness: 0.4, visible: false });
+}
 function makeWheel(p, mats, front, lite = false) {
-    const g = new THREE.Group();
+    const g = new THREE.Group(), spin = new THREE.Group(); g.add(spin); g.userData.spin = spin;
     const R = p.wheel, tw = front ? 0.27 : 0.32, rimR = R * 0.72;
     // tyre: a rounded profile spun around the axle
     const prof = [];
-    const tp = lite ? 6 : 12, ts = lite ? 18 : 28;
+    const tp = lite ? 6 : 14, ts = lite ? 18 : 36;
     for (let i = 0; i <= tp; i++) { const a = -Math.PI / 2 + Math.PI * i / tp; prof.push(new THREE.Vector2(rimR + (R - rimR) * (0.55 + 0.45 * Math.cos(a)), (tw / 2) * Math.sin(a))); }
     const tyre = new THREE.Mesh(new THREE.LatheGeometry(prof, ts), mats.tyre);
-    tyre.rotation.x = Math.PI / 2; g.add(tyre);
+    tyre.rotation.x = Math.PI / 2; spin.add(tyre);
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(rimR, rimR, tw * 0.9, ts, 1, true), mats.rim);
-    barrel.rotation.x = Math.PI / 2; g.add(barrel);
-    const disc = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.78, rimR * 0.78, 0.03, 24), mats.brake);
-    disc.rotation.x = Math.PI / 2; disc.position.z = 0.02; g.add(disc);
-    const caliper = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.1, 0.08), mats.caliper);
-    caliper.position.set(-rimR * 0.45, rimR * 0.5, 0.04); g.add(caliper);
-    const face = new THREE.Group(); face.position.z = tw * 0.42; g.add(face);
+    barrel.rotation.x = Math.PI / 2; spin.add(barrel);
+    // the rim's lip, a bright edge where the tyre meets the wheel
+    if (!lite) { const lip = new THREE.Mesh(new THREE.TorusGeometry(rimR * 0.99, 0.011, 6, ts), mats.rim); lip.position.z = tw * 0.44; spin.add(lip); }
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.82, rimR * 0.82, 0.032, lite ? 16 : 32), mats.brake);
+    disc.rotation.x = Math.PI / 2; disc.position.z = 0.02; spin.add(disc);
+    // the calliper: a chunky clamp over the top-back of the disc (it doesn't turn with the wheel)
+    const cal = new THREE.Group(); cal.position.set(-rimR * 0.5, rimR * 0.5, 0.025); cal.rotation.z = -0.78; g.add(cal); g.userData.cal = cal;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(rimR * 0.62, 0.075, 0.1), mats.caliper); cal.add(body);
+    if (!lite) for (const dz of [-0.045, 0.045]) { const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, rimR * 0.66, 10), mats.caliper); pad.rotation.z = Math.PI / 2; pad.position.set(0, 0.03, dz); cal.add(pad); }
+    const face = new THREE.Group(); face.position.z = tw * 0.42; spin.add(face);
     const hub = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.18, rimR * 0.2, 0.05, 16), mats.rim);
     hub.rotation.x = Math.PI / 2; face.add(hub);
+    // wheel nuts round the hub
+    if (!lite && p.rim !== 'wire') for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, n = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.03, 6), mats.chrome); n.rotation.x = Math.PI / 2; n.position.set(Math.cos(a) * rimR * 0.12, Math.sin(a) * rimR * 0.12, 0.03); face.add(n); }
     const spoke = (n, w, twist = 0, depth = 0.035) => {
         for (let i = 0; i < n; i++) {
             const s = new THREE.Mesh(new THREE.BoxGeometry(w, rimR * 0.85, depth), mats.rim);
@@ -371,6 +420,8 @@ function makeWheel(p, mats, front, lite = false) {
         d.rotation.x = Math.PI / 2; face.add(d);
         for (let i = 0; i < 6; i++) { const h = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.1, rimR * 0.1, 0.035, 12), mats.dark); h.rotation.x = Math.PI / 2; h.position.set(Math.cos(i * 1.047) * rimR * 0.62, Math.sin(i * 1.047) * rimR * 0.62, 0.005); face.add(h); }
     }
+    // at speed the spokes blur into a soft disc, like a real wheel filmed going fast (see in the race)
+    if (mats.spinBlur) { const b = new THREE.Mesh(new THREE.CircleGeometry(rimR * 0.97, 32), mats.spinBlur); b.position.z = tw * 0.42 + 0.045; g.add(b); }
     return g;
 }
 
@@ -507,10 +558,11 @@ function buildMaterials(design) {
         paintPlain: paintMaterial(design, true),
         glass: new THREE.MeshPhysicalMaterial({ color: 0x0a0d12, metalness: 0.3, roughness: 0.06, clearcoat: 1, side: THREE.DoubleSide }),
         carbon: new THREE.MeshStandardMaterial({ color: 0x15171b, metalness: 0.4, roughness: 0.45 }),
-        tyre: new THREE.MeshStandardMaterial({ color: 0x141518, roughness: 0.9, side: THREE.DoubleSide }),
+        tyre: new THREE.MeshStandardMaterial({ color: 0xffffff, map: tyreTexture(), roughness: 0.88, side: THREE.DoubleSide }),
         rim: rc === 'chrome' ? new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.05 })
                              : new THREE.MeshStandardMaterial({ color: rc, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide }),
-        brake: new THREE.MeshStandardMaterial({ color: 0x5a5f68, metalness: 0.9, roughness: 0.4 }),
+        brake: new THREE.MeshStandardMaterial({ color: 0xffffff, map: discTexture(), metalness: 0.85, roughness: 0.38, emissive: 0xff4010, emissiveMap: discTexture(), emissiveIntensity: 0 }),   // (glows when the brakes get hot)
+        spinBlur: spinBlurMaterial(design),
         caliper: new THREE.MeshStandardMaterial({ color: design.caliper, roughness: 0.4 }),
         dark: new THREE.MeshStandardMaterial({ color: 0x0b0c0f, roughness: 0.6 }),
         chrome: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.08 }),
@@ -573,8 +625,8 @@ export function createCar(design, { merge = false, lite = false } = {}) {
     for (const [s, front] of [[pr.frontAxle, true], [pr.rearAxle, false]]) for (const side of [1, -1]) {
         const w = makeWheel(p, mats, front, lite);
         w.position.set(X(s), p.wheel, side * (p.W / 2 - (front ? 0.16 : 0.15)));
-        if (side < 0) w.rotation.y = Math.PI;
-        w.userData = { front, side };
+        if (side < 0) { w.rotation.y = Math.PI; const cal = w.userData.cal; cal.position.x *= -1; cal.rotation.z *= -1; }   // (the callipers sit at the back of the disc on both sides)
+        Object.assign(w.userData, { front, side });
         if (front && p.wheelCovers) {
             // a smooth, slightly domed cover over the outside of the wheel (it turns with the steering but hides the spokes)
             const cover = new THREE.Mesh(new THREE.CylinderGeometry(p.wheel * 0.7, p.wheel * 0.74, 0.03, 28), mats.paintPlain);
@@ -820,8 +872,9 @@ export function createCar(design, { merge = false, lite = false } = {}) {
             car.add(strut);
         }
     }
-    if (merge) { wheels.forEach(w => { w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
-    const dispose = () => { car.traverse(o => { if (o.geometry) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); };
+    if (merge) { wheels.forEach(w => { const sp = w.userData.spin; sp.userData.wheelRoot = true; mergeByMaterial(sp); w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
+    // (the shared tyre and disc pictures, and shared suspension parts, are kept for the next car)
+    const dispose = () => { car.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map && m.map !== TYRE_TEX && m.map !== DISC_TEX) m.map.dispose(); m.dispose(); }); };
     return { group: car, mats, wheels, dispose };
 }
 // =====================================================================
