@@ -1,4 +1,4 @@
-const CACHE_NAME = 'supercar-legends-dev4'; // Bump this on every change so tablets pick up the new version
+const CACHE_NAME = 'supercar-legends-dev5'; // Bump this on every change so tablets pick up the new version
 const CACHE_PREFIX = CACHE_NAME.replace(/\d+$/, ''); // Only delete this app's own old caches: every app on richardbrb9-coder.github.io shares the same cache storage
 
 // The car list and picture credits, so every photo can be saved for offline use.
@@ -27,6 +27,7 @@ const CORE_FILES = [
     './suspension.js',
     './reflections.js',
     './trackdetail.js',
+    './soundfx.js',
     './sounds/v8_loop.wav',
     './sounds/v12_loop.wav',
     './sounds/high_loop.wav',

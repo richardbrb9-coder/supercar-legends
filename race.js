@@ -7,6 +7,7 @@ import { buildCockpit } from './cockpit.js';
 import { fitSuspension, updateSuspension, jolt } from './suspension.js';
 import { ReflectionProbe, reflectiveMaterials } from './reflections.js';
 import { roadMarks, kerbs, kerbHeight, barriers } from './trackdetail.js';
+import { RaceSound } from './soundfx.js';
 import { Weather, WEATHERS, weatherLook } from './weather.js';
 import { Post } from './post.js';
 import { createCar, carStats, loadDesign, PRESETS, PAINTS, ENGINES, RIMS, DEFAULT, UNLOCKS, medalPoints, applyPreset } from './carmodel.js';
@@ -484,6 +485,7 @@ function drivePlayer(dt) {
     }
     if (go) { r.driveTime = (r.driveTime || 0) + dt; if (onGrass) r.grassTime = (r.grassTime || 0) + dt; }
     const vmax = onGrass ? Math.min(P.vmax, 30) : P.vmax;
+    r.throttle = go && gas;                                  // (for the sounds: pops when you lift off, the turbo)
     let a = 0;
     const vTop = r.slip ? vmax * 1.05 : vmax;
     if (go && gas) a += P.a0 * Math.max(0.12, 1 - r.v / vTop) * (r.slip ? 1.15 : 1);
@@ -861,12 +863,16 @@ function startEngine() {
     const ev = player.stats.engine.sound === 0, kind = player.design.engine;
     // everything goes through a gentle compressor, so the engine can be loud without crackling
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(ctx.destination);
-    const master = ctx.createGain(); master.gain.value = 1.6; master.connect(comp);
+    // inside the cockpit the sound is muffled, as if heard through the car's body
+    const muffle = ctx.createBiquadFilter(); muffle.type = 'lowpass'; muffle.frequency.value = 20000; muffle.connect(comp);
+    const master = ctx.createGain(); master.gain.value = 1.6; master.connect(muffle);
     // small speakers (laptops, tablets) can't play the deep engine note, so a copy of it with only the higher tones
     // ('presence') is added on top: the same engine, but you can hear it on any speaker
     const presence = ctx.createBiquadFilter(); presence.type = 'highpass'; presence.frequency.value = 380; const pg = ctx.createGain(); pg.gain.value = 1.8;
     presence.connect(pg); pg.connect(master);
-    engine = { ctx, ev, master, kind, presence };
+    engine = { ctx, ev, master, kind, presence, muffle };
+    // gear changes, pops and crackles, turbo, wind, kerbs, the rivals' engines, the city echo (see soundfx.js)
+    try { engine.fx = new RaceSound(ctx, master, { city: TRACK.theme === 'city', turbo: kind === 'v8' || kind === 'hybrid', ev, post: muffle, presence }); } catch (e) { engine.fx = null; }
     // the made-up tones (used for electric cars, and until the recordings have loaded)
     const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
     o1.type = ev ? 'sine' : 'sawtooth'; o2.type = ev ? 'triangle' : 'square';
@@ -883,6 +889,7 @@ function startEngine() {
         engine.low = loopSource(ctx, kind === 'v12' || kind === 'v10' ? soundBufs.v12 || soundBufs.v8 : soundBufs.v8, master, engine.presence);
         engine.high = loopSource(ctx, soundBufs.high, master, engine.presence);
         engine.real = true;
+        if (engine.fx) engine.fx.useEngineRecording(soundBufs.v8);
     });
     if (weather) weather.startSound(ctx, soundOn);
 }
@@ -894,8 +901,21 @@ function startRoar() {
 }
 function updateEngine() {
     if (!engine) return;
-    const v = Math.abs(player.v), vmax = player.perf.vmax, t = engine.ctx.currentTime, on = engineOn ? (input.gas ? 1 : 0.55) : 0;
+    const v = Math.abs(player.v), vmax = player.perf.vmax, t = engine.ctx.currentTime;
     const gs = gearState(player), rpm = 0.18 + gs.inGear * 0.78;
+    let cut = 1;
+    if (engine.fx) {
+        const h = player.heading, sn = Math.sin(h), cs = Math.cos(h), pvx = cs * player.v, pvz = -sn * player.v;
+        const rv = rivals.map(o => {
+            const dx = o.x - player.x, dz = o.z - player.z, dist = Math.hypot(dx, dz) || 0.01, ux = dx / dist, uz = dz / dist;
+            const ovx = Math.cos(o.heading) * o.v, ovz = -Math.sin(o.heading) * o.v;
+            return { dist, side: (dx * sn + dz * cs) / dist, closing: -((ovx - pvx) * ux + (ovz - pvz) * uz), v: o.v, vmax: o.perf.vmax };
+        });
+        const onKerb = !!(player.susp && Math.max(...player.susp.bumps) > 0.025);
+        cut = engine.fx.update(0, { v: player.v, vmax, gear: gs.gear, rpm, gas: !!player.throttle, onKerb, onGrass: !!player.onGrass, cockpit: camMode === 3, engineOn, soundOn, rivals: rv });
+    }
+    engine.muffle.frequency.setTargetAtTime(camMode === 3 ? 1900 : 20000, t, 0.1);
+    const on = engineOn ? (input.gas ? 1 : 0.55) * cut : 0;
     let f;
     if (engine.ev) f = 200 + v / vmax * 1600;
     else f = (player.stats.engine.sound || 90) * (0.55 + gs.inGear * 1.1 + (gs.gear - 1) * 0.05);
@@ -914,6 +934,7 @@ function stopEngine() {
     if (weather) weather.stopSound();
     if (!engine) return;
     const e = engine, t = e.ctx.currentTime; engine = null;
+    if (e.fx) setTimeout(() => e.fx.stop(), 400);
     try { e.master.gain.setTargetAtTime(0, t, 0.05); setTimeout(() => { try { e.master.disconnect(); e.o1.stop(); e.o2.stop(); if (e.low) { e.low.s.stop(); e.high.s.stop(); } } catch (err) { /* already stopped */ } }, 400); } catch (err) { /* already stopped */ }
 }
 
@@ -1015,7 +1036,7 @@ function bindControls() {
     window.addEventListener('keyup', e => { if (keys[e.code]) input[keys[e.code]] = false; });
     window.addEventListener('blur', () => { Object.keys(input).forEach(k => { if (k !== 'tilt') input[k] = false; }); });
 }
-function getAudioStart() { if (!engine) startEngine(); }
+function getAudioStart() { if (!engine && race && !race.paused && !race.replay) startEngine(); }   // (not while paused or watching a replay)
 let tiltOn = false;
 function tiltHandler(e) { if (e.gamma == null) return; const landscape = Math.abs(window.orientation || 0) === 90 || innerWidth > innerHeight; const raw = landscape ? e.beta * (window.orientation === -90 ? -1 : 1) : e.gamma; input.tilt = -Math.max(-1, Math.min(1, raw / 25)); }
 async function toggleTilt() {
