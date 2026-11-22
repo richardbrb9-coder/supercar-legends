@@ -816,11 +816,12 @@ function podiumFrame(dt) {
     // The picture is slid up the screen, so the cars sit above the sheet of lap times.
     const fov = camera.aspect < 1 ? 58 : 44, tanV = Math.tan(fov * Math.PI / 360), ease = 1 - Math.pow(1 - Math.min(1, P.t / 2.2), 3);
     const short = renderer.domElement.clientHeight < 500 && camera.aspect > 1.2;   // a phone on its side: the heading sits beside the cars, so they move over to the right
-    const far = Math.max((camera.aspect < 1 ? 6.1 : 5.9) / (tanV * camera.aspect * (short ? 0.72 : 1)), 3.1 / tanV), dist = far * (1.35 - 0.35 * ease) + STEP_LEN / 2;
+    // (an upright phone is narrow, so the cars are framed tightly there: the outer corners of steps 2 and 3 may be cut off, the cars never are)
+    const far = Math.max((camera.aspect < 1 ? 5.1 : 5.9) / (tanV * camera.aspect * (short ? 0.72 : 1)), 3.1 / tanV), dist = far * (1.35 - 0.35 * ease) + STEP_LEN / 2;
     const a = Math.sin(P.t * 0.32) * Math.min(0.34, Math.asin(Math.min(1, (HW - 2.5) / (far * 1.35 + STEP_LEN / 2)))), c = Math.cos(P.heading + a), sn = Math.sin(P.heading + a);   // (the camera stays over the road, inside the barriers)
     camera.fov = fov; camera.position.set(P.x + c * dist, 2.0 + (1 - ease) * 2.5, P.z - sn * dist);
     camera.lookAt(podiumLook.set(P.x, 0.9, P.z));
-    camera.setViewOffset(camera.aspect * 1000, 1000, short ? -140 * camera.aspect : 0, camera.aspect < 1 ? 170 : short ? 190 : 150, camera.aspect * 1000, 1000);
+    camera.setViewOffset(camera.aspect * 1000, 1000, short ? -140 * camera.aspect : 0, camera.aspect < 1 ? 120 : short ? 190 : 150, camera.aspect * 1000, 1000);
     camPos.copy(camera.position); camLook.copy(podiumLook);
     followSun(P.x, P.z); world.update(dt);
     if (weather) weather.update(dt, camera.position, 0, 0);
