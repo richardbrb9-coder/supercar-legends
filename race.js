@@ -260,7 +260,7 @@ const ordinal = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14
 function rivalDesign(i) {
     const keys = Object.keys(PRESETS).filter(k => k !== 'formula'), preset = keys[(i * 2 + 1 + Math.floor(Math.random() * 2)) % keys.length];
     const paint = PAINTS.filter(c => c !== loadDesign().paint)[(i * 3 + Math.floor(Math.random() * 3)) % 10];
-    const engines = Object.keys(ENGINES), rims = Object.keys(RIMS);
+    const engines = Object.keys(ENGINES).filter(k => k !== 'v6h'), rims = Object.keys(RIMS);   // (the Formula racer and its engine are yours alone: the rivals keep to the six road-car styles)
     const d = applyPreset({ ...DEFAULT }, preset);
     // each rival runs a motorsport team paint job in its own team colours, with its own race number
     const team = TEAM_COLOURS[i % TEAM_COLOURS.length];

@@ -22,18 +22,17 @@ const V = (x, y, z) => new THREE.Vector3(x, y, z);
 export function formulaFrame(d) {
     const L = d.L, kz = d.W / 2, R = d.wheel, dy = (d.ride || 0.06) - 0.06, n = d.nose || 0.3;
     const at = m => L / 2 - (m / 5.5) * L;                 // where along the car (x) a distance back from the nose is
-    const K = curve;
     const fl = 0.065 + dy;                                 // the top of the flat floor
     // the middle body from nose to tail: its top, its underside and its half-width
-    const top = K([[0.07, n - 0.03 + dy], [0.2, n + 0.012 + dy], [0.55, 0.42 + (n - 0.3) * 0.6 + dy], [1.1, 0.58 + dy], [1.65, 0.625 + dy], [2.0, 0.64 + dy], [2.6, 0.665 + dy], [2.9, 0.66 + dy], [3.3, 0.62 + dy], [3.95, 0.52 + dy], [4.5, 0.43 + dy], [4.95, 0.37 + dy], [5.25, 0.34 + dy]]);
-    const under = K([[0.07, n - 0.1 + dy], [0.2, n - 0.105 + dy], [0.55, 0.22 + (n - 0.3) * 0.5 + dy], [1.1, 0.27 + dy], [1.5, 0.2 + dy], [1.72, 0.09 + dy], [1.98, fl], [4.4, fl], [4.62, 0.12 + dy], [4.95, 0.22 + dy], [5.25, 0.27 + dy]]);
-    const half = K([[0.07, 0.06], [0.2, 0.085], [0.55, 0.13], [1.1, 0.19], [1.65, 0.27], [2.0, 0.31], [2.6, 0.33], [3.0, 0.33], [3.6, 0.3], [4.1, 0.2], [4.5, 0.13], [4.95, 0.07], [5.25, 0.05]]);
+    const top = curve([[0.07, n - 0.03 + dy], [0.2, n + 0.012 + dy], [0.55, 0.42 + (n - 0.3) * 0.6 + dy], [1.1, 0.58 + dy], [1.65, 0.625 + dy], [2.0, 0.64 + dy], [2.6, 0.665 + dy], [2.9, 0.66 + dy], [3.3, 0.62 + dy], [3.95, 0.52 + dy], [4.5, 0.43 + dy], [4.95, 0.37 + dy], [5.25, 0.34 + dy]]);
+    const under = curve([[0.07, n - 0.1 + dy], [0.2, n - 0.105 + dy], [0.55, 0.22 + (n - 0.3) * 0.5 + dy], [1.1, 0.27 + dy], [1.5, 0.2 + dy], [1.72, 0.09 + dy], [1.98, fl], [4.4, fl], [4.62, 0.12 + dy], [4.95, 0.22 + dy], [5.25, 0.27 + dy]]);
+    const half = curve([[0.07, 0.06], [0.2, 0.085], [0.55, 0.13], [1.1, 0.19], [1.65, 0.27], [2.0, 0.31], [2.6, 0.33], [3.0, 0.33], [3.6, 0.3], [4.1, 0.2], [4.5, 0.13], [4.95, 0.07], [5.25, 0.05]]);
     // the cockpit opening: a rounded slot in the top of the tub
     const C0 = 2.02, C1 = 2.73;
     const open = m => m <= C0 || m >= C1 ? 0 : 0.235 * Math.pow(Math.sin(Math.PI * (m - C0) / (C1 - C0)), 0.45);
     // the airbox over the driver's head, running back as the spine of the engine cover
-    const spineTop = K([[2.74, 0.925 + dy], [2.86, 0.955 + dy], [3.1, 0.94 + dy], [3.5, 0.85 + dy], [4.1, 0.66 + dy], [4.75, 0.44 + dy]]);
-    const spineHalf = K([[2.74, 0.1], [3.1, 0.095], [3.9, 0.06], [4.75, 0.03]]);
+    const spineTop = curve([[2.74, 0.925 + dy], [2.86, 0.955 + dy], [3.1, 0.94 + dy], [3.5, 0.85 + dy], [4.1, 0.66 + dy], [4.75, 0.44 + dy]]);
+    const spineHalf = curve([[2.74, 0.1], [3.1, 0.095], [3.9, 0.06], [4.75, 0.03]]);
     const F = { d, L, kz, R, dy, at, fl, floorY: fl - 0.02, top, under, half, open, C0, C1, spineTop, spineHalf,
         frontAxle: 1.1, rearAxle: 4.7, helmet: { m: 2.5, y: 0.755 + dy }, wheelM: 2.12, wheelY: 0.595 + dy, mirror: { m: 2.02, y: 0.7 + dy, z: 0.47 } };
     return F;
@@ -174,10 +173,10 @@ function rimPoints(F, steps) {
 // A sidepod: a pod each side of the tub with an air intake at the front, cut away underneath at the front (the undercut)
 // and sloping down and inwards to the rear (the narrow 'coke-bottle' waist)
 function podGeometry(F, side, lite) {
-    const kz = F.kz, dy = F.dy, K = pts => curve(pts);
-    const zo = K([[2.23, 0.76], [2.6, 0.8], [3.1, 0.8], [3.65, 0.68], [3.95, 0.5], [4.26, 0.34]]);
-    const y1 = K([[2.23, 0.6], [2.5, 0.62], [2.9, 0.6], [3.4, 0.48], [3.85, 0.32], [4.26, 0.14]]);
-    const y0 = K([[2.23, 0.33], [2.5, 0.3], [2.9, 0.24], [3.3, 0.12], [3.5, 0.055], [4.26, 0.055]]);
+    const kz = F.kz, dy = F.dy;
+    const zo = curve([[2.23, 0.76], [2.6, 0.8], [3.1, 0.8], [3.65, 0.68], [3.95, 0.5], [4.26, 0.34]]);
+    const y1 = curve([[2.23, 0.6], [2.5, 0.62], [2.9, 0.6], [3.4, 0.48], [3.85, 0.32], [4.26, 0.14]]);
+    const y0 = curve([[2.23, 0.33], [2.5, 0.3], [2.9, 0.24], [3.3, 0.12], [3.5, 0.055], [4.26, 0.055]]);
     const N = lite ? 9 : 22, Kp = lite ? 12 : 22, rows = [], mouth = [];
     for (let i = -1; i <= N; i++) {
         const lip = i < 0, m = lip ? 2.23 : lerp(2.26, 4.26, i / N), x = F.at(lip ? 2.225 : m), zi = Math.max(0.05, Math.min(0.26, F.half(m) - 0.06));
@@ -256,6 +255,7 @@ export function createFormulaCar(design, { merge = false, lite = false, draft = 
 
     // ---- the front wing: stacked curved elements between two end plates, swept back towards the tips ----
     const zsF = (lite ? [-1, -0.6, -0.2, 0.2, 0.6, 1] : [-1, -0.85, -0.68, -0.5, -0.32, -0.14, 0.14, 0.32, 0.5, 0.68, 0.85, 1]).map(t => t * 0.965 * kz);
+    // each element: [front edge at the middle (m), how far it sweeps back by the tips, height, length at the middle and at the tips, tilt, extra rise part-way out]
     const fw = [[0, 0.22, 0.085, 0.26, 0.2, 0.07, 0], [0.2, 0.2, 0.118, 0.17, 0.17, 0.21, 0.01], [0.33, 0.18, 0.158, 0.15, 0.15, 0.35, 0.025], [0.42, 0.15, 0.205, 0.13, 0.13, 0.49, 0.04]];
     fw.forEach(([m0, sweep, y, c0, c1, tilt, rise], j) => {
         const g = wingElement(zsF, z => { const t = Math.abs(z) / (0.965 * kz); return { x: at(m0 + sweep * t * t), y: y + dy + rise * Math.sin(Math.PI * Math.min(1, t * 1.1)), chord: lerp(c0, c1, t), tilt, th: 0.014, camber: 0.022 }; });
