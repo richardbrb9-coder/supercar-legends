@@ -325,7 +325,9 @@ function updateReflections() {
     for (const r of [player, ...rivals]) {
         if (!r) continue;
         if (r.envTex !== tex) { r.envTex = tex; for (const m of reflectiveMaterials(r.model)) { m.envMap = tex; m.needsUpdate = true; } }
-        if (tex) for (const m of reflectiveMaterials(r.model)) m.envMapIntensity = scene.environmentIntensity * 1.35;   // (the real surroundings are darker than the old plain sky, so a little brighter)
+        // (the real surroundings are darker than the old plain sky, so a little brighter; each material keeps its own
+        // strength from carmodel.js, e.g. the darker see-through glass, as a multiplier)
+        if (tex) for (const m of reflectiveMaterials(r.model)) { if (m.userData.envBase === undefined) m.userData.envBase = m.envMapIntensity; m.envMapIntensity = scene.environmentIntensity * 1.35 * m.userData.envBase; }
     }
     if (tex) probe.update(scene, player.holder.position, [player.holder, weather && weather.group].filter(Boolean), sky);
 }

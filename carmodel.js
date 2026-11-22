@@ -292,7 +292,7 @@ function cabinGeometry(p, pr, lite = false) {
 // The cabin is painted with its windows: framed glasshouse (60s), glass bubble with a painted roof spine, or all-glass canopy
 // seeThrough (the detailed hypercar): the glass is tinted but lets you see the seats and driver inside
 function cabinTexture(d, pr, seeThrough = false) {
-    const s90 = isSuper90(pr.q), lt = isLongtail(pr.q), S = (s90 || lt) && seeThrough ? 2 : 1;   // (the closely-seen 90s supercar has fine lines on its cabin, so its picture is sharper)
+    const s90 = isSuper90(pr.q), lt = isLongtail(pr.q), ev = isElectric(pr.q), S = (s90 || lt || ev) && seeThrough ? 2 : 1; let gloss = null;   // (the closely-seen 90s supercar has fine lines on its cabin, so its picture is sharper)
     const W = 512, H = 256, c = document.createElement('canvas'); c.width = W * S; c.height = H * S;
     const x = c.getContext('2d'), Y = v => (1 - v) * H, glass = seeThrough ? (lt ? 'rgba(9,13,18,0.7)' : 'rgba(9,13,18,0.58)') : '#0b0f14'; x.scale(S, S);   // (a deeper tint on the Longtail: its canopy is nearly all glass)
     const span = pr.c1 - pr.c0, rake = (pr.rakeEnd - pr.c0) / span, roofEnd = (pr.roofEnd - pr.c0) / span;
@@ -330,7 +330,10 @@ function cabinTexture(d, pr, seeThrough = false) {
         rect(rake + 0.16, 0.74, 0.262, 0.425); rect(rake + 0.16, 0.74, 0.575, 0.738);   // side windows behind it
     }
     if (style === 'tallglass' && s90) cabin90(x, d, pr, W, Y, rake, seeThrough ? 'rgba(9,13,18,0.66)' : glass);   // (a slightly deeper tint than the hypercar's: there is a lot of glass here)
-    else if (style === 'tallglass') {                            // big windscreen, tall side glass, painted roof and engine cover
+    else if (style === 'tallglass' && ev) {
+        let mk = null; if (seeThrough) { gloss = document.createElement('canvas'); gloss.width = W / 2; gloss.height = H / 2; mk = gloss.getContext('2d'); mk.scale(0.5, 0.5); }
+        cabinEV(x, d, pr, W, Y, rake, seeThrough ? 'rgba(9,13,18,0.74)' : glass, mk);
+    } else if (style === 'tallglass') {                            // big windscreen, tall side glass, painted roof and engine cover
         x.fillStyle = glass;
         rect(0.02, rake + 0.03, 0.255, 0.745);
         rect(rake + 0.04, 0.55, 0.255, 0.4); rect(rake + 0.04, 0.55, 0.6, 0.745);           // door windows
@@ -340,7 +343,36 @@ function cabinTexture(d, pr, seeThrough = false) {
         }
     }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    if (gloss) t.userData.gloss = new THREE.CanvasTexture(gloss);   // (which parts are glass and which are paint)
     return t;
+}
+
+// The Electric's cabin: a long windscreen between painted pillars, door windows with a small window behind each, doors that
+// open upwards and take a piece of the painted roof with them, and a dark rear window with a slim brake light under it. mk (if given): a second picture marking glass and paint, so the glass
+// can be smooth and dark while the painted roof keeps the paint's own finish
+const GLASS_EV = 'rgba(0,70,0,0.3)';
+function cabinEV(x, d, pr, W, Y, rake, glass, mk) {
+    const D = doorsEV(pr), uP = D.uP, uB = D.uB, belt = 0.255, top = 0.408, hd = rake + 0.03;
+    const poly = (c, pts) => { c.beginPath(); pts.forEach(([u, v], i) => i ? c.lineTo(u * W, Y(v)) : c.moveTo(u * W, Y(v))); c.closePath(); };
+    const mir = pts => pts.map(([u, v]) => [u, 1 - v]);
+    const win = [[uP + 0.045, belt], [hd + 0.035, top - 0.004], [uB - 0.03, top - 0.004], [uB + 0.005, belt]];
+    const quarter = [[uB + 0.035, belt], [uB + 0.014, top - 0.03], [uB + 0.15, belt]];
+    const screen = [[0.02, belt], [uP, belt], [hd, top], [hd, 1 - top], [uP, 1 - belt], [0.02, 1 - belt]];
+    x.lineJoin = 'round'; x.lineCap = 'round'; if (mk) { mk.fillStyle = 'rgb(255,255,255)'; mk.fillRect(0, 0, W, Y(0)); }   // (red: how much clear coat, green: how rough, blue: how metallic, see-through-ness: how strongly it reflects)
+    // (each pane is cut out of the paint first, so see-through glass really is see-through; then a black band goes round it, where the glass is bonded in)
+    for (const [p, tint] of [[screen, glass], [win, glass], [mir(win), glass], [quarter, glass], [mir(quarter), glass]]) {
+        poly(x, p); x.globalCompositeOperation = 'destination-out'; x.fillStyle = '#000'; x.fill(); x.globalCompositeOperation = 'source-over'; x.fillStyle = tint; x.fill(); x.strokeStyle = '#07090c'; x.lineWidth = 2.6; x.stroke();
+        if (mk) { poly(mk, p); mk.globalCompositeOperation = 'destination-out'; mk.fillStyle = '#000'; mk.fill(); mk.globalCompositeOperation = 'source-over'; mk.fillStyle = GLASS_EV; mk.fill(); } }
+    // each door takes a piece of the roof with it: the cut runs up the pillar, along the roof close to the middle, and down behind the window
+    const cut = [[uB - 0.004, top], [uB - 0.012, 0.487], [hd + 0.045, 0.487], [hd + 0.035, top]];
+    for (const pts of [cut, mir(cut)]) for (const [col, off, wd] of [['rgba(255,255,255,0.2)', 0.7, 0.9], ['rgba(0,0,0,0.75)', 0, 1.3]]) {
+        x.strokeStyle = col; x.lineWidth = wd; x.beginPath(); pts.forEach(([u, v], i) => i ? x.lineTo(u * W + off, Y(v) + off) : x.moveTo(u * W + off, Y(v) + off)); x.stroke(); }
+    // rear window: dark glass down the fastback, with fine heater lines, and a slim brake light below it
+    const rw = [0.655 * W, Y(0.63), 0.2 * W, Y(0.37) - Y(0.63)];
+    x.fillStyle = '#090b0f'; x.beginPath(); x.roundRect(...rw, 6); x.fill(); if (mk) { mk.beginPath(); mk.roundRect(...rw, 6); mk.globalCompositeOperation = 'destination-out'; mk.fillStyle = '#000'; mk.fill(); mk.globalCompositeOperation = 'source-over'; mk.fillStyle = GLASS_EV; mk.fill(); }
+    x.strokeStyle = 'rgba(120,130,145,0.16)'; x.lineWidth = 0.6; for (let i = 1; i < 8; i++) { const u = rw[0] + rw[2] * i / 8; x.beginPath(); x.moveTo(u, rw[1] + 5); x.lineTo(u, rw[1] + rw[3] - 5); x.stroke(); }
+    x.strokeStyle = '#07090c'; x.lineWidth = 2.6; x.beginPath(); x.roundRect(...rw, 6); x.stroke();
+    x.fillStyle = '#7a0f0a'; x.fillRect(0.875 * W, Y(0.56), 0.007 * W, Y(0.44) - Y(0.56));
 }
 
 // The 90s supercar's cabin: a windscreen between two painted pillars, door windows, doors that cut up into the roof, a rear
@@ -475,18 +507,18 @@ function makeWheel(p, mats, front, lite = false, covered = false) {   // (covere
     hub.rotation.x = Math.PI / 2; face.add(hub);
     // wheel nuts round the hub
     if (!lite && !covered && p.rim !== 'wire') for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, n = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.03, 6), mats.chrome); n.rotation.x = Math.PI / 2; n.position.set(Math.cos(a) * rimR * 0.12, Math.sin(a) * rimR * 0.12, 0.03); face.add(n); }
-    const spoke = (n, w, twist = 0, depth = 0.035) => {
+    const spoke = (n, w, twist = 0, depth = 0.035, blade = false) => {   // (blade: each spoke twists about its own length, like a fan blade, and stays inside the rim)
         for (let i = 0; i < n; i++) {
             const s = new THREE.Mesh(new THREE.BoxGeometry(w, rimR * 0.85, depth), mats.rim);
             s.geometry.translate(0, rimR * 0.5, 0);
-            s.rotation.z = (i / n) * Math.PI * 2; s.rotation.y = twist; face.add(s);
+            if (blade) s.rotation.order = 'ZYX'; s.rotation.z = (i / n) * Math.PI * 2; s.rotation.y = twist; face.add(s);
         }
     };
     const rim = covered ? 'none' : p.rim;
     if (rim === 'five') spoke(5, rimR * 0.22);
     if (rim === 'ten') spoke(10, rimR * 0.09);
     if (rim === 'mesh') { spoke(14, rimR * 0.05); const m = new THREE.Group(); face.add(m); spoke(14, rimR * 0.05, 0.5); }
-    if (rim === 'turbine') spoke(12, rimR * 0.16, 0.6, 0.02);
+    if (rim === 'turbine') spoke(12, rimR * 0.16, 0.6, 0.02, true);
     if (rim === 'wire') {                 // many thin crossed spokes and a central spinner
         spoke(24, rimR * 0.022, 0.18, 0.01); spoke(24, rimR * 0.022, -0.18, 0.01);
         for (const r of [0, Math.PI / 2]) { const ear = new THREE.Mesh(new THREE.BoxGeometry(rimR * 0.5, rimR * 0.08, 0.04), mats.rim); ear.rotation.z = r + 0.4; ear.position.z = 0.03; face.add(ear); }
@@ -620,7 +652,7 @@ function liveryTexture(d, hd = false) {
             x.fillStyle = sc === d.paint ? '#111' : sc; x.font = `800 ${0.16 * pxU}px "Exo 2", Arial, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(tag, 0, 0);
         });
     }
-    if (isHyper(d)) panelLines(x, d, W, H, Y, pxU, pxV); else if (isSuper90(d)) panelLines90(x, d, W, H, Y, pxU, pxV); else if (isLongtail(d)) panelLinesLT(x, d, W, H, Y, pxU, pxV);
+    if (isHyper(d)) panelLines(x, d, W, H, Y, pxU, pxV); else if (isSuper90(d)) panelLines90(x, d, W, H, Y, pxU, pxV); else if (isLongtail(d)) panelLinesLT(x, d, W, H, Y, pxU, pxV); else if (isElectric(d)) panelLinesEV(x, d, W, H, Y, pxU, pxV);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = hd ? 8 : 4;
     t.addEventListener('dispose', () => { if (CANVAS_POOL[S].length < 1) CANVAS_POOL[S].push(c); });   // (kept for the next car, see CANVAS_POOL)
     return t;
@@ -637,7 +669,9 @@ const isHyper = d => d.lamps === 'twin' && d.cabinStyle === 'bubble' && d.cross 
 const isSuper90 = d => d.lamps === 'pods' && d.cabinStyle === 'tallglass' && d.scoop === 'snorkel';
 // The Longtail gets its own detail too (three seats under the canopy, slim lamp strips, a light bar and flaps at the tail tip)
 const isLongtail = d => d.lamps === 'slim' && d.cabinStyle === 'canopy' && !!d.wheelCovers && !!d.tailBar;
-const isDetailed = d => isHyper(d) || isSuper90(d) || isLongtail(d);
+// The Electric gets its own detail as well (blade lamps, glass panels in the roof, a louvred bonnet vent, a charging flap, a meshed tail with a strip of light)
+const isElectric = d => d.lamps === 'blade' && d.cabinStyle === 'tallglass' && d.scoop === 'bonnetvent';
+const isDetailed = d => isHyper(d) || isSuper90(d) || isLongtail(d) || isElectric(d);
 // Does the driver sit in the middle? (the 90s supercar and the Longtail, recognised by their parts, so it still holds after the sliders are moved)
 export const centreSeat = d => isSuper90(d) || isLongtail(d);
 // Where a point on the body's skin falls on the paint picture, for the cross-section at s (matches loftUV: v by distance round the ring)
@@ -824,6 +858,70 @@ function panelLinesLT(x, d, W, H, Y, pxU, pxV) {
         for (const [col, off] of [['rgba(255,255,255,0.16)', 0.9], ['rgba(0,0,0,0.72)', 0]]) { x.strokeStyle = col; x.lineWidth = 0.008 * pxU; x.beginPath(); x.roundRect(s * W - r * 1.3 + off, PY(v) - r + off, r * 2.6, r * 2, r * 0.6); x.stroke(); } }
     x.restore();
 }
+// Where the Electric's doors start and end, along the body (sA, sB, and sP: the foot of the windscreen pillar) and along the cabin's picture (uP, uB)
+function doorsEV(pr) {
+    const span = pr.c1 - pr.c0, rake = (pr.rakeEnd - pr.c0) / span, archR = (pr.wheelR + 0.055) / pr.q.L, fArch = pr.frontAxle + archR, rearArch = pr.rearAxle - archR;
+    // (the door's top corners are worked out along the cabin, then the body's lines are drawn to meet them, so the cuts line up wherever the cabin sliders are)
+    const sA = fArch + 0.028, uP = Math.min(rake - 0.04, Math.max(0.03, (Math.max(sA + 0.02, pr.c0 + span * (rake * 0.72 + 0.02)) - pr.c0) / span - 0.02));
+    const uB = Math.min(0.62, Math.max(rake + 0.14, (Math.max(sA + 0.12, Math.min(pr.c0 + span * 0.56, rearArch - 0.035)) - pr.c0) / span));
+    return { span, rake, fArch, rearArch, uP, sP: pr.c0 + span * (uP + 0.02), sA, sB: pr.c0 + span * uB, uB };
+}
+const EVBLUE = '#35c8ff';
+// the line each of the Electric's blade lamps follows: from its inner end on the nose (t = 0), sweeping back along the top of the wing (t = 1)
+const lampEV = t => [0.028 + 0.08 * Math.pow(t, 1.6), lerp(0.48, 0.9, t)];
+// the opening of the Electric's bonnet vent: from s0 back to s1, and how far out across the bonnet it reaches at each end
+const VENT_EV = { s0: 0.088, s1: 0.142, u0: 0.4, u1: 0.48 };
+// where the charging flap sits: on top of the left rear wing, over the wheel
+const chargeEV = pr => [pr.rearAxle - 0.012, 0.8];
+// The Electric's panel lines: doors that open up into the roof (they carry on in the cabin's own picture), the front lid round
+// the bonnet vent, the opening of that vent, the beds of the blade lamps, deep side intakes that start in the doors, the rear
+// clamshell, a carbon strip along the sills and a charging flap with a ring of light (or a fuel flap, if it has a petrol engine)
+function panelLinesEV(x, d, W, H, Y, pxU, pxV) {
+    const { pr, k, R, archR, PY, each, line, vTop, vLow, handle, intake } = panelTools(x, d, W, H, Y, pxU, pxV);
+    const D = doorsEV(pr), dA = D.sA, fArch = D.fArch, rearArch = D.rearArch, sP = D.sP, dB = Math.max(dA + 0.1, Math.min(D.sB, rearArch - 0.02)), plug = d.engine === 'ev' || d.engine === 'hybrid';
+    x.save(); x.scale(1, k);
+    // a slim carbon strip low along each side, from wheel to wheel, with a fine bright edge
+    each(P => { for (const [col, y, wd] of [['#0c0d10', d.ride + 0.115, 0.034], ['rgba(170,178,190,0.45)', d.ride + 0.134, 0.004]]) { x.strokeStyle = col; x.lineWidth = wd * pxU; x.lineCap = 'butt'; x.beginPath();
+        for (let i = 0; i <= 12; i++) { const s = lerp(fArch + 0.006, rearArch - 0.006, i / 12), q = [s * W, P(R(s).atY(y))]; i ? x.lineTo(...q) : x.moveTo(...q); } x.stroke(); } });
+    // doors: the front edge slants down and forwards from the foot of the windscreen pillar, then the sill and an upright back edge
+    const sM = lerp(sP, dA, 0.6), door = [[sP, vTop(sP)], [sM, lerp(vLow(sM), vTop(sM), 0.55)], [dA, lerp(vLow(dA), vTop(dA), 0.2)], [dA + 0.012, vLow(dA + 0.012)]];
+    for (let i = 1; i <= 5; i++) { const s = lerp(dA + 0.012, dB - 0.01, i / 5); door.push([s, vLow(s)]); }
+    door.push([dB, lerp(vLow(dB), vTop(dB), 0.2)], [D.sB, vTop(D.sB)]);
+    line(door);
+    intake(lerp(dA, dB, 0.5), rearArch - 0.012, [0.45, 0.7]);    // a deep side intake that starts in the door and opens out in front of the back wheel
+    handle(dB - 0.04, 0.87);                                      // flush pop-out handles
+    // front lid: from behind the lamps to the windscreen, round the bonnet vent
+    const l0 = 0.062, l1 = Math.max(l0 + 0.04, pr.c0 - 0.02), lh = s => lerp(0.4, 0.7, Math.min(1, (s - l0) / (l1 - l0) * 1.6)), lid = [[l0, 0.5]];
+    for (let i = 0; i <= 10; i++) { const s = lerp(l0, l1, i / 10); lid.push([s, R(s).atU(lh(s))]); }
+    lid.push([l1, 0.5]); line(lid, 0.007);
+    // the bonnet vent's opening: dark and deep at the front, with its floor rising into the light at the back (the louvres are real parts over it)
+    each(P => { const B = VENT_EV, N = 8, pts = [];
+        for (let i = 0; i <= N; i++) pts.push([B.s0 * W, P(R(B.s0).atU(B.u0 * i / N))]);
+        for (let i = N; i >= 0; i--) pts.push([B.s1 * W, P(R(B.s1).atU(B.u1 * i / N))]);
+        const g = x.createLinearGradient(B.s0 * W, 0, B.s1 * W, 0); g.addColorStop(0, '#000'); g.addColorStop(0.55, '#0b0c0f'); g.addColorStop(1, '#2a2d33');
+        x.beginPath(); pts.forEach((q, i) => i ? x.lineTo(...q) : x.moveTo(...q)); x.closePath(); x.fillStyle = g; x.fill(); x.lineJoin = 'round'; x.strokeStyle = '#050506'; x.lineWidth = 0.008 * pxU; x.stroke();
+        x.strokeStyle = 'rgba(255,255,255,0.4)'; x.lineWidth = 0.006 * pxU; x.beginPath(); for (let i = 0; i <= N; i++) { const q = [(B.s1 + 0.0022) * W, P(R(B.s1).atU(B.u1 * i / N))]; i ? x.lineTo(...q) : x.moveTo(...q); } x.stroke(); });
+    // the dark bed under each blade lamp's clear cover (the strip of light and the lenses are real parts sitting on it), with a fine bright edge
+    each(P => { const h = 0.0105, pts = [];
+        for (let i = 0; i <= 14; i++) { const [s, u] = lampEV(i / 14); pts.push([(s - h * lerp(0.4, 1, i / 14)) * W, P(R(s - h).atU(u))]); }
+        for (let i = 14; i >= 0; i--) { const [s, u] = lampEV(i / 14); pts.unshift([(s + h * lerp(0.4, 1, i / 14)) * W, P(R(s + h).atU(u))]); }
+        x.beginPath(); pts.forEach((q, i) => i ? x.lineTo(...q) : x.moveTo(...q)); x.closePath();
+        x.lineJoin = 'round'; x.strokeStyle = 'rgba(228,232,238,0.45)'; x.lineWidth = 0.012 * pxU; x.stroke(); x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 0.007 * pxU; x.stroke(); x.fillStyle = '#0d0f13'; x.fill(); });
+    // the rear clamshell: its edge runs back from the top of each door, out over the rear wing, and across the tail
+    const sE = 0.968, cs = [];
+    for (let i = 0; i <= 10; i++) { const s = lerp(Math.min(D.sB, sE - 0.1), sE, i / 10); cs.push([s, R(s).atU(lerp(pr.q.cabinWB + 0.03, 0.9, Math.min(1, i / 3)))]); }
+    cs.push([sE, 0.5]); line(cs, 0.007);
+    // on top of the left rear wing: a charging flap (electric and hybrid), a rounded flap with a ring of light round the socket's cover; or a round fuel flap (petrol)
+    if (!plug) { const [s, u] = chargeEV(pr), cx = s * W, cy = PY(1 - R(s).atU(u)), r = 0.052 * pxU;
+        for (const [col, off] of [['rgba(255,255,255,0.16)', 0.9], ['rgba(0,0,0,0.72)', 0]]) { x.strokeStyle = col; x.lineWidth = 0.008 * pxU; x.beginPath(); x.arc(cx + off, cy + off, r, 0, Math.PI * 2); x.stroke(); }
+        x.fillStyle = 'rgba(0,0,0,0.6)'; x.beginPath(); x.roundRect(cx + r * 0.45, cy - r * 0.22, r * 0.3, r * 0.44, r * 0.1); x.fill();
+    } else { const [s, u] = chargeEV(pr), cx = s * W, cy = PY(1 - R(s).atU(u)), r = 0.05 * pxU;
+        for (const [col, off] of [['rgba(255,255,255,0.16)', 0.9], ['rgba(0,0,0,0.72)', 0]]) { x.strokeStyle = col; x.lineWidth = 0.008 * pxU; x.beginPath(); x.roundRect(cx - r * 1.25 + off, cy - r + off, r * 2.5, r * 2, r * 0.55); x.stroke(); }
+        x.fillStyle = 'rgba(0,0,0,0.5)'; x.beginPath(); x.arc(cx, cy, 0.03 * pxU, 0, Math.PI * 2); x.fill(); x.strokeStyle = EVBLUE; x.lineWidth = 0.007 * pxU; x.beginPath(); x.arc(cx, cy, 0.022 * pxU, 0, Math.PI * 2); x.stroke(); }
+    // bumper joins at the front and back corners
+    for (const s of [Math.max(0.03, pr.frontAxle - archR - 0.022), Math.min(0.975, pr.rearAxle + archR + 0.022)]) line([[s, R(s).atY(pr.base(s) + 0.04)], [s, R(s).atU(0.96)]], 0.006);
+    x.restore();
+}
 function paintMaterial(design, plain = false, hd = false) {
     const f = FINISHES[design.finish], useMap = !plain && (hasLivery(design) || isDetailed(design));
     return new THREE.MeshPhysicalMaterial({ color: useMap ? '#ffffff' : design.paint, map: useMap ? liveryTexture(design, hd && isDetailed(design)) : null,
@@ -911,9 +1009,15 @@ function detailTexture(s90 = false) {
     for (let i = -70; i < 200; i += 4.5) { x.beginPath(); x.moveTo(64 + i, 64); x.lineTo(64 + i + 32, 128); x.moveTo(64 + i + 64, 64); x.lineTo(64 + i + 32, 128); x.stroke(); }
     x.restore();
     x.fillStyle = '#f2c200'; x.fillRect(0, 0, 256, 64); x.strokeStyle = '#111'; x.lineWidth = 3; x.strokeRect(3.5, 3.5, 249, 57);
-    x.fillStyle = '#111'; x.font = '900 40px "Arial Black", Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(s90 === 'lt' ? 'LEGEND 3' : s90 ? 'LEGEND 9' : 'LEGEND 1', 128, 34, 228);
+    x.fillStyle = '#111'; x.font = '900 40px "Arial Black", Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(s90 === 'ev' ? 'LEGEND 5' : s90 === 'lt' ? 'LEGEND 3' : s90 ? 'LEGEND 9' : 'LEGEND 1', 128, 34, 228);
     x.fillStyle = '#0b0c0f'; x.fillRect(0, 64, 64, 64);
     x.fillStyle = '#c9a227'; x.beginPath(); x.arc(32, 96, 31, 0, Math.PI * 2); x.fill(); x.fillStyle = '#0b0c0f'; x.beginPath(); x.arc(32, 96, 28, 0, Math.PI * 2); x.fill();
+    if (s90 === 'ev') {   // the Electric's own badge: a bright blue ring round a white six-sided outline with a blue pulse line across it, on a black disc (no letters)
+        x.fillStyle = EVBLUE; x.beginPath(); x.arc(32, 96, 31, 0, Math.PI * 2); x.fill(); x.fillStyle = '#0b0c0f'; x.beginPath(); x.arc(32, 96, 27, 0, Math.PI * 2); x.fill();
+        x.strokeStyle = '#f4f6f8'; x.lineWidth = 3; x.lineJoin = 'round'; x.lineCap = 'round'; x.beginPath(); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + Math.PI / 6; x.lineTo(32 + Math.cos(a) * 20, 96 + Math.sin(a) * 20); } x.closePath(); x.stroke();
+        x.strokeStyle = EVBLUE; x.lineWidth = 3.2; x.beginPath(); x.moveTo(18, 98); x.lineTo(26, 98); x.lineTo(30, 86); x.lineTo(35, 108); x.lineTo(39, 96); x.lineTo(46, 96); x.stroke();
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+    }
     if (s90 === 'lt') {   // the Longtail's own badge: a copper ring round a white teardrop with three speed lines, on a black disc (no letters)
         x.fillStyle = COPPER; x.beginPath(); x.arc(32, 96, 31, 0, Math.PI * 2); x.fill(); x.fillStyle = '#0b0c0f'; x.beginPath(); x.arc(32, 96, 27, 0, Math.PI * 2); x.fill();
         x.fillStyle = '#f4f6f8'; x.beginPath(); x.moveTo(32, 74); x.bezierCurveTo(45, 82, 42, 104, 32, 120); x.bezierCurveTo(22, 104, 19, 82, 32, 74); x.fill();
@@ -937,8 +1041,8 @@ function detailTexture(s90 = false) {
 // The colours of the interior and the small outside trim, one small strip: every such part is painted from it, so they are
 // all one material (and all hidden together in the driver's-seat view, where the cockpit model takes over).
 // 3 = helmet, 5 = accent (seat stripes), 8 = helmet stripe
-// 10, 11 = pale and darker tan leather (the Longtail's seats), 12 = copper
-const INTERIOR = ['#17191d', '#2a2d33', '#050506', 'helmet', '#0c0d10', 'accent', '#3a3f47', '#c3cad4', 'stripe', '#7a828d', '#cfb48c', '#a98a62', COPPER];
+// 10, 11 = pale and darker tan leather (the Longtail's seats), 12 = copper, 13 = electric blue (the Electric's screen and seat stripe)
+const INTERIOR = ['#17191d', '#2a2d33', '#050506', 'helmet', '#0c0d10', 'accent', '#3a3f47', '#c3cad4', 'stripe', '#7a828d', '#cfb48c', '#a98a62', COPPER, EVBLUE];
 function interiorTexture(d) {
     const c = document.createElement('canvas'); c.width = INTERIOR.length * 8; c.height = 8; const x = c.getContext('2d');
     // the helmet takes the brake calliper colour (a strong colour the builder chooses), or white if that is too dark to see
@@ -1183,6 +1287,15 @@ function skinPoint(pr, X, side, s, u) {
     const a = Math.min(0.985, Math.abs(u)), v = Math.pow(Math.sqrt(1 - Math.pow(a, 2 / pr.q.round)), 0.5 + (pr.q.round - 0.38) * 0.6);
     return new THREE.Vector3(X(s), pr.surfAt(s, a), side * a * pr.width(s) * (1 - v * 0.06));
 }
+// how far out the body's skin is at height y, on the cross-section at s (for parts fixed to the car's sides)
+function sideZ(pr, s, y) {
+    const w = pr.width(s), e = 0.5 + (pr.q.round - 0.38) * 0.6, N = 40; let py = 0, pz = 0;
+    for (let i = 0; i <= N; i++) { const a = lerp(-1.45, 1.45, i / N), u = Math.pow(Math.cos(a), pr.q.round), v = spow(Math.sin(a), e), yt = pr.topAt(s, u), yb = Math.min(yt - 0.03, pr.bottomAt(s, u)), mid = (yt + yb) / 2;
+        const yy = v >= 0 ? lerp(mid, yt, v) : lerp(mid, yb, -v), zz = u * w * (1 - Math.max(0, v) * 0.06);
+        if (i && (py - y) * (yy - y) <= 0 && yy !== py) return lerp(pz, zz, (y - py) / (yy - py));
+        py = yy; pz = zz; }
+    return w;
+}
 function skinStrip(pr, X, side, at, half, lift, mat, N = 10) {
     const pos = [], idx = [], P = (s, u) => skinPoint(pr, X, side, s, u);
     for (let i = 0; i <= N; i++) { const [s, u] = at(i / N);
@@ -1194,13 +1307,12 @@ function skinStrip(pr, X, side, at, half, lift, mat, N = 10) {
 }
 // The Longtail's lamps: a slim unit swept round each front corner. Under a clear cover: a dark bed, a thin strip of running
 // light along its top edge and three small lamp lenses. lite: just the strip of light.
-function longtailLamps(car, pr, mats, X, lite) {
-    const at = lampLT;
+function longtailLamps(car, pr, mats, X, lite, at = lampLT, lenses = [0.2, 0.36, 0.52]) {   // (the Electric's blade lamps are built the same way, along their own line)
     for (const side of [1, -1]) {
         if (lite) { car.add(skinStrip(pr, X, side, at, 0.006, 0.006, mats.head, 6)); continue; }
         if (!mats.clear) { mats.clear = mats.lens.clone(); mats.clear.opacity = 0.2; }
         car.add(skinStrip(pr, X, side, t => { const [s, u] = at(lerp(0.03, 0.985, t)); return [s + 0.0052, u]; }, 0.0022, 0.004, mats.head, 12));
-        for (const t of [0.2, 0.36, 0.52]) { const [s, u] = at(t), ss = s - 0.003, lens = new THREE.Mesh(new THREE.SphereGeometry(0.017, 12, 8), mats.head);
+        for (const t of lenses) { const [s, u] = at(t), ss = s - 0.003, lens = new THREE.Mesh(new THREE.SphereGeometry(0.017, 12, 8), mats.head);
             lens.scale.set(0.5, 0.62, 1); lens.position.copy(skinPoint(pr, X, side, ss, u)); lens.position.x += 0.005; lens.position.y += 0.003; car.add(lens);
             const rim = new THREE.Mesh(new THREE.TorusGeometry(0.019, 0.004, 6, 16), mats.dark); rim.rotation.y = Math.PI / 2; rim.scale.y = 0.62; rim.position.copy(lens.position); rim.position.x += 0.004; car.add(rim); }
         car.add(skinStrip(pr, X, side, t => at(lerp(0.02, 0.99, t)), 0.0078, 0.0075, mats.clear, 12));
@@ -1268,6 +1380,104 @@ function longtailDetail(car, p, pr, mats, X, lite) {
     bucketSeat(part, X(sSeat), hy, 0, 0.36, tan);
     helmetedDriver(part, X(sSeat), hy, 0);
 }
+// The Electric's tail: a mesh grille set back in a dark frame (cooling for the batteries and motors) with the number plate in
+// the middle, a slim strip of light right across the tail under a clear lens, split into segments, and a badge between them.
+// Everything is fitted inside the tail's own end face, so it follows the sliders. (There are no exhausts.)
+function electricTail(car, p, pr, mats, X) {
+    const add = m => { car.add(m); return m; }, box = (dx, dy, dz, mat, x, y, z) => { const m = add(new THREE.Mesh(new THREE.BoxGeometry(dx, dy, dz), mat)); m.position.set(x, y, z); return m; };
+    const xb = X(1), w1 = pr.width(1), yC = pr.topAt(1, 0), yB = Math.min(yC - 0.03, pr.bottomAt(1, 0)), mid = (yB + yC) / 2, H = yC - yB, e = 0.5 + (pr.q.round - 0.38) * 0.6;
+    const halfAt = y => { const v = Math.min(1, Math.abs(y - mid) / (H / 2)), c = Math.sqrt(Math.max(0, 1 - Math.pow(v, 2 / e))); return Math.pow(c, pr.q.round) * w1 * (1 - Math.max(0, (y - mid) / (H / 2)) * 0.06); };
+    if (!mats.detail) mats.detail = new THREE.MeshStandardMaterial({ map: detailTexture('ev'), roughness: 0.45, metalness: 0.05 });
+    if (!mats.clear) { mats.clear = mats.lens.clone(); mats.clear.opacity = 0.2; }
+    // the strip of light: a dark slot, the red strip inside it with a bright line along its middle, fine dark joins between its segments, and a clear lens over it all
+    // (it always sits clear of the ducktail's edge above it; on a short tail there is no room for the grille, so the strip sits at the top and the number plate under it)
+    const duckY = p.wing === 'ducktail' ? pr.centre(0.95) + 0.024 : 9, yHi = Math.min(yC - 0.012, duckY), yLo = yB + 0.055, tall = H >= 0.3;
+    const bh = Math.max(0.02, Math.min(0.038, H * 0.09)), ty = Math.min(tall ? lerp(yB, yC, 0.8) : 9, yHi - bh / 2 - 0.007), bw = Math.max(0.2, 2 * halfAt(ty + bh / 2 + 0.012) - 0.04);
+    box(0.012, bh + 0.014, bw + 0.014, mats.dark, xb + 0.003, ty, 0);
+    box(0.008, bh, bw, mats.tail, xb - 0.002, ty, 0);
+    box(0.008, bh * 0.32, bw - 0.02, mats.head, xb - 0.0026, ty, 0);
+    { const n = 11, seg = bw / n; for (let i = 1; i < n; i++) box(0.009, bh, 0.005, mats.dark, xb - 0.003, ty, (i - n / 2) * seg); }
+    box(0.003, bh + 0.006, bw + 0.006, mats.clear, xb - 0.0085, ty, 0);
+    // (the light wraps a little way round each corner, lying on the bodywork there)
+    if (pr.q.tailW > 0.5) for (const side of [1, -1]) { const c = box(0.2, bh * 0.75, 0.02, mats.tail, X(0.975), ty - 0.012, side * (sideZ(pr, 0.975, ty - 0.012) - 0.004)); c.rotation.z = 0.12; }
+    // the grille: black mesh set back inside a dark frame that stands proud of it, split in three by two carbon bars
+    const grille = tall && pr.q.rearGrille, y0 = lerp(yB, yC, 0.16), y1 = Math.min(lerp(yB, yC, 0.58), ty - bh / 2 - 0.05), gh = y1 - y0, gy = (y0 + y1) / 2, gw = Math.max(0.2, 2 * Math.min(halfAt(y0), halfAt(y1)) - 0.08);
+    if (grille) {
+        const g = new THREE.PlaneGeometry(gw, gh), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, lerp(0.26, 0.99, uv.getX(i)), lerp(0.02, 0.48, uv.getY(i)));
+        g.rotateY(-Math.PI / 2); add(new THREE.Mesh(g, mats.detail)).position.set(xb - 0.004, gy, 0);
+        for (const y of [y0, y1]) box(0.05, 0.016, gw + 0.016, mats.dark, xb - 0.02, y, 0);
+        for (const side of [1, -1]) { box(0.05, gh, 0.016, mats.dark, xb - 0.02, gy, side * gw / 2); box(0.03, gh, 0.012, mats.carbon, xb - 0.012, gy, side * gw * 0.24); }
+        for (const f of [1 / 3, 2 / 3]) box(0.014, 0.006, gw, mats.carbon, xb - 0.008, y0 + gh * f, 0);
+    }
+    // the number plate, on a thin backing: in the middle of the grille, or (on a short tail) between the light and the diffuser, always in full view
+    { const pTop = ty - bh / 2 - 0.016, ph = tall ? Math.min(0.08, gh * 0.6) : Math.max(0.03, Math.min(0.07, pTop - yLo)), py = tall ? gy : pTop - ph / 2;
+        const pw = Math.max(0.08, Math.min(0.36, tall ? gw * 0.4 : 2 * halfAt(py - ph / 2) - 0.06, ph * 4.2)), pg = new THREE.PlaneGeometry(pw, ph), puv = pg.attributes.uv;
+        for (let i = 0; i < puv.count; i++) puv.setY(i, 0.5 + puv.getY(i) * 0.5);
+        pg.rotateY(-Math.PI / 2); add(new THREE.Mesh(pg, mats.detail)).position.set(xb - 0.0275, py, 0); box(0.022, ph + 0.014, pw + 0.014, mats.carbon, xb - 0.016, py, 0); }
+    // the badge, between the grille and the light (left off a short tail)
+    if (tall) { const r = Math.max(0.012, Math.min(0.024, (ty - bh / 2 - y1) * 0.36)), g = new THREE.CircleGeometry(r, 20), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.25, uv.getY(i) * 0.5);
+        g.rotateY(-Math.PI / 2); add(new THREE.Mesh(g, mats.detail)).position.set(xb - 0.003, lerp(y1, ty - bh / 2, 0.5), 0); }
+}
+// The extra detail on the Electric: slim door mirrors, louvres over the bonnet vent, a lit ring on the charging flap, splitter
+// fences, diffuser fins, wiper, badge, and the interior seen through the glass (the driver on the left with a helmet on, a dark
+// empty passenger seat, and a wide screen across the dash). lite (rival cars in a race): none of it.
+function electricDetail(car, p, pr, mats, X, lite) {
+    if (lite) return;
+    const q = pr.q, V = (x, y, z) => new THREE.Vector3(x, y, z), add = m => { car.add(m); return m; };
+    const kit = interiorKit(car, p, mats, lite), { col, part } = kit, D = doorsEV(pr);
+    if (!mats.detail) mats.detail = new THREE.MeshStandardMaterial({ map: detailTexture('ev'), roughness: 0.45, metalness: 0.05 });
+    // door mirrors: slim blades on thin arms from the top of each door, beside the windscreen pillars
+    for (const side of [1, -1]) {
+        const s = D.sP + 0.014, w = pr.width(s), u = q.cabinWB + 0.05, base = V(X(s), pr.surfAt(s, u) - 0.008, side * w * u);
+        const head = V(X(s) + 0.02, base.y + 0.05, side * Math.min(w * u + 0.1, w - 0.01));
+        const arm = add(bar(base, V(head.x - 0.01, head.y - 0.006, head.z - side * 0.02), 0.012, mats.interior, 0.03)); col(arm.geometry, 2);
+        const shell = part(new THREE.SphereGeometry(1, 14, 10), 4); shell.scale.set(0.05, 0.021, 0.07); shell.position.copy(head);
+        const glass = part(new THREE.SphereGeometry(1, 12, 8), 7); glass.scale.set(0.012, 0.015, 0.058); glass.position.set(head.x - 0.04, head.y, head.z);
+    }
+    diffuserFins(car, pr, mats, X, [-0.66, -0.4, -0.14, 0.14, 0.4, 0.66]);
+    noseBadge(car, pr, mats, X, 0.04);
+    parkedWiper(car, pr, mats, X, col);
+    // louvres over the bonnet vent: slim carbon slats lying across the opening, each tipped up at the back
+    { const B = VENT_EV, n = 4, NU = 6;
+        for (let i = 0; i < n; i++) for (const side of [1, -1]) { const f = (i + 0.5) / n, s = lerp(B.s0, B.s1, f), uMax = lerp(B.u0, B.u1, f) - 0.012, h = 0.0048, pos = [], idx = [], ep = [], ei = [];
+            // (each slat: a sloping top, an upright back face under its raised edge, and a fine bright strip along that edge)
+            for (let j = 0; j <= NU; j++) { const u = lerp(0.012, uMax, j / NU), a = skinPoint(pr, X, side, s - h, u), b = skinPoint(pr, X, side, s + h, u);
+                pos.push(a.x, a.y + 0.002, a.z, b.x, b.y + 0.02, b.z, b.x, b.y - 0.002, b.z); ep.push(b.x + 0.0045, b.y + 0.0195, b.z, b.x - 0.0006, b.y + 0.0212, b.z); }
+            for (let j = 0; j < NU; j++) { const a = j * 3, c = j * 2;
+                if (side > 0) { idx.push(a, a + 1, a + 3, a + 1, a + 4, a + 3, a + 1, a + 2, a + 4, a + 2, a + 5, a + 4); ei.push(c, c + 1, c + 2, c + 1, c + 3, c + 2); }
+                else { idx.push(a, a + 3, a + 1, a + 1, a + 3, a + 4, a + 1, a + 4, a + 2, a + 2, a + 4, a + 5); ei.push(c, c + 2, c + 1, c + 1, c + 2, c + 3); } }
+            for (const [pp, ii, mat] of [[pos, idx, mats.carbon], [ep, ei, mats.chrome]]) { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pp, 3)); g.setIndex(ii); g.computeVertexNormals(); add(new THREE.Mesh(g, mat)); } } }
+    // real edges on the side intakes (their dark openings are part of the paintwork): a body-colour lip standing proud down the back of each
+    // opening and along its top, and two carbon slats inside
+    for (const side of [1, -1]) { const archR = (pr.wheelR + 0.055) / p.L, rearArch = pr.rearAxle - archR, dB = Math.max(D.sA + 0.1, Math.min(D.sB, rearArch - 0.02)), s0 = lerp(D.sA, dB, 0.5), s1 = rearArch - 0.012;
+        const yL = p.ride + 0.12, hi = pr.surfAt(s1, 0.97), ya = lerp(yL, hi, 0.24), yb = lerp(yL, hi, 0.66), ym = lerp(ya, yb, 0.4);
+        const at = (t, f, out) => { const ss = lerp(s0, s1, t), y = lerp(ym, lerp(ya, yb, f), Math.pow(t, 0.75)); return V(X(ss), y, side * (sideZ(pr, ss, y) + out)); };
+        add(bar(at(1, -0.02, 0.003), at(1, 1.04, 0.003), 0.022, mats.paintPlain, 0.016));
+        for (const [t0, t1] of [[0.4, 0.7], [0.7, 1]]) add(bar(at(t0, 1.0, 0.002), at(t1, 1.0, 0.002), 0.02, mats.paintPlain, 0.012));
+        for (const f of [0.45, 0.7]) add(bar(at(0.5, f, -0.004), at(0.99, f, -0.004), 0.016, mats.carbon, 0.007)); }
+    // the ring of light on the charging flap (on top of the left rear wing; a petrol car has a plain fuel flap there instead)
+    if (p.engine === 'ev' || p.engine === 'hybrid') { const [s, u] = chargeEV(pr), P = (ss, uu) => skinPoint(pr, X, -1, ss, uu), n = P(s + 0.004, u).sub(P(s - 0.004, u)).cross(P(s, u + 0.02).sub(P(s, u - 0.02))).normalize(); if (n.y < 0) n.negate();
+        const ring = add(new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0028, 6, 24), mats.head)); ring.quaternion.setFromUnitVectors(V(0, 0, 1), n); ring.position.copy(P(s, u)).addScaledVector(n, 0.002); }
+    // splitter end fences and two support stays
+    if (p.splitter) for (const side of [1, -1]) {
+        const y = pr.base(0.03) + 0.01, xs = X(0.02) - 0.12;
+        const fence = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.055, 0.012), mats.carbon)); fence.position.set(xs, y + 0.028, side * p.W * 0.424);
+        add(bar(V(xs + 0.13, y, side * p.W * 0.2), V(xs + 0.07, pr.base(0.012) - 0.002, side * p.W * 0.2), 0.008, mats.chrome));
+    }
+    // ---- the interior, seen through the glass: a dark tub, a dash with a wide screen, steering wheel, two seats and a helmeted driver on the left ----
+    const span = pr.c1 - pr.c0;
+    cabinFloor(pr, X, pr.c0 + 0.004, pr.c0 + span * 0.74, part);
+    const sSeat = Math.min(pr.c1 - 0.05, Math.max(pr.rakeEnd + 0.3 / p.L, pr.c0 + 0.38 * span));   // (the same place as the cockpit view's eye)
+    const wS = pr.width(sSeat), zSeat = wS * q.cabinWB * 0.3, deck = pr.topAt(sSeat, 0.3), xS = X(sSeat), sD = lerp(pr.c0, sSeat, 0.52), yD = pr.topAt(sD, 0.3);
+    const head = z => Math.max(deck - 0.02, Math.min(deck + 0.17, cabinY(pr, sSeat, Math.abs(z) + 0.05) - 0.13));     // how high a helmet or headrest can sit under the glass
+    dashAndWheel(car, pr, mats, X, kit, { sD, sSeat, zD: -zSeat, uD: 0.3, screen: false });
+    // one wide screen across the dash, from in front of the driver to the passenger's side, lit along its top edge
+    { const sw = Math.min(0.62, pr.width(sD) * q.cabinWB * 1.1), sc = part(new THREE.BoxGeometry(0.012, 0.06, sw), 6); sc.position.set(X(sD) - 0.11, yD + 0.045, zSeat * 0.3); sc.rotation.z = 0.35;
+        const glow = part(new THREE.BoxGeometry(0.014, 0.007, sw * 0.96), 13); glow.position.set(X(sD) - 0.121, yD + 0.073, zSeat * 0.3); glow.rotation.z = 0.35; }
+    bucketSeat(part, xS, head(zSeat), zSeat, 0.4, [0, 1, 6], true);    // (the passenger seat: empty, dark, with a low flat headrest)
+    bucketSeat(part, xS, head(-zSeat), -zSeat, 0.4, [0, 1, 13]);
+    helmetedDriver(part, xS, head(-zSeat), -zSeat);
+}
 // The measurements of a design's body (for the cockpit view): the profile curves, plus X(s), the position along the car
 export function carFrame(design) { const pr = profiles(design); return { pr, X: s => design.L / 2 - s * design.L }; }
 // Build a whole car as a group. Returns { group, mats, wheels, dispose }. The car points along +x and sits on y = 0.
@@ -1281,10 +1491,11 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     const body = new THREE.Mesh(bodyGeometry(p, pr, lite), mats.paint); car.add(body);
     // the cabin uses the same paint finish as the body, so the roof matches; the dark windows still shine through the clearcoat
     const fin = FINISHES[p.finish] || FINISHES.gloss;
-    const hyper = isHyper(pr.q), s90 = isSuper90(pr.q), lt = isLongtail(pr.q), fine = (hyper || s90 || lt) && !lite;        // fine: the small parts only the closely-seen car gets
+    const hyper = isHyper(pr.q), s90 = isSuper90(pr.q), lt = isLongtail(pr.q), ev = isElectric(pr.q), fine = (hyper || s90 || lt || ev) && !lite;        // fine: the small parts only the closely-seen car gets
     const cabinMat = new THREE.MeshPhysicalMaterial({ map: cabinTexture(p, pr, fine), transparent: fine, metalness: fin.metalness, roughness: Math.min(fin.roughness, 0.4), clearcoat: 1, clearcoatRoughness: 0.05,
         iridescence: fin.iridescence, iridescenceIOR: 1.6, side: fine ? THREE.BackSide : THREE.DoubleSide });   // (see-through glass shows only its outer skin, so it stays clear; the cabin's faces are wound inwards, so that is 'BackSide')
     if (fine && lt) Object.assign(cabinMat, { metalness: 0, roughness: 0.06, clearcoat: 0.5, envMapIntensity: 0.45, iridescence: 0 });   // (nearly all glass: dark and glossy, without the paint's metal flake washing it out)
+    if (fine && ev && cabinMat.map.userData.gloss) cabinMat.roughnessMap = cabinMat.metalnessMap = cabinMat.clearcoatMap = cabinMat.specularIntensityMap = cabinMat.map.userData.gloss;   // (smooth dark glass; the painted roof keeps the paint's finish)
     mats.cabin = cabinMat;
     car.add(new THREE.Mesh(cabinGeometry(p, pr, lite), cabinMat));
     const X = s => p.L / 2 - s * p.L;
@@ -1366,19 +1577,20 @@ export function createCar(design, { merge = false, lite = false, draft = false }
             const lid = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.006, 0.3), mats.dark); lid.position.set(X(ls), y, z); lid.rotation.z = -0.16; car.add(lid);
             const inner = new THREE.Mesh(new THREE.BoxGeometry(0.235, 0.008, 0.275), mats.paintPlain); inner.position.set(X(ls), y + 0.002, z); inner.rotation.z = -0.16; car.add(inner);
             const ind = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.035, 0.12), mats.amber); ind.position.set(X(0) + 0.005, pr.base(0) + 0.07, side * pr.width(0) * 0.62); car.add(ind);
-        } else if (q.lamps === 'blade') {   // slim swept LED blades on each front corner, in an L shape
+        } else if (q.lamps === 'blade' && !ev) {   // slim swept LED blades on each front corner, in an L shape
             const ls = 0.04, z = side * pr.width(ls) * 0.72, y = pr.topAt(ls, 0.72) + 0.005;
             const housing = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.05, 0.14), mats.lens); housing.position.set(X(ls) - 0.04, y - 0.01, z); housing.rotation.y = side * 0.45; housing.rotation.z = -0.28; car.add(housing);
             const a = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.03, 0.035), mats.head);
             a.position.set(X(ls) - 0.04, y, z + side * 0.03); a.rotation.y = side * 0.45; a.rotation.z = -0.28; car.add(a);
             const b = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.18), mats.head);
             b.position.set(X(ls) + 0.12, y - 0.045, z - side * 0.05); b.rotation.z = -0.28; car.add(b);
-        } else if (!lt) {
+        } else if (!lt && !ev) {
             const h = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.36), mats.head);
             h.position.set(X(0.045), pr.topAt(0.045, 0.62) - 0.02, side * pr.width(0.045) * 0.62); h.rotation.z = -0.3; car.add(h);
         }
     }
     if (lt) longtailLamps(car, pr, mats, X, lite);
+    if (ev) longtailLamps(car, pr, mats, X, lite, lampEV, [0.3, 0.5]);   // blade lamps: a strip of light and two small lenses under a clear cover, swept back along each wing
     // grille: a wide shield shape on the nose (about 0.95 m across on the 60s GT, like the real car)
     if (q.grille === 'shield') {
         const gw = pr.width(0) * 0.68, gh = (pr.centre(0) - pr.base(0)) * 0.55, sh = new THREE.Shape();
@@ -1431,7 +1643,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
         for (const side of [1, -1]) { const st = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.09, 0.03), mats.dark); st.position.set(X(ss) + 0.02, y - 0.05, side * span * 0.42); car.add(st); }
     }
     // a wide dark vent across the bonnet
-    if (q.scoop === 'bonnetvent') {
+    if (q.scoop === 'bonnetvent' && !ev) {   // (the Electric's vent is an opening in its paintwork, with louvres over it)
         const ss = 0.11, w = pr.width(ss) * 0.9;
         const v = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.03, w), mats.dark); v.position.set(X(ss), pr.centre(ss) + 0.005, 0); v.rotation.z = -0.18; car.add(v);
         for (let i = -2; i <= 2; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.012), mats.carbon); fin.position.set(X(ss), pr.centre(ss) + 0.01, i * w / 5); fin.rotation.z = -0.18; car.add(fin); }
@@ -1442,14 +1654,21 @@ export function createCar(design, { merge = false, lite = false, draft = false }
         const W2 = p.W / 2, yTop = pr.base(0) + 0.14, yBot = pr.base(0.06) + 0.03, halfTop = W2 * 0.64, halfBot = W2 * 0.38;
         const ray = new THREE.Raycaster(), from = new THREE.Vector3(), back = new THREE.Vector3(-1, 0, 0);
         const onNose = (y, z) => { ray.set(from.set(p.L, y, z), back); const hit = ray.intersectObject(body)[0]; return (hit ? hit.point.x : X(0.05)) + 0.01; };
-        const NU = 24, NV = 16, pos = [], idx = [];   // (enough points that it follows the curve of the nose)
+        const NU = 24, NV = 16, pos = [], idx = [], uvs = [];   // (enough points that it follows the curve of the nose)
         for (let j = 0; j <= NV; j++) for (let i = 0; i <= NU; i++) {
             const v = j / NV, y = lerp(yBot, yTop, v), half = lerp(halfBot, halfTop, v), z = lerp(-half, half, i / NU);
-            pos.push(onNose(y, z), y, z);
+            pos.push(onNose(y, z), y, z); uvs.push(0.625 + z / (2 * halfTop) * 0.7, 0.25 + (v - 0.5) * 1.4 * (yTop - yBot) / (2 * halfTop));
         }
         for (let j = 0; j < NV; j++) for (let i = 0; i < NU; i++) { const a0 = j * (NU + 1) + i, b0 = a0 + NU + 1; idx.push(a0, a0 + 1, b0, a0 + 1, b0 + 1, b0); }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
-        car.add(new THREE.Mesh(g, mats.intake));
+        if (fine && ev) {   // the detailed Electric: black mesh in the opening, and two body-colour pillars that split it into a middle intake and a big one at each corner
+            if (!mats.detail) mats.detail = new THREE.MeshStandardMaterial({ map: detailTexture('ev'), roughness: 0.45, metalness: 0.05 });
+            g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx.slice().reverse()); g.computeVertexNormals(); car.add(new THREE.Mesh(g, mats.detail));
+            for (const side of [1, -1]) { const pp = [], pi = [], hw = 0.028;
+                for (let j = 0; j <= 8; j++) { const v = j / 8, y = lerp(yBot - 0.003, yTop + 0.003, v), zc = side * lerp(halfBot * 0.5, halfTop * 0.46, v); for (const dz of [-hw, hw]) pp.push(onNose(Math.min(yTop, Math.max(yBot, y)), zc + dz) + 0.007, y, zc + dz); }
+                for (let j = 0; j < 8; j++) { const a = j * 2; pi.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+                const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.Float32BufferAttribute(pp, 3)); pg.setIndex(pi); pg.computeVertexNormals(); car.add(new THREE.Mesh(pg, mats.paintPlain)); }
+        } else car.add(new THREE.Mesh(g, mats.intake));
         // two slim bars across the opening
         for (const v of [0.35, 0.7]) {
             const y = lerp(yBot, yTop, v), half = lerp(halfBot, halfTop, v) * 0.96, pts = [];
@@ -1461,7 +1680,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     if (q.diffuser) {
         const w = pr.width(1) * 1.5, y = pr.base(1) + 0.03;
         const d = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, w), mats.carbon); d.position.set(X(1) - 0.02, y, 0); d.rotation.z = 0.22; car.add(d);
-        for (let i = -3; i <= 3; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.09, 0.015), mats.carbon); fin.position.set(X(1) - 0.04, y + 0.05, i * w / 7); car.add(fin); }
+        if (!(fine && ev)) for (let i = -3; i <= 3; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.09, 0.015), mats.carbon); fin.position.set(X(1) - 0.04, y + 0.05, i * w / 7); car.add(fin); }
     }
     // a low oval air intake in the nose
     if (q.mouth) {
@@ -1470,7 +1689,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
         m.position.set(X(0) + 0.005, pr.base(0) + 0.055, 0); car.add(m);
     }
     // a big sweeping air intake on each side, behind the doors
-    if (q.sideIntake && !s90) for (const side of [1, -1]) {   // (the 90s supercar's are part of its paintwork instead)
+    if (q.sideIntake && !s90 && !ev) for (const side of [1, -1]) {   // (the 90s supercar's and the Electric's are part of their paintwork instead)
         const s0 = p.tailBar ? 0.5 : 0.4, s1 = p.tailBar ? 0.71 : 0.69, yLo = pr.base(0.62) + 0.13, yHi = lerp(pr.base(0.62), pr.topAt(0.62, 1), 0.78);
         const sh = new THREE.Shape();
         const len = (s1 - s0) * p.L;    // a sweep that starts low along the door and rises to a deep opening in front of the rear wheel
@@ -1481,7 +1700,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
         car.add(m);
     }
     // a full-width black mesh grille across the tail, with slats
-    if (q.rearGrille && !s90) {
+    if (q.rearGrille && !s90 && !(fine && ev)) {
         const y0 = pr.base(1) + 0.06, y1 = lerp(pr.base(1), pr.centre(1), 0.62), w = pr.width(1) * 1.7;
         const panel = new THREE.Mesh(new THREE.BoxGeometry(0.02, y1 - y0, w), mats.grille); panel.position.set(X(1) - 0.005, (y0 + y1) / 2, 0); car.add(panel);
         for (let i = 1; i < 5; i++) { const slat = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.012, w * 0.96), mats.dark); slat.position.set(X(1) - 0.012, y0 + (y1 - y0) * i / 5, 0); car.add(slat); }
@@ -1517,6 +1736,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
             const amber = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.034, 16), mats.amber); amber.rotation.z = Math.PI / 2; amber.position.set(X(1) - 0.01, ty, z); car.add(amber);
         }
     } else if (lt) { longtailTail(car, p, pr, mats, X, lite);
+    } else if (fine && ev) { electricTail(car, p, pr, mats, X);
     } else if (p.tailBar) {             // a slim light bar right across the back, curling round the corners
         const ty = lerp(pr.base(1), pr.centre(1), 0.82), wz = pr.width(0.99) * 1.82;
         const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.035, wz), mats.tail); bar.position.set(X(1) - 0.01, ty, 0); car.add(bar);
@@ -1585,6 +1805,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     if (p.wing === 'ducktail') {
         const d = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.07, pr.width(0.95) * 1.9), mats.paintPlain);
         d.position.set(X(0.95), pr.centre(0.95) + 0.03, 0); d.rotation.z = -0.25; car.add(d);
+        if (fine && ev) { const lip = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, pr.width(0.95) * 1.9), mats.carbon); lip.position.set(X(0.95) - 0.143, pr.centre(0.95) + 0.03 + 0.079, 0); lip.rotation.z = -0.25; car.add(lip); }   // a fine carbon lip along its top edge
     }
     if (p.wing === 'gt' || p.wing === 'swan') {
         const span = p.W * 0.9, h = p.wing === 'swan' ? 0.38 : 0.3, sx = X(0.94);
@@ -1603,9 +1824,10 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     if (hyper) hyperDetail(car, p, pr, mats, X, lite);
     if (s90) super90Detail(car, p, pr, mats, X, lite);
     if (lt) longtailDetail(car, p, pr, mats, X, lite);
+    if (ev) electricDetail(car, p, pr, mats, X, lite);
     if (merge) { wheels.forEach(w => { const sp = w.userData.spin; sp.userData.wheelRoot = true; mergeByMaterial(sp); w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
     // (the shared tyre and disc pictures, and shared suspension parts, are kept for the next car)
-    const dispose = () => { car.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map && m.map !== TYRE_TEX && m.map !== DISC_TEX) m.map.dispose(); m.dispose(); }); };
+    const dispose = () => { car.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map && m.map !== TYRE_TEX && m.map !== DISC_TEX) m.map.dispose(); if (m.metalnessMap) m.metalnessMap.dispose(); m.dispose(); }); };
     return { group: car, mats, wheels, dispose, draft: draft && fine };
 }
 // =====================================================================
