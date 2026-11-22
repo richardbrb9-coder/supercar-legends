@@ -3,7 +3,7 @@ import * as THREE from './lib/three.module.min.js';
 import { OrbitControls } from './lib/addons/OrbitControls.js';
 import { RoomEnvironment } from './lib/addons/RoomEnvironment.js';
 import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, LIVERIES, TEAM_LIVERIES, UNLOCKS, loadDesign, saveDesign as saveDesignTo, createCar, carStats,
-    medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign, applyPreset, clearPaintPool } from './carmodel.js';
+    medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign, applyPreset, tidyDesign, clearPaintPool } from './carmodel.js';
 import { isFormula } from './formula.js';
 
 // =====================================================================
@@ -125,7 +125,7 @@ function renderPanel() {
     if (panelTab === 'aero' && f1) html += `<p class="b-label">Wings</p><p class="small">A Formula racer is built around its wings, so they are all fitted already: a front wing made of four curved blades, a rear wing with a flap, a beam wing and a diffuser under the tail. Together they press the car onto the road, which is why it corners and brakes so well.</p>`;
     else if (panelTab === 'aero') html += `<p class="b-label">Rear wing</p><div class="opts">${choice(WINGS, design.wing, 'wing')}</div>
         <p class="b-label">Extras</p><div class="opts"><button class="opt ${design.splitter ? 'active' : ''}" data-toggle="splitter">Front splitter</button><button class="opt ${design.skirts ? 'active' : ''}" data-toggle="skirts">Side skirts</button><button class="opt ${design.rallyLights ? 'active' : ''}" data-toggle="rallyLights">Rally lights</button></div>`;
-    if (panelTab === 'engine') html += `<p class="b-label">Engine</p><div class="opts">${choice(ENGINES, design.engine, 'engine')}</div><p class="small">${ENGINES[design.engine].note}. Tap again to hear it.</p>`;
+    if (panelTab === 'engine') html += `<p class="b-label">Engine</p><div class="opts">${choice(f1 ? ENGINES : Object.fromEntries(Object.entries(ENGINES).filter(([k]) => k !== 'v6h')), design.engine, 'engine')}</div><p class="small">${ENGINES[design.engine].note}. Tap again to hear it.</p>`;
     if (panelTab === 'cars') {
         const saved = loadSavedCars(), pts = medalPoints(), next = UNLOCKS.find(u => u.pts > pts);
         html += `<label class="field"><span>Car name</span><input type="text" maxlength="24" value="${esc(design.name)}" data-text="name"></label>
@@ -188,7 +188,7 @@ function lockedToast(kind, value) {
     window.toast && window.toast(`🔒 ${u.label}: win ${need} more medal point${need > 1 ? 's' : ''} in Race to unlock it`, 2600);
     return true;
 }
-function setDesign(d) { design = { ...DEFAULT, ...d }; saveDesign(); renderPanel(); buildCar(); }
+function setDesign(d) { design = tidyDesign({ ...DEFAULT, ...d }); saveDesign(); renderPanel(); buildCar(); }
 function onCars(action, id) {
     const saved = loadSavedCars();
     const toast = (m, ms) => window.toast && window.toast(m, ms);

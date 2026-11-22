@@ -3,9 +3,11 @@
 // under a 'halo' hoop. It is an original design in the spirit of 2020s Grand Prix cars, not a copy of any team's car.
 // Everything is made in code. It hands back the same kind of model as the other cars (see createCar in carmodel.js),
 // so the builder, the race, replays and the cockpit view all work with it.
-// (carmodel.js and this file use each other's helpers; neither uses the other while it is first loading, which keeps that safe)
+// This file does not load carmodel.js (carmodel.js loads this one). The parts it borrows from there, such as the wheels,
+// the materials and the helmeted driver, are handed in by carmodel.js each time it asks for a car ('kit'), so the two files
+// can never trip over each other while they are loading, online or offline.
 import * as THREE from './lib/three.module.min.js';
-import { curve, lerp, makeWheel, buildMaterials, mergeByMaterial, interiorKit, helmetedDriver, bar, rod, disposer, sponsorSticker, SPONSORS } from './carmodel.js';
+import { curve, lerp } from './curves.js';
 
 // A design is a Formula racer if it has the open cockpit (so it stays one after the sliders have been moved)
 export const isFormula = d => !!d && d.cabinStyle === 'open';
@@ -208,7 +210,9 @@ function spineGeometry(F, lite) {
 //  THE WHOLE CAR
 // =====================================================================
 // Build a Formula racer. Same options and the same kind of result as createCar (which calls this for Formula designs).
-export function createFormulaCar(design, { merge = false, lite = false, draft = false } = {}) {
+// kit: the shared car parts from carmodel.js (makeWheel, buildMaterials, mergeByMaterial, interiorKit, helmetedDriver, bar, rod, disposer)
+export function createFormulaCar(design, { merge = false, lite = false, draft = false } = {}, kit) {
+    const { makeWheel, buildMaterials, mergeByMaterial, interiorKit, helmetedDriver, bar, rod, disposer } = kit;
     const p = design, F = formulaFrame(p), mats = buildMaterials(p, lite || draft), wheels = [], car = new THREE.Group();
     const { at, kz, dy } = F, add = (g, mat) => { const m = new THREE.Mesh(g, mat); car.add(m); return m; };
     mats.carbon.side = THREE.DoubleSide;                                                       // (thin wings and plates are seen from both sides)
@@ -241,16 +245,21 @@ export function createFormulaCar(design, { merge = false, lite = false, draft = 
             // a slim raised wing along the floor's edge, on little stays
             const ew = add(new THREE.BoxGeometry(at(3.0) - at(3.85), 0.008, 0.07), mats.carbon); ew.position.set((at(3.0) + at(3.85)) / 2, F.fl + 0.04, side * 0.84 * kz);
             for (const m of [3.08, 3.42, 3.77]) { const st = add(new THREE.BoxGeometry(0.03, 0.04, 0.006), mats.carbon); st.position.set(at(m), F.fl + 0.02, side * 0.82 * kz); }
-            // upright vanes at the front of the floor that steer the air outwards
-            for (const [z, h] of [[0.5, 0.15], [0.62, 0.12], [0.74, 0.09]]) add(sidePlate(F, [[2.2, 0], [2.21, h * 0.5], [2.27, h * 0.9], [2.36, h], [2.56, h * 0.85], [2.62, 0]].map(([m, y]) => [at(m), F.fl + y]), side * z * kz, 0.008, false), mats.carbon);
+            // two low, curved vanes at the front of the floor that steer the air outwards (smooth humps, so they don't read as teeth)
+            for (const [z, h] of [[0.5, 0.09], [0.64, 0.065]]) {
+                const o = []; for (let i = 0; i <= 10; i++) { const t = i / 10; o.push([at(lerp(2.16, 2.7, t)), F.fl + h * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.8)), 0.8)]); }
+                add(sidePlate(F, o, side * z * kz, 0.008, false), mats.carbon);
+            }
         }
     }
     const ramp = m => F.floorY + 0.01 + 0.317 * Math.pow(Math.max(0, m - 4.36), 1.6), rows = [];
     for (let i = 0; i <= 6; i++) { const m = lerp(4.36, 5.2, i / 6); rows.push([[at(m), ramp(m), 0.5 * kz], [at(m), ramp(m), -0.5 * kz]]); }
     add(skin(rows), mats.intake);
+    // its fences: the two outer ones close the sides of the tunnel down to the floor; the inner ones are shallow ribs under its roof
     for (const z of lite ? [-0.5, 0, 0.5] : [-0.5, -0.25, 0, 0.25, 0.5]) {
-        const o = []; for (let i = 0; i <= 6; i++) { const m = lerp(4.36, 5.2, i / 6); o.push([at(m), ramp(m)]); } o.push([at(5.2), F.floorY + 0.05], [at(4.4), F.floorY]);
-        add(sidePlate(F, o, z * kz, 0.008, false), mats.carbon);
+        const outer = Math.abs(z) === 0.5, o = [], back = [];
+        for (let i = 0; i <= 6; i++) { const m = lerp(4.36, 5.2, i / 6); o.push([at(m), ramp(m)]); back.unshift([at(m), outer ? F.floorY : Math.max(F.floorY, ramp(m) - 0.05)]); }
+        add(sidePlate(F, [...o, ...back], z * kz, 0.008, false), mats.carbon);
     }
 
     // ---- the front wing: stacked curved elements between two end plates, swept back towards the tips ----
@@ -296,7 +305,7 @@ export function createFormulaCar(design, { merge = false, lite = false, draft = 
     const rest = []; for (let i = 0; i <= 10; i++) { const a = lerp(-1.95, 1.95, i / 10); rest.push(V(hx - Math.cos(a) * 0.17, hy - 0.05, Math.sin(a) * 0.168)); }
     add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rest), lite ? 8 : 16, 0.045, lite ? 5 : 8, false), mats.dark);   // the headrest: a padded horseshoe round the back of the helmet
     if (!lite) add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rimPoints(F, 12), true), 48, 0.013, 6, true), mats.dark);
-    steeringWheel(F, { col, part, car, mats, lite });
+    steeringWheel(F, { col, part, car, mats, lite, bar });
     if (!lite) {   // the little TV camera pod on top of the airbox, and the air-speed probe on the nose
         const cam = add(new THREE.BoxGeometry(0.11, 0.035, 0.2), mats.carbon); cam.position.set(at(2.95), F.spineTop(2.95) + 0.035, 0);
         const stem = add(new THREE.BoxGeometry(0.06, 0.04, 0.02), mats.carbon); stem.position.set(at(2.95), F.spineTop(2.95) + 0.01, 0);
@@ -332,7 +341,7 @@ export function createFormulaCar(design, { merge = false, lite = false, draft = 
     return { group: car, mats, wheels, links, dispose: disposer(car, mats), draft: draft && !lite };
 }
 // the steering wheel: a small squared-off racing wheel with two grips and a little screen, and the driver's arms reaching it
-function steeringWheel(F, { col, part, car, mats, lite }) {
+function steeringWheel(F, { col, part, car, mats, lite, bar }) {
     const g = new THREE.Group(); g.position.set(F.at(F.wheelM), F.wheelY, 0); g.rotation.z = -0.3; car.add(g);
     const inWheel = (geo, i) => { const m = new THREE.Mesh(col(geo, i), mats.interior); g.add(m); return m; };
     inWheel(new THREE.BoxGeometry(0.028, 0.105, 0.2), 0);
@@ -369,8 +378,8 @@ function onStrip(x, d, W, H, Y, m, y, side, fn) {
 // two-tone paint: the second colour on the outer halves of the sidepods and the lower body
 export function formulaTwoTone(x, d, W, H, Y) { x.fillStyle = d.paint2; x.fillRect(0, Y(0.3), W, Y(0.14) - Y(0.3)); x.fillRect(0, Y(0.86), W, Y(0.7) - Y(0.86)); }
 // Motorsport team schemes on the Formula racer: stripes and blocks of colour, and made-up sponsors on the airbox,
-// the rear wing end plates and the top of the tub
-export function formulaTeam(x, d, W, H, Y, band) {
+// the rear wing end plates and the top of the tub (kit: the sponsor list and sticker drawing from carmodel.js)
+export function formulaTeam(x, d, W, H, Y, band, { sponsorSticker, SPONSORS }) {
     const sc = d.stripeColour, p2 = d.paint2, S = i => SPONSORS[i % SPONSORS.length], U = m => (m / 5.5) * W;
     const sticker = (sp, wM, hM) => px => sponsorSticker(x, sp, wM * px, hM * px);
     const both = fn => { for (const side of ['right', 'left']) fn(side); };

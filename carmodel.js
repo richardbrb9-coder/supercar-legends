@@ -2,6 +2,7 @@
 // Everything is made in code: no model files, no textures to download, so it works offline and stays small.
 import * as THREE from './lib/three.module.min.js';
 import { flakeTexture } from './reflections.js';
+import { curve, lerp } from './curves.js';
 import { isFormula, createFormulaCar, formulaStats, formulaTwoTone, formulaTeam, formulaMarks, formulaPanelLines } from './formula.js';
 
 // =====================================================================
@@ -97,41 +98,38 @@ export const SHAPE_DEFAULTS = { waist: 0.95, rallyLights: false, rake: 0.34, scr
 // Apply a body style: its shape, its details, and the parts that suit it
 export function applyPreset(design, key) {
     const { label, style, ...shape } = PRESETS[key];
-    return Object.assign(design, SHAPE_DEFAULTS, shape, style || {}, { preset: key });
+    const plain = design.paint === DEFAULT.paint && design.caliper === DEFAULT.caliper;   // (still the colours every new car starts with)
+    Object.assign(design, SHAPE_DEFAULTS, shape, style || {}, { preset: key });
+    // A red single-seater with yellow tyre stripes would look like one real team's car, so a Formula racer that still has
+    // the starting colours gets its own: purple with lime stripes (any colours can still be picked afterwards)
+    if (key === 'formula' && plain) Object.assign(design, FORMULA_COLOURS);
+    return tidyDesign(design);
+}
+const FORMULA_COLOURS = { paint: '#7E57C2', caliper: '#C6FF00' };
+// Keep a design within what its body style can be: the Formula racer has its own slider ranges, and its V6 engine and
+// longer body are for it alone (a road car left with them, from switching styles or from a share code, goes back to normal)
+const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+export function tidyDesign(d) {
+    if (d.cabinStyle === 'open') {
+        d.L = clampTo(d.L, 5.2, 5.6); d.W = clampTo(d.W, 1.9, 2.1); d.nose = clampTo(d.nose, 0.3, 0.42); d.ride = clampTo(d.ride, 0.06, 0.1); d.wheel = clampTo(d.wheel, 0.34, 0.38);
+    } else {
+        if (d.engine === 'v6h') d.engine = 'v8';
+        d.L = Math.min(d.L, 5.4); if (d.wbFrac > 0.65) d.wbFrac = 0.65;
+    }
+    return d;
 }
 export const DEFAULT = { preset: 'hyper', rallyLights: false, ...SHAPE_DEFAULTS, ...(({ label, style, ...shape }) => shape)(PRESETS.hyper), ...PRESETS.hyper.style,
     paint: '#E10600', finish: 'metallic', caliper: '#FFB300', rimSize: 1, engine: 'v8', name: 'My Supercar',
     livery: 'none', stripeColour: '#F4F6F8', twoTone: false, paint2: '#1B1F26', number: '', tag: '' };
 const STORE_KEY = 'builderDesign';
 export function loadDesign() {
-    try { const d = JSON.parse(localStorage.getItem(STORE_KEY)); if (d && d.L) return { ...DEFAULT, ...d }; } catch (e) { /* ignore */ }
+    try { const d = JSON.parse(localStorage.getItem(STORE_KEY)); if (d && d.L) return tidyDesign({ ...DEFAULT, ...d }); } catch (e) { /* ignore */ }
     return { ...DEFAULT };
 }
 export function saveDesign(design) { try { localStorage.setItem(STORE_KEY, JSON.stringify(design)); } catch (e) { /* storage unavailable */ } }
 
-// =====================================================================
-//  SMOOTH CURVES (monotone cubic, so the body never bulges where it shouldn't)
-// =====================================================================
-export function curve(points) {
-    const xs = points.map(p => p[0]), ys = points.map(p => p[1]), n = xs.length;
-    const d = [], m = [];
-    for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
-    m[0] = d[0]; m[n - 1] = d[n - 2];
-    for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
-    for (let i = 0; i < n - 1; i++) {
-        if (d[i] === 0) { m[i] = m[i + 1] = 0; continue; }
-        const a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b;
-        if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
-    }
-    return x => {
-        if (x <= xs[0]) return ys[0];
-        if (x >= xs[n - 1]) return ys[n - 1];
-        let i = 0; while (x > xs[i + 1]) i++;
-        const h = xs[i + 1] - xs[i], t = (x - xs[i]) / h, t2 = t * t, t3 = t2 * t;
-        return (2 * t3 - 3 * t2 + 1) * ys[i] + (t3 - 2 * t2 + t) * h * m[i] + (-2 * t3 + 3 * t2) * ys[i + 1] + (t3 - t2) * h * m[i + 1];
-    };
-}
-export const lerp = (a, b, t) => a + (b - a) * t;
+// (the smooth-curve helpers live in curves.js, shared with formula.js; they are passed on from here for the other files)
+export { curve, lerp };
 const spow = (v, p) => Math.sign(v) * Math.pow(Math.abs(v), p);
 
 // =====================================================================
@@ -553,7 +551,7 @@ function spinBlurMaterial(design) {
     return new THREE.MeshStandardMaterial({ map: t, transparent: true, opacity: 0, depthWrite: false, metalness: 0.15, roughness: 0.4, visible: false });
 }
 // (o: the Formula racer's wheels, see FORMULA_TYRES: its own tyre width tw, a smaller rim for a taller tyre, square-shouldered slicks, one centre nut)
-export function makeWheel(p, mats, front, lite = false, covered = false, o = {}) {   // (covered: a smooth cover hides the spokes, so they are left out)
+function makeWheel(p, mats, front, lite = false, covered = false, o = {}) {   // (covered: a smooth cover hides the spokes, so they are left out)
     const g = new THREE.Group(), spin = new THREE.Group(); g.add(spin); g.userData.spin = spin;
     const R = p.wheel, tw = o.tw || (front ? 0.27 : 0.32), rimR = R * (o.rimK || 0.72);
     // tyre: a rounded profile spun around the axle
@@ -614,7 +612,7 @@ export const LIVERIES = { none: 'Plain', twin: 'Twin stripes', single: 'Offset s
 // Motorsport team paint jobs, with sponsor stickers. The sponsors are all made up (no real brands or logos).
 export const TEAM_LIVERIES = { rally: 'Rally team', endurance: 'Endurance team', gt: 'GT team' };
 const ALL_LIVERIES = [...Object.keys(LIVERIES), ...Object.keys(TEAM_LIVERIES)];
-export const SPONSORS = [
+const SPONSORS = [
     { name: 'APEX TYRES', bg: '#111418', fg: '#FFB300', mark: 'ring' }, { name: 'NITRO FUEL', bg: '#E10600', fg: '#ffffff', mark: 'bolt' },
     { name: 'VELOCITY OIL', bg: '#ffffff', fg: '#1E3A8A', mark: 'drop' }, { name: 'BOLT BRAKES', bg: '#FFB300', fg: '#111418', mark: 'bolt' },
     { name: 'ROCKET PLUGS', bg: '#1E3A8A', fg: '#ffffff', mark: 'star' }, { name: 'ZOOM RADIO', bg: '#00A86B', fg: '#ffffff', mark: 'ring' },
@@ -622,7 +620,7 @@ export const SPONSORS = [
 ];
 const hasLivery = d => (d.livery && d.livery !== 'none') || d.twoTone || String(d.number || '').trim() || String(d.tag || '').trim();
 // A sponsor sticker, drawn centred on (0, 0), w x h pixels
-export function sponsorSticker(x, sp, w, h) {
+function sponsorSticker(x, sp, w, h) {
     x.fillStyle = sp.bg; x.beginPath(); x.roundRect(-w / 2, -h / 2, w, h, h * 0.18); x.fill();
     x.strokeStyle = sp.fg; x.lineWidth = Math.max(1, h * 0.06); x.stroke();
     const m = h * 0.32, mx = -w / 2 + h * 0.5;
@@ -715,7 +713,7 @@ function liveryTexture(d, hd = false) {
     // race number roundels on both doors and the driver's tag, drawn so they read the right way round on each side
     const pxU = W / d.L, pxV = H / (2 * d.W + 2 * (d.deck - d.ride) + 0.4);   // pixels per metre along and around the body
     const team = TEAM_LIVERIES[d.livery];
-    if (team) f1 ? formulaTeam(x, d, W, H, Y, band) : teamLivery(x, d, W, H, Y, band, pxU, pxV);
+    if (team) f1 ? formulaTeam(x, d, W, H, Y, band, { sponsorSticker, SPONSORS }) : teamLivery(x, d, W, H, Y, band, pxU, pxV);
     const num = String(d.number || '').trim().slice(0, 2) || (team ? { rally: '4', endurance: '24', gt: '7' }[d.livery] : ''), tag = String(d.tag || '').trim().slice(0, 14);
     if (f1) { formulaMarks(x, d, W, H, Y, num, tag); formulaPanelLines(x, d, W, H, Y); }
     else for (const side of ['right', 'left']) {
@@ -1105,7 +1103,7 @@ function paintMaterial(design, plain = false, hd = false) {
         // metallic and pearl paint: tiny flakes under the smooth clear coat glint in the light
         ...(design.finish === 'metallic' || design.finish === 'pearl' ? { normalMap: flakeTexture(), normalScale: new THREE.Vector2(0.22, 0.22) } : {}) });
 }
-export function buildMaterials(design, lite = false) {
+function buildMaterials(design, lite = false) {
     const rc = RIM_COLOURS[design.rimColour];
     return {
         paint: paintMaterial(design, false, !lite),
@@ -1130,7 +1128,7 @@ export function buildMaterials(design, lite = false) {
 }
 // Combine all the meshes under 'root' that share a material into one mesh each (fewer things to draw = smoother on tablets).
 // Each part keeps its exact position; the look doesn't change.
-export function mergeByMaterial(root) {
+function mergeByMaterial(root) {
     root.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), groups = new Map(), victims = [];
     root.traverse(o => {
@@ -1161,7 +1159,7 @@ export function mergeByMaterial(root) {
 // turn a shape inside out, so its inner surface is the one that shows (for the insides of pipes and lamp bowls)
 function insideOut(g) { g.scale(-1, 1, 1); const n = g.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i)); return g; }
 // a bar (box) from point a to point b
-export function bar(a, b, t, mat, w = t) {
+function bar(a, b, t, mat, w = t) {
     const d = new THREE.Vector3().subVectors(b, a), m = new THREE.Mesh(new THREE.BoxGeometry(w, d.length(), t), mat);
     m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return m;
 }
@@ -1296,7 +1294,7 @@ function hyperDetail(car, p, pr, mats, X, lite) {
 // ---- parts the detailed cars share ----
 // The interior and the small outside trim share one material (hidden in the driver's-seat view).
 // (it glows very faintly in its own colours, so the bright helmet still reads through the tinted glass from the race cameras)
-export function interiorKit(car, p, mats, lite) {
+function interiorKit(car, p, mats, lite) {
     if (!lite) { const it = interiorTexture(p); mats.interior = new THREE.MeshStandardMaterial({ map: it, emissive: 0xffffff, emissiveMap: it, emissiveIntensity: 0.3, roughness: 0.5, metalness: 0.1 }); }
     const col = (g, i) => { const uv = g.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, (i + 0.5) / INTERIOR.length, 0.5); return g; };
     const part = (g, i) => { const m = new THREE.Mesh(col(g, i), mats.interior); car.add(m); return m; };
@@ -1367,7 +1365,7 @@ function bucketSeat(part, xS, hy, z, w = 0.4, tone = [0, 1, 5], empty = false) {
     const rest = part(new THREE.SphereGeometry(0.1, 12, 8), tone[1]); rest.scale.set(0.6, 0.85, 1.15); rest.position.set(xS - 0.2, hy + 0.02, z);
 }
 // the driver: racing suit shoulders and a full-face helmet with a dark visor (never a face)
-export function helmetedDriver(part, xS, hy, z) {
+function helmetedDriver(part, xS, hy, z) {
     const R = 0.125;
     const body = part(new THREE.SphereGeometry(1, 14, 10), 4); body.scale.set(0.15, 0.16, 0.25); body.position.set(xS - 0.04, hy - 0.2, z);
     const lid = part(new THREE.SphereGeometry(R, 20, 14), 3); lid.scale.set(1.12, 1, 0.94); lid.position.set(xS, hy, z);
@@ -1781,7 +1779,7 @@ function wedgeDetail(car, p, pr, mats, X, lite) {
         if (yS > yF + 0.08) { tube(V(xH, yF, zh), V(xH, yS, zh)); tube(V(xH, yF, -zh), V(xH, yS, -zh)); tube(V(xH, yS, zh), V(xH, yM, zh * 0.45)); tube(V(xH, yS, -zh), V(xH, yM, -zh * 0.45)); tube(V(xH, yM, zh * 0.45), V(xH, yM, -zh * 0.45)); tube(V(xH, yF, -zh), V(xH, yM, zh * 0.45)); } }
 }
 // a round rod from point a to point b
-export function rod(a, b, r, mat, seg = 10) {
+function rod(a, b, r, mat, seg = 10) {
     const d = new THREE.Vector3().subVectors(b, a), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), seg), mat);
     m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return m;
 }
@@ -1866,7 +1864,7 @@ export function carFrame(design) { const pr = profiles(design); return { pr, X: 
 // lite: a lighter build with fewer points on the curves (the same shape and paint), for the rival cars in a race
 // draft: use the normal-size paint picture instead of the sharp one (the builder does this while a slider is being dragged)
 export function createCar(design, { merge = false, lite = false, draft = false } = {}) {
-    if (isFormula(design)) return createFormulaCar(design, { merge, lite, draft });   // (an open-wheel racer is put together its own way)
+    if (isFormula(design)) return createFormulaCar(design, { merge, lite, draft }, { makeWheel, buildMaterials, mergeByMaterial, interiorKit, helmetedDriver, bar, rod, disposer });   // (an open-wheel racer is put together its own way)
     const mats = buildMaterials(design, lite || draft), wheels = [];
     const p = design, pr = profiles(p);
     const car = new THREE.Group();
@@ -2251,7 +2249,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     return { group: car, mats, wheels, dispose: disposer(car, mats), draft: draft && fine };
 }
 // how to throw a car away when it is finished with, giving its memory back
-export function disposer(car, mats) {
+function disposer(car, mats) {
     return () => { car.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map && m.map !== TYRE_TEX && m.map !== DISC_TEX) m.map.dispose(); if (m.metalnessMap) m.metalnessMap.dispose(); m.dispose(); }); };
 }
 // =====================================================================
@@ -2379,6 +2377,6 @@ export function decodeDesign(code) {
         if (ver >= 8) d.deckRear = num(raw.deckRear, 0.8, 1.3, 1);
         if (ver >= 9) { d.roofLen = num(raw.roofLen, 0, 0.95, 0); d.rallyLights = !!raw.rallyLights; }
         if (ver >= 10) d.waist = num(raw.waist, 0.8, 1, 0.95);
-        return d;
+        return tidyDesign(d);   // (closed cars keep their old limits; only a Formula racer may be up to 5.6 m long)
     } catch (e) { return null; }
 }

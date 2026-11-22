@@ -20,6 +20,7 @@ const CORE_FILES = [
     './builder.js',
     './carmodel.js',
     './formula.js',
+    './curves.js',
     './race.js',
     './scenery.js',
     './cockpit.js',

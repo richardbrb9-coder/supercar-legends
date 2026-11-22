@@ -195,7 +195,7 @@ export function buildCockpit(design, units = 'mph') {
 const armUp = new THREE.Vector3(0, 1, 0), armDir = new THREE.Vector3(), handAt = new THREE.Vector3();
 function formulaCockpit(design, units) {
     const F = formulaFrame(design), g = new THREE.Group(), V3 = (x, y, z) => new THREE.Vector3(x, y, z);
-    const eye = V3(F.at(F.helmet.m) + 0.03, F.helmet.y - 0.035, 0);
+    const eye = V3(F.at(F.helmet.m) - 0.02, F.helmet.y - 0.03, 0);   // (a little back in the helmet, so the halo's top bar doesn't fill the view)
     const mats = {
         trim: new THREE.MeshStandardMaterial({ map: carbonTex(), color: 0xd0d4dc, roughness: 0.6 }),
         soft: new THREE.MeshStandardMaterial({ color: 0x2b2e35, roughness: 0.9 }),
@@ -217,8 +217,8 @@ function formulaCockpit(design, units) {
     const screen = { c, x: c.getContext('2d'), tex, last: -1, t: 1 };
     // gloves on the grips (they turn with the wheel) and forearms reaching back to the elbows
     const hands = [1, -1].map(sd => {
-        const glove = put(new THREE.SphereGeometry(0.042, 12, 10), mats.glove, -0.012, 0.012, sd * 0.118); glove.scale.set(1, 1.15, 0.9);
-        const elbow = V3(eye.x - 0.02, eye.y - 0.33, sd * 0.2), arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1, 14), mats.suit); g.add(arm);
+        const glove = put(new THREE.SphereGeometry(0.036, 12, 10), mats.glove, -0.012, 0.012, sd * 0.118); glove.scale.set(1.1, 1.2, 0.85);
+        const elbow = V3(eye.x - 0.02, eye.y - 0.33, sd * 0.2), arm = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.034, 1, 14), mats.suit); g.add(arm);
         return { glove, elbow, arm };
     });
     col.add(beam(V3(0.014, 0, 0), V3(0.2, 0, 0), 0.04, mats.soft));
@@ -249,9 +249,9 @@ function formulaCockpit(design, units) {
     function dispose() { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map && o.material !== mats.mirror) o.material.map.dispose(); o.material.dispose(); } }); }
     function setMirror(t) { const m = mats.mirror; if (m.map === t) return; m.map = t; m.color.set(0xffffff); m.needsUpdate = true; }
     // the 'bonnet' camera is the TV camera on top of the airbox, looking down the car over the driver's helmet and the halo
-    const bonnet = V3(F.at(2.95) + 0.14, F.spineTop(2.95) + 0.16, 0);
+    const bonnet = V3(F.at(2.95) + 0.1, F.spineTop(2.95) + 0.26, 0);   // (high enough that the helmet sits below the speed readout)
     // openTop: the race keeps drawing the car itself, close up; drop: how far down each of the two views looks at 10 m; mirrorFrom: where the mirrors' view is taken from
-    return { group: g, eye, bonnet, style: 'formula', glass: null, update, dispose, setMirror, openTop: true, drop: [1.7, 0.6], mirrorFrom: V3(-0.36, 0.34, 0) };
+    return { group: g, eye, bonnet, style: 'formula', glass: null, update, dispose, setMirror, openTop: true, drop: [1.7, 0.75], mirrorFrom: V3(-0.36, 0.34, 0) };
 }
 
 // The windscreen in bad weather. Measurements in metres on the glass: x across (0 = middle), y up the glass from its bottom edge.
