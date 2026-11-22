@@ -44,7 +44,7 @@ export class ReflectionProbe {
 // The materials on a car that should show the live reflections
 export function reflectiveMaterials(model) {
     const m = model.mats, out = [];
-    for (const k of ['paint', 'paintPlain', 'cabin', 'glass', 'chrome', 'rim', 'lens', 'head', 'tail', 'carbon', 'grille']) if (m[k]) out.push(m[k]);
+    for (const k of ['paint', 'paintPlain', 'cabin', 'glass', 'chrome', 'rim', 'lens', 'head', 'tail', 'carbon', 'grille', 'halo']) if (m[k]) out.push(m[k]);
     return out;
 }
 

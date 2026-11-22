@@ -4,6 +4,7 @@
 // so it moves with the car. The car's own cabin shell is hidden while you're inside it; its bonnet stays, seen through the glass.
 import * as THREE from './lib/three.module.min.js';
 import { carFrame, lerp, centreSeat } from './carmodel.js';
+import { isFormula, formulaFrame } from './formula.js';
 
 export const COCKPIT_STYLE = { gt60: 'classic', wedge70: 'classic', super90: 'nineties' };   // everything else is 'modern'
 
@@ -47,6 +48,7 @@ function woodTex() {
 }
 
 export function buildCockpit(design, units = 'mph') {
+    if (isFormula(design)) return formulaCockpit(design, units);
     const { pr, X } = carFrame(design), q = pr.q, style = COCKPIT_STYLE[design.preset] || 'modern', L = design.L;
     const g = new THREE.Group();
     // where the driver sits: behind the top of the windscreen, under the roof; the 90s supercar and the Longtail have a centre seat
@@ -186,6 +188,70 @@ export function buildCockpit(design, units = 'mph') {
     // the mirrors show the picture from a camera looking backwards (flipped left to right, like a real mirror)
     function setMirror(tex) { const m = mats.mirror; if (m.map === tex) return; m.map = tex; m.color.set(0xffffff); m.needsUpdate = true; }
     return { group: g, eye, bonnet, style, glass, update, dispose, setMirror };
+}
+
+// The Formula racer's cockpit. It is open, so you look out over the car's own nose, wheels and halo; all this adds is what
+// sits right in front of you: the steering wheel with its little screen, your gloves and arms, and the mirrors' glass.
+const armUp = new THREE.Vector3(0, 1, 0), armDir = new THREE.Vector3(), handAt = new THREE.Vector3();
+function formulaCockpit(design, units) {
+    const F = formulaFrame(design), g = new THREE.Group(), V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+    const eye = V3(F.at(F.helmet.m) + 0.03, F.helmet.y - 0.015, 0);
+    const mats = {
+        trim: new THREE.MeshStandardMaterial({ map: carbonTex(), color: 0xd0d4dc, roughness: 0.6 }),
+        soft: new THREE.MeshStandardMaterial({ color: 0x2b2e35, roughness: 0.9 }),
+        glove: new THREE.MeshStandardMaterial({ color: 0x23262d, roughness: 0.8 }),
+        suit: new THREE.MeshStandardMaterial({ color: design.paint, roughness: 0.8 }),      // racing overalls in the car's colour
+        mirror: new THREE.MeshBasicMaterial({ color: 0x9aa6b2 }),
+        accent: new THREE.MeshStandardMaterial({ color: design.caliper || '#FFB300', roughness: 0.5 })
+    };
+    // the steering wheel, on a short column tilted towards the driver; 'spin' turns with the steering
+    const col = new THREE.Group(); col.position.set(F.at(F.wheelM), F.wheelY, 0); col.rotation.z = -0.3; g.add(col);
+    const spin = new THREE.Group(); col.add(spin);
+    const put = (geo, mat, x, y, z) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); spin.add(m); return m; };
+    put(new THREE.BoxGeometry(0.028, 0.105, 0.2), mats.trim, 0, 0, 0);
+    for (const sd of [1, -1]) { put(new THREE.BoxGeometry(0.036, 0.13, 0.036), mats.soft, 0, 0, sd * 0.115); put(new THREE.BoxGeometry(0.008, 0.016, 0.016), mats.accent, -0.016, -0.03, sd * 0.06); }
+    // its little screen: gear, speed and a row of rev lights
+    const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sc = put(new THREE.PlaneGeometry(0.088, 0.044), new THREE.MeshBasicMaterial({ map: tex }), -0.0145, 0.02, 0); sc.rotation.y = -Math.PI / 2;
+    const screen = { c, x: c.getContext('2d'), tex, last: -1, t: 1 };
+    // gloves on the grips (they turn with the wheel) and forearms reaching back to the elbows
+    const hands = [1, -1].map(sd => {
+        const glove = put(new THREE.SphereGeometry(0.042, 12, 10), mats.glove, -0.012, 0.012, sd * 0.118); glove.scale.set(1, 1.15, 0.9);
+        const elbow = V3(eye.x - 0.02, eye.y - 0.33, sd * 0.2), arm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.04, 1, 10), mats.suit); g.add(arm);
+        return { glove, elbow, arm };
+    });
+    col.add(beam(V3(0.014, 0, 0), V3(0.2, 0, 0), 0.04, mats.soft));
+    // the mirrors show the view behind (the race gives them a picture)
+    for (const sd of [1, -1]) { const m = new THREE.Mesh(new THREE.CircleGeometry(1, 20), mats.mirror); m.scale.set(0.074, 0.036, 1); m.rotation.y = -Math.PI / 2 - sd * 0.12; m.position.set(F.at(F.mirror.m) - 0.004, F.mirror.y, sd * F.mirror.z); g.add(m); }
+    g.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+    function update(info, dt) {
+        spin.rotation.x = -info.steer * 1.7;
+        // each forearm stretches from its elbow to its glove, wherever the wheel has taken it
+        g.updateMatrixWorld(true);
+        for (const h of hands) {
+            g.worldToLocal(h.glove.getWorldPosition(handAt)); armDir.subVectors(handAt, h.elbow);
+            const len = armDir.length(); h.arm.position.copy(h.elbow).addScaledVector(armDir, 0.5); h.arm.scale.y = len; h.arm.quaternion.setFromUnitVectors(armUp, armDir.divideScalar(len));
+        }
+        screen.t += dt; if (screen.t < 0.08) return; screen.t = 0;
+        const v = Math.round(info.speed), key = v * 10 + info.gear + Math.round(info.rpm * 12) * 10000; if (key === screen.last) return; screen.last = key;
+        const x = screen.x, w = c.width, hh = c.height;
+        x.fillStyle = '#07080a'; x.fillRect(0, 0, w, hh);
+        const bars = 12, lit = Math.round(info.rpm * bars);
+        for (let i = 0; i < bars; i++) { x.fillStyle = i < lit ? (i > 9 ? '#4aa3ff' : i > 6 ? '#ff3b1f' : '#38e07b') : '#1b1d22'; x.beginPath(); x.arc(21 + i * 19.5, 16, 7, 0, Math.PI * 2); x.fill(); }
+        x.textAlign = 'center'; x.textBaseline = 'middle';
+        x.fillStyle = '#00e5ff'; x.font = '900 84px Orbitron, Arial, sans-serif'; x.fillText(String(info.gear), w * 0.5, hh * 0.64);
+        x.fillStyle = '#f4f6f8'; x.font = '900 40px Orbitron, "Exo 2", Arial, sans-serif'; x.fillText(String(v), w * 0.17, hh * 0.6); 
+        x.font = '700 18px "Exo 2", Arial, sans-serif'; x.fillText(units === 'mph' ? 'MPH' : 'KM/H', w * 0.17, hh * 0.86);
+        x.fillStyle = '#ffb300'; x.font = '700 22px "Exo 2", Arial, sans-serif'; x.fillText('GEAR', w * 0.84, hh * 0.6);
+        tex.needsUpdate = true;
+    }
+    function dispose() { g.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map && o.material !== mats.mirror) o.material.map.dispose(); o.material.dispose(); } }); }
+    function setMirror(t) { const m = mats.mirror; if (m.map === t) return; m.map = t; m.color.set(0xffffff); m.needsUpdate = true; }
+    // the 'bonnet' camera is the TV camera on top of the airbox, looking down the car over the driver's helmet and the halo
+    const bonnet = V3(F.at(2.95) + 0.14, F.spineTop(2.95) + 0.16, 0);
+    // openTop: the race keeps drawing the car itself, close up; drop: how far down each of the two views looks at 10 m; mirrorFrom: where the mirrors' view is taken from
+    return { group: g, eye, bonnet, style: 'formula', glass: null, update, dispose, setMirror, openTop: true, drop: [1.7, 0.85], mirrorFrom: V3(-0.36, 0.34, 0) };
 }
 
 // The windscreen in bad weather. Measurements in metres on the glass: x across (0 = middle), y up the glass from its bottom edge.

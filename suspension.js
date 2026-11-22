@@ -16,13 +16,16 @@ const HEAVE = { w: 13, z: 0.42 };
 // Split a race car into the body (on springs) and the wheels, and add the suspension parts if asked.
 export function fitSuspension(racer, parts = false) {
     const g = racer.model.group, wheels = racer.model.wheels;
+    // (the Formula racer's wishbones are part of the car: when its parts are asked for they stay off the body, to follow the wheels)
+    const links = racer.model.links || null, live = parts && links ? links.map(l => l.mesh) : [];
     const sprung = new THREE.Group(); sprung.name = 'sprung';
-    for (const c of [...g.children]) if (!wheels.includes(c)) sprung.add(c);
+    for (const c of [...g.children]) if (!wheels.includes(c) && !live.includes(c)) sprung.add(c);
     g.add(sprung);
     const R = racer.design.wheel;
     const s = { sprung, pitch: 0, pitchV: 0, roll: 0, rollV: 0, heave: 0, heaveV: 0, lastV: 0, lastH: null, accel: 0, lat: 0,
-        bumps: wheels.map(() => 0), heat: 0, corners: [], R };
-    if (parts) { const fr = carFrame(racer.design); s.corners = wheels.map(w => buildCorner(g, w, racer.model.mats, R, racer.design, fr.pr)); }
+        bumps: wheels.map(() => 0), heat: 0, corners: [], R, links: null, stiff: links ? 0.35 : 1 };   // (stiff: a Formula racer hardly leans or dips at all)
+    if (live.length) { s.links = links; for (const m of live) { m.matrixAutoUpdate = false; m.frustumCulled = false; } }
+    else if (parts) { const fr = carFrame(racer.design); s.corners = wheels.map(w => buildCorner(g, w, racer.model.mats, R, racer.design, fr.pr)); }
     racer.susp = s;
     return s;
 }
@@ -112,9 +115,9 @@ export function updateSuspension(r, dt, road) {
     const clamp = (v, m) => Math.max(-m, Math.min(m, v));
     // the nose rises under power and dips under braking; the body leans out of the corner
     // (never so far that the nose or tail would touch the road)
-    const pMax = Math.min(PITCH.max, (r.design.ride || 0.1) * 0.75 / (r.design.L / 2));
-    spring(s, PITCH, clamp(s.accel * PITCH.k, pMax), dt, 'pitch');
-    spring(s, ROLL, clamp(s.lat * ROLL.k, ROLL.max), dt, 'roll');
+    const pMax = Math.min(PITCH.max, (r.design.ride || 0.1) * 0.75 / (r.design.L / 2)) * s.stiff;
+    spring(s, PITCH, clamp(s.accel * PITCH.k * s.stiff, pMax), dt, 'pitch');
+    spring(s, ROLL, clamp(s.lat * ROLL.k * s.stiff, ROLL.max), dt, 'roll');
     // bumps under each wheel, from the road
     const w = r.model.wheels, c = Math.cos(r.heading), sn = Math.sin(r.heading);
     let sum = 0, front = 0, rear = 0, left = 0, right = 0;
@@ -147,6 +150,12 @@ export function updateSuspension(r, dt, road) {
     if (tl) { if (s.tailBase == null) s.tailBase = tl.emissiveIntensity; const want = s.accel < -4 && r.v > 2 ? 1.7 : 1; s.tailK = (s.tailK || 1) + (want - (s.tailK || 1)) * Math.min(1, dt * 14); tl.emissiveIntensity = s.tailBase * s.tailK; }
     // the spinning wheels blur into a soft disc at speed
     const blur = r.model.mats.spinBlur; if (blur) { blur.opacity = Math.max(0, Math.min(0.5, (Math.abs(r.v) - 9) / 45)); blur.visible = blur.opacity > 0.02; }
+    // the Formula racer's links: each corner's set is one piece, sheared so that its inner ends ride with the body
+    // and its outer ends with the wheel (y moves by a + k * z)
+    if (s.links) for (const q of s.links) {
+        const bodyDy = s.heave + q.x * pitch - q.zi * roll, k = (q.wheel.position.y - s.R - bodyDy) / (q.zo - q.zi), e = q.mesh.matrix.elements;
+        e[9] = k; e[13] = bodyDy - k * q.zi; q.mesh.matrixWorldNeedsUpdate = true;
+    }
     // the suspension parts follow
     for (const q of s.corners) {
         const wx = q.x, bodyDy = s.heave + q.x * pitch - q.side * Math.abs(q.zi) * roll, wheelDy = q.wheel.position.y - s.R;

@@ -285,8 +285,8 @@ export function createFormulaCar(design, { merge = false, lite = false, draft = 
     const hoop = [...hp.slice(1).reverse().map(([m, y, z]) => V(at(m), y + dy, -z)), ...hp.map(([m, y, z]) => V(at(m), y + dy, z))];
     add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(hoop, false, 'centripetal'), lite ? 18 : 48, 0.031, lite ? 5 : 8, false), mats.halo);
     const foot = V(at(1.95), F.top(1.95) - 0.02, 0), crown = V(at(2.085), 0.862 + dy, 0);
-    const pillar = rod(foot, crown, 0.023, mats.halo, lite ? 6 : 10); pillar.scale.set(1.9, 1, 1); car.add(pillar);
-    const knot = add(new THREE.SphereGeometry(0.032, 10, 8), mats.halo); knot.position.copy(crown); knot.scale.set(1.5, 0.95, 1.2);
+    const pillar = rod(foot, crown, 0.013, mats.halo, lite ? 6 : 10); pillar.scale.set(3.6, 1, 1); car.add(pillar);   // (a thin blade, so the driver can see round it)
+    const knot = add(new THREE.SphereGeometry(0.032, 10, 8), mats.halo); knot.position.copy(crown); knot.scale.set(1.7, 0.95, 0.8);
 
     // ---- the cockpit: padded rim, headrest, steering wheel with its little screen, and the helmeted driver ----
     const hx = at(F.helmet.m), hy = F.helmet.y;

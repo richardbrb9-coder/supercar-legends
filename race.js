@@ -258,7 +258,7 @@ function champResultHtml(pos) {
 }
 const ordinal = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10] || 'th');
 function rivalDesign(i) {
-    const keys = Object.keys(PRESETS), preset = keys[(i * 2 + 1 + Math.floor(Math.random() * 2)) % keys.length];
+    const keys = Object.keys(PRESETS).filter(k => k !== 'formula'), preset = keys[(i * 2 + 1 + Math.floor(Math.random() * 2)) % keys.length];
     const paint = PAINTS.filter(c => c !== loadDesign().paint)[(i * 3 + Math.floor(Math.random() * 3)) % 10];
     const engines = Object.keys(ENGINES), rims = Object.keys(RIMS);
     const d = applyPreset({ ...DEFAULT }, preset);
@@ -291,7 +291,7 @@ function applyCameraView() {
     if (!player) return;
     const inside = camMode === 3;
     player.model.group.traverse(o => { if (o.isMesh && (o.material === player.model.mats.cabin || o.material === player.model.mats.interior)) o.visible = !inside; });   // (and the seats, driver, wiper and door mirrors, which the cockpit model replaces)
-    camera.near = camMode === 2 ? 0.06 : 0.5; camera.updateProjectionMatrix();
+    camera.near = camMode === 2 || (inside && player.cockpit && player.cockpit.openTop) ? 0.06 : 0.5; camera.updateProjectionMatrix();   // (an open cockpit shows the car's own nose and halo close up)
     const st = document.getElementById('race-stage'); if (st) st.classList.toggle('in-cockpit', inside);   // the dash has its own speedometer
 }
 // The cockpit is drawn in a second pass over the outside world, so the car's own body (whose top runs under the cabin)
@@ -308,7 +308,7 @@ function drawMirror() {
         mirrorCam = new THREE.PerspectiveCamera(32, 256 / 96, 0.5, 600);
     }
     // (from just above the driver's head, looking level, so it sees over your own tail to the cars behind)
-    const r = player, eye = r.cockpit.eye.clone().add(new THREE.Vector3(-0.2, 0.22, 0)); r.holder.updateMatrixWorld(); r.holder.localToWorld(eye);
+    const r = player, eye = r.cockpit.eye.clone().add(r.cockpit.mirrorFrom || new THREE.Vector3(-0.2, 0.22, 0)); r.holder.updateMatrixWorld(); r.holder.localToWorld(eye);
     const back = new THREE.Vector3(r.cockpit.eye.x - 12, r.cockpit.eye.y + 0.05, r.cockpit.eye.z); r.holder.localToWorld(back);
     mirrorCam.position.copy(eye); mirrorCam.lookAt(back);
     const was = renderer.getRenderTarget(), sh = renderer.shadowMap.autoUpdate; renderer.shadowMap.autoUpdate = false;
@@ -779,7 +779,7 @@ function placeCamera(snap = false, dt = 0.016) {
         // bonnet and cockpit: fixed to the car, looking down the road (the cockpit view glances a little into corners)
         const ck = r.cockpit, eye = (camMode === 3 ? ck.eye : ck.bonnet).clone();
         const turn = camMode === 3 ? r.steer * 0.35 : 0;
-        const ahead = new THREE.Vector3(eye.x + Math.cos(turn) * 10, eye.y - (camMode === 3 ? 0.75 : r.design.cabin[0] < 0.33 ? 1.9 : 1.25), eye.z - Math.sin(turn) * 10);   // (low bonnets: look a little more down, so the bonnet shows)
+        const ahead = new THREE.Vector3(eye.x + Math.cos(turn) * 10, eye.y - (ck.drop ? ck.drop[camMode - 2] : camMode === 3 ? 0.75 : r.design.cabin[0] < 0.33 ? 1.9 : 1.25), eye.z - Math.sin(turn) * 10);   // (low bonnets: look a little more down, so the bonnet shows)
         // the camera rides with the body (like a camera fixed inside a real car), so the dash and bonnet stay still in view
         r.holder.updateMatrixWorld(); const onBody = r.susp ? r.susp.sprung : r.holder; onBody.localToWorld(eye); onBody.localToWorld(ahead);
         camera.position.copy(eye);
@@ -901,7 +901,7 @@ function startEngine() {
     engine.squeal = ng;
     if (!ev) loadSounds(ctx).then(() => {
         if (!engine || engine.ctx !== ctx || !soundBufs.v8 || !soundBufs.high) return;
-        engine.low = loopSource(ctx, kind === 'v12' || kind === 'v10' ? soundBufs.v12 || soundBufs.v8 : soundBufs.v8, master, engine.presence);
+        engine.low = loopSource(ctx, kind === 'v12' || kind === 'v10' || kind === 'v6h' ? soundBufs.v12 || soundBufs.v8 : soundBufs.v8, master, engine.presence);
         engine.high = loopSource(ctx, soundBufs.high, master, engine.presence);
         engine.real = true;
         if (engine.fx) engine.fx.useEngineRecording(soundBufs.v8);
@@ -937,7 +937,7 @@ function updateEngine() {
     engine.o1.frequency.setTargetAtTime(f, t, 0.05); engine.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
     if (engine.real) {
         // a higher-pitched engine for the V10 and V12, and each gear starts a touch higher than the last
-        const base = { v8: 0.82, hybrid: 0.86, v10: 1.0, v12: 1.08 }[engine.kind] || 0.9, rate = base * (0.72 + rpm * 1.15 + (gs.gear - 1) * 0.03);
+        const base = { v8: 0.82, hybrid: 0.86, v10: 1.0, v12: 1.08, v6h: 1.16 }[engine.kind] || 0.9, rate = base * (0.72 + rpm * 1.15 + (gs.gear - 1) * 0.03);
         engine.low.s.playbackRate.setTargetAtTime(rate, t, 0.04); engine.high.s.playbackRate.setTargetAtTime(0.55 + rpm * 0.75 + (gs.gear - 1) * 0.02, t, 0.04);
         const hi = Math.max(0, (rpm - 0.45) / 0.55);
         engine.low.g.gain.setTargetAtTime((0.24 - hi * 0.1) * on, t, 0.08); engine.high.g.gain.setTargetAtTime(hi * 0.2 * on, t, 0.08);
@@ -1486,7 +1486,7 @@ export function leave() {
 }
 // for testing: drive automatically along the racing line
 export function autopilot(on) { window.__autopilot = on; }
-export function suspDebug() { const s = player && player.susp; return s && { pitch: +s.pitch.toFixed(4), roll: +s.roll.toFixed(4), heave: +s.heave.toFixed(4), heat: +s.heat.toFixed(2), bumps: s.bumps.map(b => +b.toFixed(3)), parts: s.corners.length }; }
+export function suspDebug() { const s = player && player.susp; return s && { pitch: +s.pitch.toFixed(4), roll: +s.roll.toFixed(4), heave: +s.heave.toFixed(4), heat: +s.heat.toFixed(2), bumps: s.bumps.map(b => +b.toFixed(3)), parts: s.corners.length || (s.links ? s.links.length : 0) }; }
 export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), rivalLat: rivals.map(r => [+r.lat.toFixed(2), +r.latV.toFixed(2)]), trackLen, ghost: !!(ghost && ghost.holder.visible), slip: player && player.slip, time: timeOfDay, quality, shadows: renderer.shadowMap.enabled, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
 export function setHelp(on) { help = on; }
 export function testReplay() { if (race && race.tape && race.tape.length >= 20) { startReplay(); return true; } return false; }   // testing only
