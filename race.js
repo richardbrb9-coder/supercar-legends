@@ -3,6 +3,7 @@
 import * as THREE from './lib/three.module.min.js';
 import * as SC from './scenery.js';
 import { Effects } from './effects.js';
+import { Damage } from './damage.js';
 import { buildCockpit } from './cockpit.js';
 import { fitSuspension, updateSuspension, jolt } from './suspension.js';
 import { ReflectionProbe, reflectiveMaterials } from './reflections.js';
@@ -206,7 +207,8 @@ function makeRacer(design, factor, isPlayer) {
     // a soft contact shadow right under the car (with the sun's shadows on, a lighter one, so the car sits on the road)
     blob.material.opacity = renderer && renderer.shadowMap.enabled ? 0.55 : 1;
     const racer = { design, model, holder, blob, stats, perf: perf(stats, factor), isPlayer, x: 0, z: 0, heading: 0, v: 0, steer: 0, d: 0, idx: 0, lap: 0,
-             lapStart: 0, lastLat: 0, finished: null, best: null, half: false, wheelSpin: 0, lineOffset: 0, lat: 0, latV: 0 };
+             lapStart: 0, lastLat: 0, finished: null, best: null, half: false, wheelSpin: 0, lineOffset: 0, lat: 0, latV: 0,
+             laps: [], lineStart: 0, hitAt: -9 };   // (laps: every lap time; lineStart: when it first crossed the line after the start; hitAt: its last bump)
     fitSuspension(racer, isPlayer && quality !== 'low');     // the body rides on springs; your own car shows its suspension parts
     return racer;
 }
@@ -235,26 +237,27 @@ function standingsTable(highlight) {
         return `<tr class="${i === 0 ? 'me' : ''}"><td>${k + 1}</td><td><span class="champ-dot" style="background:${col}"></span>${escapeHtml(names[i])}</td><td>${last ? `P${last.pos} +${last.pts}` : ''}</td><td><b>${champ.points[i]}</b></td></tr>`;
     }).join('')}</tbody></table>`;
 }
-// finishing order of everyone, when you cross the line (rivals still racing are placed by how far round they are)
+// points for everyone, from the finishing order (see classify: rivals still racing when you finish are run on to the line)
 function champScore() {
-    const all = [player, ...rivals].sort((a, b) => (a.finished ?? Infinity) - (b.finished ?? Infinity) || progressOf(b) - progressOf(a));
-    champ.last = all.map((c, k) => { const idx = c === player ? 0 : rivals.indexOf(c) + 1, pts = CHAMP_POINTS[k] || 0; champ.points[idx] += pts; return { idx, pos: k + 1, pts }; });
+    champ.last = race.results.map((row, k) => { const idx = row.k, pts = CHAMP_POINTS[k] || 0; champ.points[idx] += pts; return { idx, pos: k + 1, pts }; });
     champ.round++;
 }
 function champResultHtml(pos) {
     const done = champ.round >= CHAMP_TRACKS.length, names = champNames();
     const leader = champ.points.indexOf(Math.max(...champ.points)), you = [...champ.points].sort((a, b) => b - a).indexOf(champ.points[0]) + 1;
-    let head = `<span class="kicker">Championship · race ${champ.round} of ${CHAMP_TRACKS.length} · ${difficulty}</span><h2>You finished ${ordinal(pos)}</h2>`;
+    let kicker = `Championship · race ${champ.round} of ${CHAMP_TRACKS.length} · ${difficulty}`, title = `You finished ${ordinal(pos)}`, extra = '';
     const nextTrack = TRACKS.find(t => t.id === CHAMP_TRACKS[champ.round]);
     let actions = `<button class="big-btn" data-race="champ-next">Next race: ${nextTrack ? nextTrack.name : ''}</button><button class="act-btn" data-race="replay">🎬 Watch replay</button><button class="act-btn ghost" data-race="champ-quit">Leave championship</button>`;
     if (done) {
         const won = leader === 0 && champ.points.filter(p => p === champ.points[0]).length === 1 || you === 1;
         if (won) { const t = store('raceTrophies', {}); t[difficulty] = (t[difficulty] || 0) + 1; storeSet('raceTrophies', t); }
-        head = `<span class="kicker">Championship · final standings · ${difficulty}</span><h2>${won ? '🏆 You are the champion!' : `You finished ${ordinal(you)} overall`}</h2>${won ? '<p class="rr-medal">Champion\'s trophy</p>' : `<p class="small">${escapeHtml(names[leader])} won it this time. Try again?</p>`}`;
+        kicker = `Championship · final standings · ${difficulty}`; title = won ? '🏆 You are the champion!' : `You finished ${ordinal(you)} overall`;
+        extra = won ? '<p class="rr-medal">Champion\'s trophy</p>' : `<p class="small">${escapeHtml(names[leader])} won it this time. Try again?</p>`;
         actions = `<button class="big-btn" data-race="champ-again">New championship</button><button class="act-btn" data-race="replay">🎬 Watch replay</button><button class="act-btn ghost" data-race="champ-quit">Menu</button>`;
         window.playSound && window.playSound(won ? 'win' : 'lose');
     }
-    return `<div class="rr-box champ-box">${head}${standingsTable()}<div class="rr-actions">${actions}</div></div>`;
+    race.sheet = { kicker, title, extra: done ? extra : `<p class="small">You are ${ordinal(you)} in the championship with ${champ.points[0]} point${champ.points[0] === 1 ? '' : 's'}.</p>`, actions, more: '🏆 Standings' };
+    return `<div class="rr-box champ-box"><span class="kicker">${kicker}</span><h2>${title}</h2>${extra}${standingsTable()}<div class="rr-actions">${actions}${PODIUM_BTN}</div></div>`;
 }
 const ordinal = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14) ? 0 : n % 10] || 'th');
 function rivalDesign(i) {
@@ -273,7 +276,7 @@ function rivalDesign(i) {
 //  STATE
 // =====================================================================
 let renderer, scene, camera, raf = null, started = false, lastT = 0;
-let sky = null, sun = null, hemi = null, efx = null, headlight = null, carGlow = null, look = null, elapsed = 0, puffT = 0;
+let sky = null, sun = null, hemi = null, efx = null, dmg = null, headlight = null, carGlow = null, look = null, elapsed = 0, puffT = 0;
 let timeOfDay = store('raceTime', 'day');
 let weatherKind = Object.keys(WEATHERS).includes(store('raceWeather', 'sunny')) ? store('raceWeather', 'sunny') : 'sunny', weather = null;
 // graphics quality: 'auto' picks a level and steps down if the frame rate drops
@@ -285,7 +288,7 @@ const input = { left: false, right: false, gas: false, brake: false, tilt: 0 };
 // camera views: 0 chase, 1 close chase, 2 bonnet, 3 cockpit (from the driver's seat)
 const CAM_NAMES = ['Chase camera', 'Close chase camera', 'Bonnet camera', 'Cockpit view'];
 let camMode = [0, 1, 2, 3].includes(store('raceCam', 0)) ? store('raceCam', 0) : 0, help = store('raceHelp', true);
-function nextCamera() { camMode = (camMode + 1) % 4; storeSet('raceCam', camMode); applyCameraView(); flash(CAM_NAMES[camMode], 1100); }
+function nextCamera() { if (race && (race.replay || race.podium)) return; camMode = (camMode + 1) % 4; storeSet('raceCam', camMode); applyCameraView(); flash(CAM_NAMES[camMode], 1100); }
 // show the cockpit (and hide the car's own cabin shell) only in the cockpit view
 function applyCameraView() {
     if (!player) return;
@@ -329,7 +332,7 @@ function updateReflections() {
         // strength from carmodel.js, e.g. the darker see-through glass, as a multiplier)
         if (tex) for (const m of reflectiveMaterials(r.model)) { if (m.userData.envBase === undefined) m.userData.envBase = m.envMapIntensity; m.envMapIntensity = scene.environmentIntensity * 1.35 * m.userData.envBase; }
     }
-    if (tex) probe.update(scene, player.holder.position, [player.holder, weather && weather.group].filter(Boolean), sky);
+    if (tex) probe.update(scene, race.podium && !race.replay ? podium.group.position : player.holder.position, [player.holder, weather && weather.group].filter(Boolean), sky);
 }
 // where the sun is in the picture, and how strongly its lens flare shows (sunny days and sunsets only)
 const sunTmp = new THREE.Vector3(), sunUV = new THREE.Vector2(), SUN_SUNSET = new THREE.Color(1, 0.62, 0.32), SUN_DAY = new THREE.Color(1, 0.93, 0.8);
@@ -388,7 +391,8 @@ function storeSet(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); 
 
 function setupRace() {
     // remove old cars
-    [player, ...rivals, ghost].forEach(r => { if (r) { scene.remove(r.holder); r.model.dispose(); if (r.cockpit) { if (r.cockpit.group.parent) r.cockpit.group.parent.remove(r.cockpit.group); r.cockpit.dispose(); } } });
+    leavePodium();
+    [player, ...rivals, ghost].forEach(r => { if (r) { scene.remove(r.holder); dmg.unfit(r); r.model.dispose(); if (r.cockpit) { if (r.cockpit.group.parent) r.cockpit.group.parent.remove(r.cockpit.group); r.cockpit.dispose(); } } });
     rivals = []; ghost = null;
     player = makeRacer(loadDesign(), 1, true);
     scene.add(player.holder);
@@ -421,7 +425,11 @@ function setupRace() {
         }
     }
     if (efx) efx.clear();
-    race = { phase: 'lights', t: 0, lightsT: 0, raceTime: 0, results: null, recording: [], lapTimes: [], tape: [] };
+    // crash damage (looks only): every car starts each race, and each championship round, as good as new
+    dmg.clearPieces();
+    for (const r of [player, ...rivals]) dmg.fit(r);
+    try { for (const o of dmg.warmUp(player)) { const was = o.visible; o.visible = true; renderer.compile(o, camera, scene); o.visible = was; } } catch (e) { /* made ready at the first bump instead */ }
+    race = { phase: 'lights', t: 0, lightsT: 0, raceTime: 0, results: null, recording: [], lapTimes: [], tape: [], hits: [] };
     updateCars(0); placeCamera(true);
     hud();
 }
@@ -437,16 +445,18 @@ function nearestIndex(r) {
     }
     return best;
 }
+const raceLaps = () => window.__laps || TRACK.laps;   // (__laps: testing only, a shorter race)
 function lapCrossing(r, prevIdx) {
     if (prevIdx > N * 0.4 && prevIdx < N * 0.6) r.half = true;
     if (prevIdx > N * 0.9 && r.idx < N * 0.1) {
         if (r.half) {
             r.lap++; r.half = false;
             const now = race.raceTime, lapTime = r.lap >= 1 ? now - r.lapStart : null;
+            if (lapTime == null) r.lineStart = now; else r.laps.push(lapTime);     // every car's lap times are kept, for the podium
             if (lapTime != null && (r.best == null || lapTime < r.best)) r.best = lapTime;
             if (r.isPlayer) onPlayerLap(lapTime);
             r.lapStart = now;
-            if (mode === 'race' && r.lap >= TRACK.laps && r.finished == null) { r.finished = now; if (r.isPlayer) finishRace(); }
+            if (mode === 'race' && r.lap >= raceLaps() && r.finished == null) { r.finished = now; if (r.isPlayer) finishRace(); }
         }
     }
     if (prevIdx < N * 0.1 && r.idx > N * 0.9) r.half = false;   // reversing over the line doesn't count
@@ -528,6 +538,7 @@ function drivePlayer(dt) {
             const sg = Math.sign(lat2);   // sparks where the car scrapes the barrier
             efx.sparksAt(r.x + s2.n.x * sg * 1.0, 0.4, r.z + s2.n.z * sg * 1.0, Math.cos(r.heading), -Math.sin(r.heading), Math.min(40, 8 + r.v));
             efx.bump(Math.min(0.8, r.v / 60));
+            carHit(r, s2.n.x * sg, s2.n.z * sg, Math.min(0.7, r.v / 60), null, r.v < 30);   // a scuff from the barrier (a hard hit can leave a dent)
         }
         r.v *= 0.82;
     }
@@ -564,16 +575,29 @@ function driveRival(r, dt) {
     const prevIdx = r.idx; r.idx = ((Math.floor(r.d / trackLen * N) % N) + N) % N;
     if (go) lapCrossing(r, prevIdx);
 }
+// Crash damage, which only changes how the cars look (see damage.js). (nx, nz) points from this car towards what it hit.
+// Bumps are spaced out, so two cars rubbing along each other pick up a scuff now and then, not one every moment.
+function carHit(r, nx, nz, sev, colour, light) {
+    if (!r.damage || race.ff || race.raceTime - r.hitAt < (sev < 0.35 ? 2.5 : 0.45)) return;
+    r.hitAt = race.raceTime;
+    const c = Math.cos(r.heading), s = Math.sin(r.heading);
+    const ev = dmg.hit(r, nx * c - nz * s, nx * s + nz * c, sev, colour, light);
+    if (ev) { ev.t = race.raceTime; ev.k = r.isPlayer ? 0 : rivals.indexOf(r) + 1; race.hits.push(ev); }   // (kept for the replay)
+}
+function crash(a, b, nx, nz, dv) {
+    const sev = Math.max(0.2, Math.min(1, dv / 12));
+    carHit(a, nx, nz, sev, b.design.paint, false); carHit(b, -nx, -nz, sev, a.design.paint, false);
+}
 // keep cars from driving through each other
 function collisions() {
-    const all = [player, ...rivals];
+    const all = race.ff ? rivals : [player, ...rivals];   // (ff: the rivals finishing their race quickly, see classify)
     for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
         const a = all[i], b = all[j], dx = b.x - a.x, dz = b.z - a.z, dist = Math.hypot(dx, dz), min = 2.6;
         if (dist < min && dist > 0.01) {
             const push = (min - dist) / 2, nx = dx / dist, nz = dz / dist;
-            if (a.isPlayer) { a.x -= nx * push * 2; a.z -= nz * push * 2; a.v *= 0.97; if (Math.abs(a.v - b.v) > 4) { bump(0.2); jolt(a, 0.25); efx.sparksAt((a.x + b.x) / 2, 0.5, (a.z + b.z) / 2, -nx, -nz, 14); } }
-            else if (b.isPlayer) { b.x += nx * push * 2; b.z += nz * push * 2; b.v *= 0.97; }
-            else { a.v *= 0.995; }
+            if (a.isPlayer) { a.x -= nx * push * 2; a.z -= nz * push * 2; a.v *= 0.97; if (Math.abs(a.v - b.v) > 4) { bump(0.2); jolt(a, 0.25); efx.sparksAt((a.x + b.x) / 2, 0.5, (a.z + b.z) / 2, -nx, -nz, 14); } crash(a, b, nx, nz, Math.abs(a.v - b.v)); }
+            else if (b.isPlayer) { b.x += nx * push * 2; b.z += nz * push * 2; b.v *= 0.97; crash(a, b, nx, nz, Math.abs(a.v - b.v)); }
+            else { a.v *= 0.995; if (dist < 2.1) crash(a, b, nx, nz, Math.min(5, Math.abs(a.v - b.v) * 0.5)); }   // (rivals only mark each other when really close, and never hard enough to lose a part)
         }
     }
 }
@@ -643,10 +667,36 @@ function updateGhost() {
     const [x, z, h] = ghost.frames[i];
     ghost.holder.visible = true; ghost.holder.position.set(x, 0, z); ghost.holder.rotation.y = h;
 }
+// The finishing order of the whole field, worked out the moment you cross the line. Rivals who are still racing are
+// driven on to the finish straight away, at high speed and out of sight, by the very same driving code (in the same
+// small time steps) that was racing them a moment ago. So every time on the podium is a real one, never a guess. The
+// cars you can see are then put back exactly where they were, and carry on round the track as before.
+function classify() {
+    const before = [player, ...rivals].map(progressOf);
+    const keep = rivals.map(r => ({ x: r.x, z: r.z, heading: r.heading, v: r.v, steer: r.steer, d: r.d, idx: r.idx, lap: r.lap, lapStart: r.lapStart, finished: r.finished,
+        best: r.best, half: r.half, lat: r.lat, latV: r.latV, lineStart: r.lineStart, nLaps: r.laps.length }));
+    const t0 = race.raceTime; race.ff = true;
+    for (let i = 0; i < 40000; i++) {                           // (at most 400 more seconds of racing)
+        let racing = false; for (const r of rivals) if (r.finished == null) { racing = true; break; }
+        if (!racing) break;
+        for (const r of rivals) driveRival(r, 0.01);
+        collisions(); race.raceTime += 0.01;
+    }
+    const rows = [player, ...rivals].map((c, k) => ({ k, c, name: k === 0 ? 'You' : TEAM_NAMES[(k - 1) % TEAM_NAMES.length], colour: c.design.paint, total: c.finished,
+        // lap 1 is timed from the green light (like a real race), so the laps add up to the race time
+        laps: c.finished == null ? [] : c.laps.slice(0, raceLaps()).map((t, i) => i === 0 ? t + c.lineStart : t), best: c.best, far: progressOf(c) }));
+    rows.sort((a, b) => (a.total ?? Infinity) - (b.total ?? Infinity) || before[b.k] - before[a.k] || b.far - a.far);
+    rivals.forEach((r, i) => { const { nLaps, ...was } = keep[i]; Object.assign(r, was); r.laps.length = nLaps; });
+    race.raceTime = t0; race.ff = false;
+    return rows;
+}
+const PODIUM_BTN = '<button class="act-btn ghost pod-only" data-race="podium">🏁 Podium</button>';
 function finishRace() {
-    race.phase = 'done'; race.tapeEnd = race.raceTime + 4;     // keep filming for a few seconds after the line
+    race.phase = 'done'; race.tapeEnd = race.raceTime + 3;     // keep filming for a few seconds after the line
+    race.podiumAt = race.t + 3;                                // ... and then the top three go up on the podium
     clearTimeout(flashTimer); document.getElementById('race-flash').classList.remove('show');
-    const pos = positionOf(player);
+    race.results = classify();
+    const pos = race.results.findIndex(row => row.k === 0) + 1;
     const medal = ['🥇 Gold', '🥈 Silver', '🥉 Bronze'][pos - 1] || 'No medal this time';
     const medals = store('raceMedals', {}); const prev = medals[TRACK.id + '_' + difficulty];
     const before = medalPoints();
@@ -654,17 +704,126 @@ function finishRace() {
     const after = medalPoints(), unlocked = UNLOCKS.filter(u => u.pts > before && u.pts <= after);
     const next = UNLOCKS.find(u => u.pts > after);
     window.playSound && window.playSound(pos === 1 ? 'win' : 'lose');
-    const el = document.getElementById('race-result');
+    const el = document.getElementById('race-result'); el.className = 'race-panel';
+    const unlockHtml = unlocked.map(u => `<p class="rr-unlock">🔓 Unlocked in Build: <b>${u.label}</b></p>`).join('');
+    const actions = '<button class="big-btn" data-race="again">Race again</button><button class="act-btn" data-race="replay">🎬 Watch replay</button><button class="act-btn ghost" data-race="menu">Menu</button>';
+    race.sheet = { kicker: `${TRACK.name} · ${difficulty}`, title: pos === 1 ? 'You win!' : `You finished ${ordinal(pos)}`, extra: (pos <= 3 ? `<p class="rr-medal">${medal}</p>` : '') + unlockHtml, actions, more: '📋 Results' };
     el.innerHTML = `<div class="rr-box"><span class="kicker">${TRACK.name} · ${difficulty}</span>
         <h2>${pos === 1 ? 'You win!' : `You finished ${ordinal(pos)}`}</h2>
         <p class="rr-medal">${medal}</p>
         <p>Race time <b>${fmtTime(player.finished)}</b> · Best lap <b>${fmtTime(player.best)}</b></p>
         ${after > before ? `<p class="rr-unlock">+${after - before} medal point${after - before > 1 ? 's' : ''} (${after} in total)</p>` : ''}
-        ${unlocked.map(u => `<p class="rr-unlock">🔓 Unlocked in Build: <b>${u.label}</b></p>`).join('')}
+        ${unlockHtml}
         ${next ? `<p class="small">Next unlock at ${next.pts} points: ${next.label}</p>` : ''}
-        <div class="rr-actions"><button class="big-btn" data-race="again">Race again</button><button class="act-btn" data-race="replay">🎬 Watch replay</button><button class="act-btn ghost" data-race="menu">Menu</button></div></div>`;
-    if (champ) { champScore(); el.innerHTML = champResultHtml(pos); }
+        <div class="rr-actions">${actions}${PODIUM_BTN}</div></div>`;
+    if (champ) { champScore(); const unlocks = race.sheet.extra.replace(/<p class="rr-medal">.*?<\/p>/, ''); el.innerHTML = champResultHtml(pos); race.sheet.extra += unlocks; }
     el.hidden = false;
+}
+
+// =====================================================================
+//  THE PODIUM: a few seconds after you finish, the top three cars go up on the steps by the start line, with their
+//  lap times underneath. The cars are the real race cars, bumps and scrapes and all.
+// =====================================================================
+// each step: [place, metres to the side of the middle of the road, height, how far the car is turned in towards the middle]
+const STEPS = [[1, 0, 0.9, 0], [2, 3.7, 0.6, 0.26], [3, -3.7, 0.35, -0.26]], STEP_LEN = 5.9, STEP_W = 3.6, PODIUM_D = 12;
+let podium = null;
+function buildPodium() {
+    const group = new THREE.Group(), block = new THREE.MeshStandardMaterial({ color: 0x232831, roughness: 0.55, metalness: 0.3 }), edge = new THREE.MeshStandardMaterial({ color: 0xE10600, roughness: 0.5 });
+    const top = new THREE.MeshStandardMaterial({ color: 0x15171b, roughness: 0.8 });
+    for (const [n, z, h] of STEPS) {
+        const b = new THREE.Mesh(new THREE.BoxGeometry(STEP_LEN, h, STEP_W), block); b.position.set(0, h / 2, z); b.castShadow = b.receiveShadow = true; group.add(b);
+        const lid = new THREE.Mesh(new THREE.BoxGeometry(STEP_LEN + 0.06, 0.05, STEP_W + 0.06), top); lid.position.set(0, h - 0.02, z); lid.receiveShadow = true; group.add(lid);
+        const trim = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, STEP_W + 0.08), edge); trim.position.set(STEP_LEN / 2 + 0.02, h - 0.03, z); group.add(trim);
+        // the big number on the front of the step
+        const tex = canvasTex(128, 128, x => { x.clearRect(0, 0, 128, 128); x.font = '900 104px Orbitron, Arial Black, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = ['#FFB300', '#C9CED6', '#C98A4B'][n - 1]; x.fillText(String(n), 64, 70); });
+        const size = Math.min(0.8, h - 0.1), num = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: tex, transparent: true }));
+        num.rotation.y = Math.PI / 2; num.position.set(STEP_LEN / 2 + 0.012, (h - 0.06) / 2, z); group.add(num);
+    }
+    group.visible = false; scene.add(group);
+    return { group };
+}
+// put the three cars on their steps, and everyone else out of sight
+function podiumScene() {
+    if (!podium) podium = buildPodium();
+    const P = race.podium, at = pathAt(PODIUM_D, 0, 0), c = Math.cos(at.heading), sn = Math.sin(at.heading);
+    podium.group.position.set(at.x, 0, at.z); podium.group.rotation.y = at.heading; podium.group.visible = true;
+    P.x = at.x; P.z = at.z; P.heading = at.heading;
+    for (const r of [player, ...rivals]) { r.holder.visible = false; r.v = 0; }
+    P.top.forEach((row, i) => {
+        const r = row.c, [, z, h, turn] = STEPS[i];
+        r.x = at.x + z * sn; r.z = at.z + z * c; r.heading = at.heading + turn; r.v = 0; r.steer = turn ? Math.sign(turn) * 0.3 : 0.22;
+        r.holder.visible = true; r.holder.position.set(r.x, h, r.z); r.holder.rotation.y = r.heading;
+        if (r.susp) { r.susp.lastV = 0; r.susp.lastH = r.heading; }
+        for (const w of r.model.wheels) w.rotation.y = (w.userData.side < 0 ? Math.PI : 0) + (w.userData.front ? r.steer : 0);
+    });
+    if (headlight && headlight.visible) {   // at night: the headlight and the lamp glow light the podium instead
+        headlight.position.set(at.x + c * 13, 6, at.z - sn * 13); headlight.target.position.set(at.x, 0.8, at.z); headlight.target.updateMatrixWorld();
+        carGlow.position.set(at.x + c * 2, 5, at.z - sn * 2);
+    }
+    document.getElementById('race-stage').classList.add('podium-on');
+    document.getElementById('race-hud').innerHTML = ''; lastHud = '';
+}
+function lapRows(row) {
+    return `<table class="pod-laps">${row.laps.map((t, i) => `<tr><td>Lap ${i + 1}</td><td>${fmtTime(t)}</td></tr>`).join('')}<tr class="tot"><td>Total</td><td>${fmtTime(row.total)}</td></tr></table>`;
+}
+function startPodium() {
+    const rows = race.results, top = rows.slice(0, 3).filter(row => row.total != null), you = rows.findIndex(row => row.k === 0);
+    race.podiumAt = null;
+    race.podium = { t: 0, top, saveCam: camMode, party: you < 3 && !matchMedia('(prefers-reduced-motion: reduce)').matches };
+    camMode = 0; applyCameraView();
+    stopEngine(); if (efx) efx.clear(); dmg.clearPieces();
+    podiumScene();
+    // the sheet under the cars: who came where, each lap and the race time. Second, first, third, the same way round as the steps.
+    const card = i => { const row = top[i]; if (!row) return '<div></div>';
+        return `<div class="pod-card p${i + 1} ${row.k === 0 ? 'me' : ''}" style="--c:${row.colour}"><div class="pod-pos">${ordinal(i + 1)}</div><div class="pod-name"><span class="champ-dot" style="background:${row.colour}"></span>${escapeHtml(row.name)}</div>${lapRows(row)}</div>`; };
+    const mine = rows[you], S = race.sheet;
+    const own = you >= 3 ? `<div class="pod-you"><b>You · ${ordinal(you + 1)}</b>${mine.laps.map((t, i) => `<span>Lap ${i + 1} <b>${fmtTime(t)}</b></span>`).join('')}<span>Total <b>${fmtTime(mine.total)}</b></span></div>` : '';
+    const el = document.getElementById('race-result'), sheet = document.createElement('div'); sheet.className = 'pod-sheet';
+    sheet.innerHTML = `<div class="pod-head"><span class="kicker">${S.kicker}</span><h2>${S.title}</h2>${S.extra}</div>
+        <div class="pod-cards">${card(1)}${card(0)}${card(2)}</div>${own}
+        <p class="pod-note">Lap 1 is timed from the green light.</p>
+        <div class="rr-actions">${S.actions}<button class="act-btn ghost" data-race="results">${S.more}</button></div>`;
+    el.appendChild(sheet); el.classList.add('has-podium', 'podium'); el.hidden = false;
+}
+// leave the podium for good (a new race, or back to the menu)
+function leavePodium() {
+    if (podium) podium.group.visible = false;
+    if (camera) camera.clearViewOffset();
+    const st = document.getElementById('race-stage'); if (st) st.classList.remove('podium-on');
+    if (race && race.podium) { camMode = race.podium.saveCam; race.podium = null; }
+}
+// confetti for a podium finish: a few dozen bits of coloured paper on the flat layer over the 3D view, for a few seconds
+const CONFETTI = 70, confetti = new Float32Array(CONFETTI * 5), CONFETTI_COLOURS = ['#E10600', '#FFB300', '#00E5FF', '#C6FF00', '#F4F6F8'];
+function drawConfetti(P, dt) {
+    const cv = efx.overlay, x = efx.ctx2d, w = cv.clientWidth, h = cv.clientHeight;
+    if (!P.party || P.t > 7) { if (P.party) { P.party = false; x.clearRect(0, 0, cv.width, cv.height); } return; }
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    if (!P.thrown) { P.thrown = true; for (let i = 0; i < CONFETTI; i++) confetti.set([Math.random() * w, -Math.random() * h * 0.9, (Math.random() - 0.5) * 60, 90 + Math.random() * 130, Math.random() * 6], i * 5); }
+    x.clearRect(0, 0, w, h); x.globalAlpha = Math.min(1, (7 - P.t) / 1.5);
+    for (let i = 0; i < CONFETTI; i++) {
+        const k = i * 5; confetti[k] += (confetti[k + 2] + Math.sin(P.t * 3 + i) * 30) * dt; confetti[k + 1] += confetti[k + 3] * dt; confetti[k + 4] += dt * 7;
+        x.fillStyle = CONFETTI_COLOURS[i % 5]; x.fillRect(confetti[k], confetti[k + 1], 9, 5 * Math.abs(Math.cos(confetti[k + 4])) + 2);
+    }
+    x.globalAlpha = 1;
+}
+const podiumLook = new THREE.Vector3();
+function podiumFrame(dt) {
+    const P = race.podium; P.t += dt;
+    for (const row of P.top) updateSuspension(row.c, dt, null);
+    // the camera: in front of the cars, drifting slowly from side to side, and far enough back to fit all three in.
+    // The picture is slid up the screen, so the cars sit above the sheet of lap times.
+    const fov = camera.aspect < 1 ? 58 : 44, tanV = Math.tan(fov * Math.PI / 360), ease = 1 - Math.pow(1 - Math.min(1, P.t / 2.2), 3);
+    const short = renderer.domElement.clientHeight < 500 && camera.aspect > 1.2;   // a phone on its side: the heading sits beside the cars, so they move over to the right
+    const far = Math.max((camera.aspect < 1 ? 6.1 : 5.9) / (tanV * camera.aspect * (short ? 0.72 : 1)), 3.1 / tanV), dist = far * (1.35 - 0.35 * ease) + STEP_LEN / 2;
+    const a = Math.sin(P.t * 0.32) * Math.min(0.34, Math.asin(Math.min(1, (HW - 2.5) / (far * 1.35 + STEP_LEN / 2)))), c = Math.cos(P.heading + a), sn = Math.sin(P.heading + a);   // (the camera stays over the road, inside the barriers)
+    camera.fov = fov; camera.position.set(P.x + c * dist, 2.0 + (1 - ease) * 2.5, P.z - sn * dist);
+    camera.lookAt(podiumLook.set(P.x, 0.9, P.z));
+    camera.setViewOffset(camera.aspect * 1000, 1000, short ? -140 * camera.aspect : 0, camera.aspect < 1 ? 170 : short ? 190 : 150, camera.aspect * 1000, 1000);
+    camPos.copy(camera.position); camLook.copy(podiumLook);
+    followSun(P.x, P.z); world.update(dt);
+    if (weather) weather.update(dt, camera.position, 0, 0);
+    efx.update(dt); drawConfetti(P, dt);
+    drawFrame();
 }
 
 // =====================================================================
@@ -696,8 +855,12 @@ function buildTvCams() {
 function startReplay() {
     if (!race || !race.tape || race.tape.length < 20) return;
     if (!tvCams) buildTvCams();
-    race.replay = { t: 0, shot: -1, shotT: 0, cam: null, saveCam: camMode };
+    race.replay = { t: 0, shot: -1, shotT: 0, cam: null, saveCam: camMode, hit: 0 };
     camMode = 0; applyCameraView();
+    if (race.podiumAt != null) race.podiumAt = 0;                    // (the podium then follows straight after the replay)
+    if (race.podium) { podium.group.visible = false; camera.clearViewOffset(); document.getElementById('race-stage').classList.remove('podium-on'); }
+    for (const c of [player, ...rivals]) { c.holder.visible = true; dmg.reset(c); }   // the cars start the replay undamaged: each bump comes back at its moment
+    dmg.clearPieces();
     document.getElementById('race-result').hidden = true;
     let bar = document.getElementById('race-replay');
     if (!bar) { bar = document.createElement('div'); bar.id = 'race-replay'; bar.className = 'race-replay'; document.getElementById('race-canvas-wrap').appendChild(bar); }
@@ -709,7 +872,9 @@ function startReplay() {
 }
 function stopReplay() {
     if (!race || !race.replay) return;
+    replayHits(Infinity, false); dmg.clearPieces();                  // all the race's damage is back on the cars
     camMode = race.replay.saveCam; race.replay = null; applyCameraView();
+    if (race.podium) { efx.clear(); podiumScene(); }
     const bar = document.getElementById('race-replay'); if (bar) bar.hidden = true;
     document.getElementById('race-stage').classList.remove('replaying');
 }
@@ -722,10 +887,15 @@ function replayPose(t) {
         c.steer = a[3] + (b[3] - a[3]) * u; c.v = a[4] + (b[4] - a[4]) * u;
     });
 }
+// bring back the bumps that had happened by replay time t (the tape starts a tenth of a second into the race)
+function replayHits(t, pieces) {
+    const R = race.replay, all = [player, ...rivals];
+    while (R.hit < race.hits.length && race.hits[R.hit].t - 0.1 <= t) { const ev = race.hits[R.hit++]; if (all[ev.k]) dmg.apply(all[ev.k], ev, pieces); }
+}
 function replayFrame(dt) {
     const R = race.replay, len = (race.tape.length - 1) * 0.1;
-    R.t += dt; if (R.t >= len) { R.t = 0; R.cam = null; }       // loops round to the start
-    replayPose(R.t); updateCars(dt);
+    R.t += dt; if (R.t >= len) { R.t = 0; R.cam = null; R.hit = 0; for (const c of [player, ...rivals]) dmg.reset(c); dmg.clearPieces(); }       // loops round to the start
+    replayPose(R.t); replayHits(R.t, true); updateCars(dt);
     // the director: cut to the next shot every few seconds (a trackside shot lasts until the cars have passed)
     R.shotT += dt;
     const shot = SHOTS[R.shot % SHOTS.length], r = player;
@@ -972,7 +1142,7 @@ function updateEffects(dt) {
         }
     }
     if (weather) weather.update(dt, camera.position, r.v * fwdX, r.v * fwdZ);
-    efx.update(dt);
+    efx.update(dt); dmg.update(dt);
     efx.drawSpeedLines(r.v / r.perf.vmax, r.slip, dt);
     efx.lensDrops(dt, weatherKind === 'rain' && camMode < 2);
     if (headlight && headlight.visible) {
@@ -983,9 +1153,9 @@ function updateEffects(dt) {
     const tag = document.getElementById('race-slip'); if (tag) tag.classList.toggle('show', !!r.slip);
 }
 // keep the shadow area centred on the player, and the sky around the camera
-function followSun() {
+function followSun(x = player.x, z = player.z) {
     const d = sun.userData.dir;
-    sun.position.set(player.x + d.x * 200, d.y * 200, player.z + d.z * 200); sun.target.position.set(player.x, 0, player.z); sun.target.updateMatrixWorld();
+    sun.position.set(x + d.x * 200, d.y * 200, z + d.z * 200); sun.target.position.set(x, 0, z); sun.target.updateMatrixWorld();
     sky.position.copy(camera.position);
 }
 // 'auto' quality: if the frame rate stays low for a few seconds, step down a level
@@ -1002,7 +1172,9 @@ function frame(now) {
     const dt = Math.min(0.05, (now - lastT) / 1000 || 0); lastT = now;
     if (!race || race.paused) { if (sky) sky.position.copy(camera.position); drawFrame(); return; }
     if (race.replay) { replayFrame(dt); return; }
+    if (race.podium) { podiumFrame(dt); return; }
     race.t += dt;
+    if (race.podiumAt != null && race.t >= race.podiumAt) { startPodium(); podiumFrame(dt); return; }
     if (race.phase === 'lights') {
         // the gantry lights come on one by one while the countdown runs: 3, 2, 1, GO!
         const lit = Math.min(5, Math.floor(race.t / 0.8));
@@ -1014,10 +1186,9 @@ function frame(now) {
             player.lapStart = race.raceTime; rivals.forEach(r => { r.lapStart = race.raceTime; });
         }
     }
-    if (race.phase === 'go' || race.phase === 'done') race.raceTime += dt;
-    // fixed small steps keep the driving stable
-    const steps = Math.ceil(dt / 0.01), h = dt / steps;
-    for (let i = 0; i < steps; i++) { drivePlayer(h); rivals.forEach(r => driveRival(r, h)); collisions(); }
+    // fixed small steps keep the driving stable (the race clock ticks with them, so lap times are right to a hundredth of a second)
+    const steps = Math.ceil(dt / 0.01), h = dt / steps, timed = race.phase === 'go' || race.phase === 'done';
+    for (let i = 0; i < steps; i++) { if (timed) race.raceTime += h; drivePlayer(h); rivals.forEach(r => driveRival(r, h)); collisions(); }
     // the replay tape: every car, ten times a second, from the start until a few seconds after you finish
     if ((race.phase === 'go' || race.phase === 'done') && (race.tapeEnd == null || race.raceTime < race.tapeEnd)) {
         race.tapeT = (race.tapeT || 0) + dt;
@@ -1051,7 +1222,7 @@ function bindControls() {
     window.addEventListener('keyup', e => { if (keys[e.code]) input[keys[e.code]] = false; });
     window.addEventListener('blur', () => { Object.keys(input).forEach(k => { if (k !== 'tilt') input[k] = false; }); });
 }
-function getAudioStart() { if (!engine && race && !race.paused && !race.replay) startEngine(); }   // (not while paused or watching a replay)
+function getAudioStart() { if (!engine && race && !race.paused && !race.replay && !race.podium) startEngine(); }   // (not while paused or watching a replay)
 let tiltOn = false;
 function tiltHandler(e) { if (e.gamma == null) return; const landscape = Math.abs(window.orientation || 0) === 90 || innerWidth > innerHeight; const raw = landscape ? e.beta * (window.orientation === -90 ? -1 : 1) : e.gamma; input.tilt = -Math.max(-1, Math.min(1, raw / 25)); }
 async function toggleTilt() {
@@ -1133,7 +1304,7 @@ function showStage() {
     resize(); setupRace(); startEngine();
 }
 function showMenu() {
-    stopEngine(); race = null;
+    stopEngine(); leavePodium(); race = null;
     document.getElementById('race-stage').hidden = true;
     document.getElementById('race-menu').hidden = false;
     document.body.classList.remove('racing');
@@ -1437,7 +1608,7 @@ function init() {
     // the speed lines are drawn on a see-through layer over the 3D view
     const overlay = document.createElement('canvas'); overlay.className = 'race-fx';
     canvas.after(overlay);
-    efx = new Effects(scene, overlay); weather = new Weather(scene);
+    efx = new Effects(scene, overlay); weather = new Weather(scene); dmg = new Damage(scene);
     // headlights for night races (one light that follows your car)
     headlight = new THREE.SpotLight(0xfff4e0, 60, 90, 0.45, 0.5, 1.4); headlight.visible = false;
     carGlow = new THREE.PointLight(0xc8d8ff, 18, 14, 1.6); carGlow.visible = false;   // like light from street lamps falling on your car
@@ -1462,6 +1633,8 @@ export function enter() {
             if (b.dataset.race === 'champ-again') { stopReplay(); startChampionship(); }
             if (b.dataset.race === 'champ-quit') { stopReplay(); champ = null; showMenu(); }
             if (b.dataset.race === 'replay-exit') { stopReplay(); document.getElementById('race-result').hidden = false; }
+            if (b.dataset.race === 'results') document.getElementById('race-result').classList.remove('podium');   // from the podium to the full results (or standings)
+            if (b.dataset.race === 'podium') document.getElementById('race-result').classList.add('podium');       // ... and back
             if (b.dataset.race === 'pause') togglePause();
             if (b.dataset.race === 'resume') togglePause();
             if (b.id === 'race-tilt') toggleTilt();
@@ -1489,4 +1662,13 @@ export function autopilot(on) { window.__autopilot = on; }
 export function suspDebug() { const s = player && player.susp; return s && { pitch: +s.pitch.toFixed(4), roll: +s.roll.toFixed(4), heave: +s.heave.toFixed(4), heat: +s.heat.toFixed(2), bumps: s.bumps.map(b => +b.toFixed(3)), parts: s.corners.length || (s.links ? s.links.length : 0) }; }
 export function debug() { return { mode, phase: race && race.phase, lap: player && player.lap, idx: player && player.idx, v: player && player.v, pos: player && positionOf(player), best: player && player.best, rivals: rivals.map(r => [r.lap, Math.round(r.v)]), rivalLat: rivals.map(r => [+r.lat.toFixed(2), +r.latV.toFixed(2)]), trackLen, ghost: !!(ghost && ghost.holder.visible), slip: player && player.slip, time: timeOfDay, quality, shadows: renderer.shadowMap.enabled, calls: renderer.info.render.calls, tris: renderer.info.render.triangles, grassPct: player ? Math.round(100 * (player.grassTime || 0) / (player.driveTime || 1)) : 0, raceTime: race && race.raceTime }; }
 export function setHelp(on) { help = on; }
+// testing only: bump car k (0 = you, 1 = the first rival ...) on its 'front', 'rear', 'left' or 'right', as hard as sev (0 to 1)
+export function testHit(k = 0, where = 'front', sev = 0.8, colour = '#FFB300') {
+    const r = [player, ...rivals][k]; if (!r || !race) return null;
+    const [lx, lz] = { front: [1, 0], rear: [-1, 0], right: [0, 1], left: [0, -1] }[where] || [1, 0], c = Math.cos(r.heading), s = Math.sin(r.heading);
+    r.hitAt = -9; const n = race.hits.length; carHit(r, lx * c + lz * s, -lx * s + lz * c, sev, colour, false);
+    return race.hits.length > n ? { ...race.hits[n], damage: { scuffs: r.damage.scuffs, dents: r.damage.dents, lost: r.damage.lost, chips: r.damage.chips, parts: r.damage.parts.length } } : null;
+}
+export function results() { return race && race.results && race.results.map(row => ({ k: row.k, name: row.name, total: row.total, laps: row.laps })); }   // testing only
+export function damageDebug() { return { hits: race ? race.hits.length : 0, replayAt: race && race.replay ? [+race.replay.t.toFixed(1), race.replay.hit] : null, cars: [player, ...rivals].map(r => r.damage ? [r.damage.scuffs, r.damage.dents, r.damage.lost, r.damage.chips] : null) }; }   // testing only
 export function testReplay() { if (race && race.tape && race.tape.length >= 20) { startReplay(); return true; } return false; }   // testing only

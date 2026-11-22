@@ -35,6 +35,7 @@ const CORE_FILES = [
     './sounds/high_loop.wav',
     './sounds/roar.wav',
     './effects.js',
+    './damage.js',
     './credits.js',
     './manifest.json',
     './licences/fdl-1.2.txt',

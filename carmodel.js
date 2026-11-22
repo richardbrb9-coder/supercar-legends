@@ -1137,6 +1137,7 @@ function mergeByMaterial(root) {
         let p = o.parent; while (p && p !== root) { if (p.userData.wheelRoot) return; p = p.parent; }
         const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
         g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+        if (o.userData.loose) g.userData.loose = o.userData.loose;
         if (!groups.has(o.material)) groups.set(o.material, []);
         groups.get(o.material).push(g); victims.push(o);
     });
@@ -1152,11 +1153,17 @@ function mergeByMaterial(root) {
             for (const g of list) { arr.set(g.attributes[name].array, off); off += g.attributes[name].array.length; }
             merged.setAttribute(name, new THREE.BufferAttribute(arr, size));
         }
+        const mesh = new THREE.Mesh(merged, mat); root.add(mesh);
+        // parts that can be knocked off in a race (see damage.js): remember which points of the combined shape are theirs
+        let at = 0;
+        for (const g of list) { const n = g.attributes.position.count; if (g.userData.loose) (root.userData.loose = root.userData.loose || []).push({ name: g.userData.loose, mesh, start: at, count: n }); at += n; }
         list.forEach(g => g.dispose());
-        root.add(new THREE.Mesh(merged, mat));
     }
 }
 // turn a shape inside out, so its inner surface is the one that shows (for the insides of pipes and lamp bowls)
+// Mark small parts that a bump in a race can knock off (a door mirror, a wing end plate, the end of the splitter).
+// It is only a label: the builder ignores it, and damage.js uses it on the race cars.
+function loose(name, ...meshes) { for (const m of meshes) if (m) m.userData.loose = name; }
 function insideOut(g) { g.scale(-1, 1, 1); const n = g.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i)); return g; }
 // a bar (box) from point a to point b
 function bar(a, b, t, mat, w = t) {
@@ -1253,7 +1260,8 @@ function hyperDetail(car, p, pr, mats, X, lite) {
         const head = V(X(s) + 0.035, base.y + 0.052, side * Math.min(zb + 0.1, w - 0.05));
         const stalk = add(bar(base, V(head.x - 0.01, head.y - 0.008, head.z - side * 0.02), 0.022, lite ? mats.carbon : mats.interior, 0.01)); if (!lite) col(stalk.geometry, 2);
         const shell = lite ? add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), mats.carbon)) : part(new THREE.SphereGeometry(1, 14, 10), 4); shell.scale.set(0.046, 0.027, 0.066); shell.position.copy(head);
-        if (!lite) { const glass = part(new THREE.SphereGeometry(1, 12, 8), 7); glass.scale.set(0.012, 0.02, 0.055); glass.position.set(head.x - 0.037, head.y, head.z); }
+        if (!lite) { const glass = part(new THREE.SphereGeometry(1, 12, 8), 7); glass.scale.set(0.012, 0.02, 0.055); glass.position.set(head.x - 0.037, head.y, head.z); loose(side > 0 ? 'mirrorR' : 'mirrorL', glass); }
+        loose(side > 0 ? 'mirrorR' : 'mirrorL', stalk, shell);
     }
     // short fins under the tail (the diffuser): they hug the rising underside, either side of the number plate
     const w1 = pr.width(1), xT = X(1), yT = pr.base(1);
@@ -1276,7 +1284,7 @@ function hyperDetail(car, p, pr, mats, X, lite) {
     // splitter end fences and two support stays
     if (p.splitter) for (const side of [1, -1]) {
         const y = pr.base(0.03) + 0.01, xs = X(0.02) - 0.12;
-        const fence = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.012), mats.carbon)); fence.position.set(xs, y + 0.03, side * p.W * 0.424);
+        const fence = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.012), mats.carbon)); fence.position.set(xs, y + 0.03, side * p.W * 0.424); loose(side > 0 ? 'splitterR' : 'splitterL', fence);
         add(bar(V(xs + 0.13, y, side * p.W * 0.2), V(xs + 0.07, pr.base(0.012) - 0.002, side * p.W * 0.2), 0.008, mats.chrome));
     }
     parkedWiper(car, pr, mats, X, col);
@@ -1384,7 +1392,8 @@ function super90Detail(car, p, pr, mats, X, lite) {
         const head = V(X(s) + 0.02, base.y + 0.042, side * Math.min(w * u + 0.085, w - 0.01));
         const stalk = add(bar(base, V(head.x - 0.01, head.y - 0.008, head.z - side * 0.02), 0.018, lite ? mats.carbon : mats.interior, 0.012)); if (!lite) col(stalk.geometry, 2);
         const shell = lite ? add(new THREE.Mesh(new THREE.SphereGeometry(1, 8, 6), mats.carbon)) : part(new THREE.SphereGeometry(1, 14, 10), 4); shell.scale.set(0.042, 0.026, 0.066); shell.position.copy(head);
-        if (!lite) { const glass = part(new THREE.SphereGeometry(1, 12, 8), 7); glass.scale.set(0.012, 0.02, 0.055); glass.position.set(head.x - 0.034, head.y, head.z); }
+        if (!lite) { const glass = part(new THREE.SphereGeometry(1, 12, 8), 7); glass.scale.set(0.012, 0.02, 0.055); glass.position.set(head.x - 0.034, head.y, head.z); loose(side > 0 ? 'mirrorR' : 'mirrorL', glass); }
+        loose(side > 0 ? 'mirrorR' : 'mirrorL', stalk, shell);
     }
     diffuserFins(car, pr, mats, X, lite ? [-0.4, 0.4] : [-0.52, -0.3, 0.3, 0.52]);
     if (lite) return;
@@ -1555,6 +1564,7 @@ function longtailDetail(car, p, pr, mats, X, lite) {
         const pod = part(new THREE.SphereGeometry(1, 12, 8), 4); pod.scale.set(0.06, 0.014, 0.024); pod.position.copy(head);
         const lens = part(new THREE.SphereGeometry(0.008, 8, 6), 7); lens.position.set(head.x - 0.054, head.y, head.z);
         const tip = part(new THREE.SphereGeometry(1, 8, 6), 12); tip.scale.set(0.02, 0.006, 0.025); tip.position.set(head.x + 0.02, head.y + 0.011, head.z);   // (a copper flash on top)
+        loose(side > 0 ? 'mirrorR' : 'mirrorL', arm, pod, lens, tip);
     }
     parkedWiper(car, pr, mats, X, col);
     // ---- the interior, seen through the canopy: the driver in the middle, a passenger seat set back on each side ----
@@ -1625,6 +1635,7 @@ function electricDetail(car, p, pr, mats, X, lite) {
         const arm = add(bar(base, V(head.x - 0.01, head.y - 0.006, head.z - side * 0.02), 0.012, mats.interior, 0.03)); col(arm.geometry, 2);
         const shell = part(new THREE.SphereGeometry(1, 14, 10), 4); shell.scale.set(0.05, 0.021, 0.07); shell.position.copy(head);
         const glass = part(new THREE.SphereGeometry(1, 12, 8), 7); glass.scale.set(0.012, 0.015, 0.058); glass.position.set(head.x - 0.04, head.y, head.z);
+        loose(side > 0 ? 'mirrorR' : 'mirrorL', arm, shell, glass);
     }
     diffuserFins(car, pr, mats, X, [-0.66, -0.4, -0.14, 0.14, 0.4, 0.66]);
     noseBadge(car, pr, mats, X, 0.04);
@@ -1653,7 +1664,7 @@ function electricDetail(car, p, pr, mats, X, lite) {
     // splitter end fences and two support stays
     if (p.splitter) for (const side of [1, -1]) {
         const y = pr.base(0.03) + 0.01, xs = X(0.02) - 0.12;
-        const fence = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.055, 0.012), mats.carbon)); fence.position.set(xs, y + 0.028, side * p.W * 0.424);
+        const fence = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.055, 0.012), mats.carbon)); fence.position.set(xs, y + 0.028, side * p.W * 0.424); loose(side > 0 ? 'splitterR' : 'splitterL', fence);
         add(bar(V(xs + 0.13, y, side * p.W * 0.2), V(xs + 0.07, pr.base(0.012) - 0.002, side * p.W * 0.2), 0.008, mats.chrome));
     }
     // ---- the interior, seen through the glass: a dark tub, a dash with a wide screen, steering wheel, two seats and a helmeted driver on the left ----
@@ -1736,9 +1747,10 @@ function wedgeDetail(car, p, pr, mats, X, lite) {
     // door mirrors: small round mirrors on short stalks, on the top of each door beside the windscreen pillar
     for (const side of [1, -1]) {
         const s = D.sP + 0.02, w = pr.width(s), u = q.cabinWB + 0.06, base = V(X(s), pr.surfAt(s, u) - 0.008, side * w * u), head = V(X(s) + 0.012, base.y + 0.05, side * Math.min(w * u + 0.06, w));
-        col(add(bar(base, head, 0.012, mats.interior, 0.012)).geometry, 2);
+        const stalk = add(bar(base, head, 0.012, mats.interior, 0.012)); col(stalk.geometry, 2);
         const shell = part(new THREE.SphereGeometry(1, 14, 10), 9); shell.scale.set(0.05, 0.034, 0.04); shell.position.set(head.x + 0.02, head.y + 0.012, head.z); shell.geometry.translate(0.35, 0, 0);   // (a bullet shape: rounded at the front, cut off flat at the back for the glass)
         const glass = part(new THREE.CircleGeometry(0.03, 16), 7); glass.rotation.y = -Math.PI / 2; glass.scale.z = 1.15; glass.position.set(head.x - 0.012, head.y + 0.012, head.z);
+        loose(side > 0 ? 'mirrorR' : 'mirrorL', stalk, shell, glass);
     }
     // door handles: a small bright bar in each recess
     for (const side of [1, -1]) { const [s, y] = handle70(pr, D), h = add(new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.014, 0.012), mats.chrome)); h.position.set(X(s), y + 0.004, side * (sideZ(pr, s, y) + 0.002)); }
@@ -1814,9 +1826,10 @@ function gtDetail(car, p, pr, mats, X, lite) {
     // door mirrors: small round mirrors on short stalks, on the top of each door beside the windscreen pillar
     for (const side of [1, -1]) {
         const s = D.sP + 0.02, w = pr.width(s), u = q.cabinWB + 0.06, base = V(X(s), pr.surfAt(s, u) - 0.008, side * w * u), head = V(X(s) + 0.012, base.y + 0.05, side * Math.min(w * u + 0.06, w));
-        col(add(bar(base, head, 0.01, mats.interior, 0.01)).geometry, 9);
+        const stalk = add(bar(base, head, 0.01, mats.interior, 0.01)); col(stalk.geometry, 9);
         const shell = part(new THREE.SphereGeometry(1, 14, 10), 9); shell.scale.set(0.042, 0.029, 0.034); shell.position.set(head.x + 0.02, head.y + 0.012, head.z); shell.geometry.translate(0.35, 0, 0);
         const glass = part(new THREE.CircleGeometry(0.025, 16), 2); glass.rotation.y = -Math.PI / 2; glass.scale.z = 1.15; glass.position.set(head.x - 0.0095, head.y + 0.012, head.z);
+        loose(side > 0 ? 'mirrorR' : 'mirrorL', stalk, shell, glass);
     }
     // door handles: a slim chrome handle with a round push button in front of it
     for (const side of [1, -1]) { const [s, y] = handle70(pr, D), z = side * (sideZ(pr, s, y) + 0.008);
@@ -2214,7 +2227,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
             }
         }
     }
-    if (p.splitter) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.025, p.W * 0.86), mats.carbon); sp.position.set(X(0.02) - 0.12, pr.base(0.03) + 0.01, 0); car.add(sp); }
+    if (p.splitter) { const sp = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.025, p.W * 0.86), mats.carbon); sp.position.set(X(0.02) - 0.12, pr.base(0.03) + 0.01, 0); car.add(sp); loose('splitter', sp); }
     if (p.skirts) for (const side of [1, -1]) {
         const sk = new THREE.Mesh(new THREE.BoxGeometry(p.L * 0.3, 0.06, 0.05), mats.carbon);
         sk.position.set(X(0.5), p.ride + 0.04, side * (pr.width(0.5) + 0.0)); car.add(sk);
@@ -2231,7 +2244,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
         wingGeo.translate(-0.18, 0, -span / 2);
         const wing = new THREE.Mesh(wingGeo, mats.carbon); wing.position.set(sx, pr.centre(0.94) + h, 0); wing.rotation.z = 0.12; car.add(wing);
         for (const side of [1, -1]) {
-            const plate = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.015), mats.carbon); plate.position.set(sx, pr.centre(0.94) + h, side * span / 2); car.add(plate);
+            const plate = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.18, 0.015), mats.carbon); plate.position.set(sx, pr.centre(0.94) + h, side * span / 2); car.add(plate); loose(side > 0 ? 'plateR' : 'plateL', plate);
             const strut = new THREE.Mesh(new THREE.BoxGeometry(0.1, h + (p.wing === 'swan' ? 0.12 : 0), 0.025), mats.carbon);
             if (p.wing === 'swan') { strut.position.set(sx - 0.05, pr.centre(0.94) + h / 2 + 0.05, side * span * 0.28); strut.rotation.z = 0.35; }
             else strut.position.set(sx, pr.centre(0.94) + h / 2, side * span * 0.3);

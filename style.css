@@ -495,3 +495,60 @@ body.racing .topbar { display: none; }
 .champ-table td { padding: 5px 6px; border-top: 1px solid rgba(255,255,255,.08); }
 .champ-table tr.me td { background: rgba(225,6,0,.18); font-weight: 700; }
 .champ-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; box-shadow: 0 0 0 1px rgba(255,255,255,.4); }
+/* the podium: the top three cars on their steps, with a sheet of lap times underneath */
+.podium-on .race-top, .podium-on .pad, .podium-on .race-slip, .podium-on .race-map, .podium-on .race-flash { display: none; }
+.pod-sheet, .pod-only { display: none; }
+.race-panel.has-podium .pod-only { display: inline-block; }
+.race-panel.podium { place-items: end center; padding: 10px max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); pointer-events: none;
+    background: linear-gradient(180deg, rgba(5,6,8,0) 38%, rgba(5,6,8,.6) 58%, rgba(5,6,8,.92)); }
+.race-panel.podium .rr-box { display: none; }
+.race-panel.podium .pod-sheet { display: grid; gap: 8px; width: 100%; max-width: 860px; text-align: center; pointer-events: auto; animation: pod-rise .5s ease-out both; }
+@keyframes pod-rise { from { opacity: 0; transform: translateY(24px); } }
+.pod-head .kicker { margin-bottom: 2px; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+.pod-head h2 { font-size: clamp(1.25rem, 3.6vw, 1.9rem); text-shadow: 0 2px 8px rgba(0,0,0,.8); }
+.pod-head p { margin: 2px 0; }
+.pod-head .rr-medal { font-size: 1.1rem; }
+.pod-cards { display: grid; grid-template-columns: 1fr 1.12fr 1fr; gap: 8px; align-items: end; }
+.pod-card { background: linear-gradient(180deg, var(--panel), var(--bg)); border: 1px solid var(--line-2); border-top: 4px solid var(--c, var(--line-2)); padding: 8px 10px 6px; min-width: 0; }
+.pod-card.p1 { padding-top: 14px; }
+.pod-card.me { border-color: var(--red-2); border-top-color: var(--c); box-shadow: 0 0 0 1px var(--red-2), 0 0 16px rgba(225,6,0,.35); }
+.pod-pos { font-family: var(--display); font-weight: 900; font-size: 1.25rem; line-height: 1; color: #C9CED6; }
+.pod-card.p1 .pod-pos { font-size: 1.55rem; color: var(--amber); }
+.pod-card.p3 .pod-pos { color: #C98A4B; }
+.pod-name { font-family: var(--head); font-size: .95rem; margin: 5px 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pod-laps { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.pod-laps td { padding: 1px 0; }
+.pod-laps td:first-child { text-align: left; color: var(--muted); }
+.pod-laps td:last-child { text-align: right; font-weight: 600; }
+.pod-laps tr.tot td { border-top: 1px solid var(--line-2); padding-top: 3px; font-weight: 800; color: #fff; }
+.pod-you { display: flex; flex-wrap: wrap; gap: 4px 14px; justify-content: center; align-items: baseline; padding: 7px 10px; font-size: .85rem; color: var(--muted); background: rgba(225,6,0,.18); border: 1px solid var(--red-2); font-variant-numeric: tabular-nums; }
+.pod-you b { color: #fff; }
+.pod-you > b { font-family: var(--head); font-weight: 400; font-size: .95rem; }
+.pod-note { margin: 0; font-size: .7rem; color: var(--muted); text-shadow: 0 1px 3px rgba(0,0,0,.9); }
+.pod-sheet .rr-actions { justify-content: center; margin-top: 2px; gap: 8px; }
+.pod-sheet .big-btn { padding: 11px 20px; font-size: .9rem; }
+.pod-sheet .act-btn { padding: 10px 18px; font-size: .88rem; }
+@media (max-width: 640px) {
+    .pod-cards { gap: 5px; }
+    .pod-card { padding: 6px 6px 5px; }
+    .pod-name { font-size: .8rem; white-space: normal; line-height: 1.15; }
+    .pod-name .champ-dot { margin-right: 5px; }
+    .pod-laps { font-size: .76rem; }
+    .pod-sheet .big-btn, .pod-sheet .act-btn { padding: 10px 14px; font-size: .8rem; }
+}
+/* a phone on its side: the heading and buttons go beside the lap times, to leave room for the cars */
+@media (max-height: 500px) {
+    .race-panel.podium { background: linear-gradient(90deg, rgba(5,6,8,.85), rgba(5,6,8,0) 34%), linear-gradient(180deg, rgba(5,6,8,0) 55%, rgba(5,6,8,.85)); }
+    .race-panel.podium .pod-sheet { grid-template-columns: minmax(180px, 1fr) 2.6fr; align-items: end; max-width: none; gap: 4px 12px; }
+    .pod-head h2 { font-size: 1.3rem; } .pod-head .rr-unlock { font-size: .8rem; margin: 2px 0; }
+    .pod-head .kicker { font-size: .6rem; letter-spacing: .18em; }
+    .pod-head { grid-column: 1; grid-row: 1; align-self: end; }
+    .pod-sheet .rr-actions { grid-column: 1; grid-row: 2 / span 2; align-self: start; }
+    .pod-cards { grid-column: 2; grid-row: 1 / span 2; }
+    .pod-you { grid-column: 2; }
+    .pod-note { grid-column: 2; }
+    .pod-card { padding: 4px 8px; } .pod-card.p1 { padding-top: 8px; }
+    .pod-laps { font-size: .76rem; } .pod-name { margin: 2px 0; font-size: .85rem; }
+    .pod-sheet .big-btn, .pod-sheet .act-btn { padding: 8px 14px; font-size: .78rem; }
+}
+@media (prefers-reduced-motion: reduce) { .race-panel.podium .pod-sheet { animation: none; } }

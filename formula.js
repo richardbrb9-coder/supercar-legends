@@ -243,8 +243,8 @@ export function createFormulaCar(design, { merge = false, lite = false, draft = 
         const plank = add(new THREE.BoxGeometry(at(1.6) - at(4.4), 0.012, 0.3), mats.dark); plank.position.set((at(1.6) + at(4.4)) / 2, F.floorY - 0.006, 0);   // the wear plank under the floor
         for (const side of [1, -1]) {
             // a slim raised wing along the floor's edge, on little stays
-            const ew = add(new THREE.BoxGeometry(at(3.0) - at(3.85), 0.008, 0.07), mats.carbon); ew.position.set((at(3.0) + at(3.85)) / 2, F.fl + 0.04, side * 0.84 * kz);
-            for (const m of [3.08, 3.42, 3.77]) { const st = add(new THREE.BoxGeometry(0.03, 0.04, 0.006), mats.carbon); st.position.set(at(m), F.fl + 0.02, side * 0.82 * kz); }
+            const ew = add(new THREE.BoxGeometry(at(3.0) - at(3.85), 0.008, 0.07), mats.carbon); ew.position.set((at(3.0) + at(3.85)) / 2, F.fl + 0.04, side * 0.84 * kz); ew.userData.loose = side > 0 ? 'wingletR' : 'wingletL';
+            for (const m of [3.08, 3.42, 3.77]) { const st = add(new THREE.BoxGeometry(0.03, 0.04, 0.006), mats.carbon); st.position.set(at(m), F.fl + 0.02, side * 0.82 * kz); st.userData.loose = ew.userData.loose; }
             // two low, curved vanes at the front of the floor that steer the air outwards (smooth humps, so they don't read as teeth)
             for (const [z, h] of [[0.5, 0.09], [0.64, 0.065]]) {
                 const o = []; for (let i = 0; i <= 10; i++) { const t = i / 10; o.push([at(lerp(2.16, 2.7, t)), F.fl + h * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.8)), 0.8)]); }
@@ -270,7 +270,8 @@ export function createFormulaCar(design, { merge = false, lite = false, draft = 
         const g = wingElement(zsF, z => { const t = Math.abs(z) / (0.965 * kz); return { x: at(m0 + sweep * t * t), y: y + dy + rise * Math.sin(Math.PI * Math.min(1, t * 1.1)), chord: lerp(c0, c1, t), tilt, th: 0.014, camber: 0.022 }; });
         add(g, j < 2 ? mats.carbon : mats.paintPlain);
     });
-    for (const side of [1, -1]) add(sidePlate(F, [[0.24, 0.07], [0.7, 0.07], [0.7, 0.3], [0.66, 0.335], [0.56, 0.33], [0.42, 0.24], [0.3, 0.14]].map(([m, y]) => [at(m), y + dy]), side * 0.975 * kz, 0.012, false), mats.paintPlain);
+    // (small parts a bump in a race can knock off are labelled 'loose': see damage.js)
+    for (const side of [1, -1]) add(sidePlate(F, [[0.24, 0.07], [0.7, 0.07], [0.7, 0.3], [0.66, 0.335], [0.56, 0.33], [0.42, 0.24], [0.3, 0.14]].map(([m, y]) => [at(m), y + dy]), side * 0.975 * kz, 0.012, false), mats.paintPlain).userData.loose = side > 0 ? 'plateR' : 'plateL';
     // two short pylons hold the wing up under the nose
     for (const side of [1, -1]) car.add(bar(V(at(0.3), 0.1 + dy, side * 0.07), V(at(0.36), F.under(0.36) + 0.02, side * 0.07), 0.012, mats.carbon, 0.1));
 
@@ -316,8 +317,9 @@ export function createFormulaCar(design, { merge = false, lite = false, draft = 
         const mp = V(at(F.mirror.m), F.mirror.y, side * F.mirror.z);
         const shell = add(new THREE.SphereGeometry(1, lite ? 8 : 14, lite ? 6 : 10, 0, Math.PI), mats.paintPlain); shell.rotation.y = Math.PI / 2; shell.scale.set(0.082, 0.042, 0.06); shell.position.copy(mp);   // a rounded shell, open at the back
         const glass = add(new THREE.CircleGeometry(1, lite ? 8 : 16), mats.chrome); glass.rotation.y = -Math.PI / 2; glass.scale.set(0.076, 0.037, 1); glass.position.set(mp.x - 0.002, mp.y, mp.z);
-        car.add(bar(V(mp.x, mp.y - 0.03, mp.z - side * 0.03), V(mp.x - 0.04, F.top(F.mirror.m) - 0.05, side * (F.half(F.mirror.m) - 0.02)), 0.012, mats.carbon, 0.03));
-        if (!lite) car.add(bar(V(mp.x, mp.y - 0.03, mp.z + side * 0.04), V(at(2.3), 0.6 + dy, side * 0.6 * kz), 0.008, mats.carbon, 0.02));   // a stay down to the sidepod
+        const stalk = bar(V(mp.x, mp.y - 0.03, mp.z - side * 0.03), V(mp.x - 0.04, F.top(F.mirror.m) - 0.05, side * (F.half(F.mirror.m) - 0.02)), 0.012, mats.carbon, 0.03); car.add(stalk);
+        const stay = lite ? null : bar(V(mp.x, mp.y - 0.03, mp.z + side * 0.04), V(at(2.3), 0.6 + dy, side * 0.6 * kz), 0.008, mats.carbon, 0.02); if (stay) car.add(stay);   // a stay down to the sidepod
+        for (const m of [shell, glass, stalk, stay]) if (m) m.userData.loose = side > 0 ? 'mirrorR' : 'mirrorL';
     }
 
     // ---- wheels: slick tyres with a coloured band, brake ducts inside, and the suspension links out to them ----
