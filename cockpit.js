@@ -195,7 +195,7 @@ export function buildCockpit(design, units = 'mph') {
 const armUp = new THREE.Vector3(0, 1, 0), armDir = new THREE.Vector3(), handAt = new THREE.Vector3();
 function formulaCockpit(design, units) {
     const F = formulaFrame(design), g = new THREE.Group(), V3 = (x, y, z) => new THREE.Vector3(x, y, z);
-    const eye = V3(F.at(F.helmet.m) + 0.03, F.helmet.y - 0.015, 0);
+    const eye = V3(F.at(F.helmet.m) + 0.03, F.helmet.y - 0.035, 0);
     const mats = {
         trim: new THREE.MeshStandardMaterial({ map: carbonTex(), color: 0xd0d4dc, roughness: 0.6 }),
         soft: new THREE.MeshStandardMaterial({ color: 0x2b2e35, roughness: 0.9 }),
@@ -218,7 +218,7 @@ function formulaCockpit(design, units) {
     // gloves on the grips (they turn with the wheel) and forearms reaching back to the elbows
     const hands = [1, -1].map(sd => {
         const glove = put(new THREE.SphereGeometry(0.042, 12, 10), mats.glove, -0.012, 0.012, sd * 0.118); glove.scale.set(1, 1.15, 0.9);
-        const elbow = V3(eye.x - 0.02, eye.y - 0.33, sd * 0.2), arm = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.04, 1, 10), mats.suit); g.add(arm);
+        const elbow = V3(eye.x - 0.02, eye.y - 0.33, sd * 0.2), arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.04, 1, 14), mats.suit); g.add(arm);
         return { glove, elbow, arm };
     });
     col.add(beam(V3(0.014, 0, 0), V3(0.2, 0, 0), 0.04, mats.soft));
@@ -230,7 +230,7 @@ function formulaCockpit(design, units) {
         // each forearm stretches from its elbow to its glove, wherever the wheel has taken it
         g.updateMatrixWorld(true);
         for (const h of hands) {
-            g.worldToLocal(h.glove.getWorldPosition(handAt)); armDir.subVectors(handAt, h.elbow);
+            g.worldToLocal(h.glove.getWorldPosition(handAt)); armDir.subVectors(handAt, h.elbow).multiplyScalar(0.88);   // (it stops just inside the glove's cuff)
             const len = armDir.length(); h.arm.position.copy(h.elbow).addScaledVector(armDir, 0.5); h.arm.scale.y = len; h.arm.quaternion.setFromUnitVectors(armUp, armDir.divideScalar(len));
         }
         screen.t += dt; if (screen.t < 0.08) return; screen.t = 0;
@@ -251,7 +251,7 @@ function formulaCockpit(design, units) {
     // the 'bonnet' camera is the TV camera on top of the airbox, looking down the car over the driver's helmet and the halo
     const bonnet = V3(F.at(2.95) + 0.14, F.spineTop(2.95) + 0.16, 0);
     // openTop: the race keeps drawing the car itself, close up; drop: how far down each of the two views looks at 10 m; mirrorFrom: where the mirrors' view is taken from
-    return { group: g, eye, bonnet, style: 'formula', glass: null, update, dispose, setMirror, openTop: true, drop: [1.7, 0.85], mirrorFrom: V3(-0.36, 0.34, 0) };
+    return { group: g, eye, bonnet, style: 'formula', glass: null, update, dispose, setMirror, openTop: true, drop: [1.7, 0.6], mirrorFrom: V3(-0.36, 0.34, 0) };
 }
 
 // The windscreen in bad weather. Measurements in metres on the glass: x across (0 = middle), y up the glass from its bottom edge.

@@ -277,6 +277,8 @@ export function createFormulaCar(design, { merge = false, lite = false, draft = 
         const led = add(new THREE.BoxGeometry(0.012, 0.16, 0.014), mats.tail); led.position.set(at(5.5) - 0.004, 0.66 + dy, side * 0.535 * kz);   // a red light strip on the back edge of each end plate
     }
     add(sidePlate(F, [[4.84, 0.37], [4.93, 0.37], [5.05, 0.6], [5.13, 0.8], [5.18, 0.855], [5.27, 0.86], [5.27, 0.835], [5.19, 0.83], [5.1, 0.82], [5.0, 0.62], [4.88, 0.42]].map(([m, y]) => [at(m), y + dy]), 0, 0.028, false), mats.carbon);
+    // the exhaust: one fat tailpipe poking out under the wing
+    const pipe = add(new THREE.CylinderGeometry(0.045, 0.045, 0.2, lite ? 8 : 16, 1, true), mats.intake); pipe.rotation.z = Math.PI / 2; pipe.position.set(at(5.12), 0.415 + dy, 0);
     // the rain light: a strip of red lamps on the very back of the car (it glows brighter under braking, like tail lights)
     const rain = add(new THREE.BoxGeometry(0.03, 0.1, 0.05), mats.tail); rain.position.set(at(5.26), 0.305 + dy, 0);
 
@@ -407,6 +409,9 @@ export function formulaMarks(x, d, W, H, Y, num, tag) {
 export function formulaPanelLines(x, d, W, H, Y) {
     x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 1.2;
     for (const m of [1.02, 2.95]) { x.beginPath(); x.moveTo((m / 5.5) * W, Y(0.86)); x.lineTo((m / 5.5) * W, Y(0.14)); x.stroke(); }
+    // cooling gills: a row of dark slots on the shoulder of each sidepod
+    x.fillStyle = 'rgba(8,9,11,0.85)';
+    for (const sgn of [1, -1]) for (let i = 0; i < 6; i++) { const u = ((3.02 + i * 0.085) / 5.5) * W, v0 = Y(0.5 - sgn * 0.185), v1 = Y(0.5 - sgn * 0.215); x.beginPath(); x.moveTo(u, v0); x.lineTo(u + 0.006 * W, v0); x.lineTo(u + 0.011 * W, v1); x.lineTo(u + 0.005 * W, v1); x.fill(); }
 }
 
 // =====================================================================
