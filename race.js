@@ -200,6 +200,8 @@ function blobShadow() {
     m.material.polygonOffset = true; m.material.polygonOffsetFactor = -2; m.material.polygonOffsetUnits = -2;
     return m;
 }
+// throw away a car's contact shadow (each car has its own little picture for it)
+function dropBlob(m) { m.geometry.dispose(); m.material.map.dispose(); m.material.dispose(); }
 function makeRacer(design, factor, isPlayer) {
     const model = createCar(design, { merge: true, lite: !isPlayer }), stats = carStats(design);   // rivals use the lighter build
     const holder = new THREE.Group(), blob = blobShadow(); holder.add(model.group, blob);
@@ -392,7 +394,7 @@ function storeSet(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); 
 function setupRace() {
     // remove old cars
     leavePodium();
-    [player, ...rivals, ghost].forEach(r => { if (r) { scene.remove(r.holder); dmg.unfit(r); r.model.dispose(); if (r.cockpit) { if (r.cockpit.group.parent) r.cockpit.group.parent.remove(r.cockpit.group); r.cockpit.dispose(); } } });
+    [player, ...rivals, ghost].forEach(r => { if (r) { scene.remove(r.holder); dmg.unfit(r); r.model.dispose(); dropBlob(r.blob); if (r.cockpit) { if (r.cockpit.group.parent) r.cockpit.group.parent.remove(r.cockpit.group); r.cockpit.dispose(); } } });
     rivals = []; ghost = null;
     player = makeRacer(loadDesign(), 1, true);
     scene.add(player.holder);

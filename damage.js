@@ -8,7 +8,8 @@
 //    (so the big paint picture is never redrawn in the middle of a race);
 //  - a dent gently pushes in the points of the body near the bump (each race car has its own shape, so no other car changes);
 //  - a loose part (door mirror, wing end plate, the end of the splitter: labelled 'loose' in carmodel.js and formula.js)
-//    is folded away to nothing on the car, and a small piece from a ready-made pool bounces along the road and fades away.
+//    is folded away to nothing on the car, and a copy of that very part (its own shape, size and colours) bounces along
+//    the road, lies there for a while and then shrinks away. The meshes for the falling pieces come from a small pool.
 // Work is only done at the moment of a bump. The falling pieces are the only thing updated every frame, and only while
 // one is moving. Each bump is described by a small record, so a replay can show the same damage at the same moment.
 import * as THREE from './lib/three.module.min.js';
@@ -16,7 +17,8 @@ import * as THREE from './lib/three.module.min.js';
 // the most damage one car can collect in a race
 const MAX_SCUFFS = 14, MAX_DENTS = 6, MAX_PARTS = 2, MAX_CHIPS = 2;
 const DENT_LIMIT = 0.075;                     // no point of the body ever moves further than this (metres)
-const PIECES = 12, PIECE_STAYS = 8, PIECE_FADES = 1.2;   // falling pieces: how many at once, and how long they lie on the road (seconds)
+const PIECES = 12, PIECE_STAYS = 8, PIECE_FADES = 1.2;   // falling pieces: how many at once, how long they lie on the road and how long they take to shrink away (seconds)
+const SPLITTER_CUT = 0.85;                    // a splitter only ever loses a corner: the outer end of each half
 
 // a small repeatable random-number maker: the same seed always gives the same scratches (so replays match the race)
 function seeded(seed) {
@@ -24,16 +26,21 @@ function seeded(seed) {
     return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
+// the smallest turn that gets an angle to the same flat position (a piece lying face up or face down looks the same)
+const flat = a => a - Math.PI * Math.round(a / Math.PI);
+
 export class Damage {
     constructor(scene) {
         this.scene = scene;
-        // the pool of falling pieces: simple blocks and rounded lumps, re-used all race long
-        this.box = new THREE.BoxGeometry(1, 1, 1); this.blob = new THREE.SphereGeometry(0.5, 8, 6);
+        // the pool of falling pieces, re-used all race long. A knocked-off part is shown with a copy of its own shape and
+        // the car's own materials; a chip of bodywork is a small flat block in the car's paint colour.
+        this.box = new THREE.BoxGeometry(1, 1, 1);
         this.pieces = [];
         for (let i = 0; i < PIECES; i++) {
-            const m = new THREE.Mesh(this.box, new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: 0.55, metalness: 0.25, transparent: true }));
-            m.visible = false; m.castShadow = false; scene.add(m);
-            this.pieces.push({ m, vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, life: 0, rest: false, hy: 0.02 });
+            const chip = new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: 0.4, metalness: 0.2 });
+            const m = new THREE.Mesh(this.box, chip);
+            m.visible = false; m.castShadow = false; m.frustumCulled = false; m.rotation.order = 'YXZ'; scene.add(m);   // (YXZ: the turn round the upright comes last, so it can lie flat whichever way it points)
+            this.pieces.push({ m, chip, own: null, size: new THREE.Vector3(), vx: 0, vy: 0, vz: 0, wx: 0, wy: 0, wz: 0, life: 0, rest: false, hy: 0.02 });
         }
         this.next = 0; this.moving = false;
         this.c = new THREE.Vector3(); this.uv = [0, 0];
@@ -61,19 +68,17 @@ export class Damage {
         for (const e of model.group.userData.loose || []) {
             const pos = e.mesh.geometry.attributes.position; bb.makeEmpty();
             for (let i = e.start; i < e.start + e.count; i++) bb.expandByPoint(v.fromBufferAttribute(pos, i));
-            const colour = e.mesh.material.map ? 0x1b1d22 : e.mesh.material.color.getHex();
             if (e.name === 'splitter') {   // the splitter loses one end at a time: the points past the cut are folded back to it
-                const half = bb.max.z, cut = half * 0.62;
+                const half = bb.max.z, cut = half * SPLITTER_CUT;
                 for (const side of [1, -1]) {
-                    const p = byName['splitter' + (side > 0 ? 'R' : 'L')] = byName['splitter' + (side > 0 ? 'R' : 'L')] || { ranges: [], box: new THREE.Box3(), lost: false, blob: false, colour };
+                    const p = byName['splitter' + (side > 0 ? 'R' : 'L')] = byName['splitter' + (side > 0 ? 'R' : 'L')] || { ranges: [], box: new THREE.Box3(), lost: false };
                     p.ranges.push({ mesh: e.mesh, start: e.start, count: e.count, clip: side, cut });
                     p.box.expandByPoint(v.set(bb.min.x, bb.min.y, side * cut)).expandByPoint(v.set(bb.max.x, bb.max.y, side * half));
                 }
                 continue;
             }
-            const p = byName[e.name] = byName[e.name] || { ranges: [], box: new THREE.Box3(), lost: false, blob: e.name.startsWith('mirror'), colour };
+            const p = byName[e.name] = byName[e.name] || { ranges: [], box: new THREE.Box3(), lost: false };
             p.ranges.push({ mesh: e.mesh, start: e.start, count: e.count, clip: 0, cut: 0 }); p.box.union(bb);
-            if (!e.mesh.material.map) p.colour = colour;   // (a painted part keeps its paint colour)
         }
         for (const p of Object.values(byName)) { p.centre = p.box.getCenter(new THREE.Vector3()); p.size = p.box.getSize(new THREE.Vector3()); d.parts.push(p); }
         racer.damage = d;
@@ -86,7 +91,7 @@ export class Damage {
         racer.damage = null;
     }
     // the objects whose drawing programs should be made ready before the race starts (so the first bump doesn't stutter)
-    warmUp(racer) { return [racer.damage && racer.damage.shell, this.pieces[0].m].filter(Boolean); }
+    warmUp(racer) { return [racer.damage && racer.damage.shell, this.pieces[0].m].filter(Boolean); }   // (a knocked-off part is drawn with the car's own materials, which are ready already)
 
     // A bump. (lx, lz) points from the middle of the car towards what it hit, in the car's own directions (x = forwards,
     // z = to its right). sev is how hard, 0 to 1. colour is the other car's paint (it leaves a streak), or null for a barrier.
@@ -122,10 +127,15 @@ export class Damage {
         if (ev.dent) { this.dent(d, this.c, -ev.lx, -ev.lz, 0.26 + 0.2 * ev.sev, 0.02 + 0.035 * ev.sev); d.dents++; }
         if (ev.part >= 0 && d.parts[ev.part] && !d.parts[ev.part].lost) {
             const p = d.parts[ev.part]; p.lost = true; d.lost++;
+            const piece = pieces ? this.takePiece() : null;
+            if (piece) this.copyPart(piece, p);                 // (copied before it is folded away on the car)
             for (const r of p.ranges) this.fold(r, p.centre);
-            if (pieces) this.throwPiece(racer, p.centre.x, p.centre.y, p.centre.z, p.size.x, p.size.y, p.size.z, p.blob, p.colour, rnd);
+            if (piece) this.throwPiece(piece, racer, p.centre.x, p.centre.y, p.centre.z, rnd);
         }
-        if (ev.part === -2) { d.chips++; if (pieces) this.throwPiece(racer, px, d.box.min.y + 0.3, pz, 0.2, 0.025, 0.13, false, racer.design.paint, rnd); }
+        if (ev.part === -2) {
+            d.chips++;
+            if (pieces) { const piece = this.takePiece(); piece.m.material.color.set(racer.design.paint); piece.size.set(0.16, 0.02, 0.1); piece.m.scale.copy(piece.size); this.throwPiece(piece, racer, px, d.box.min.y + 0.3, pz, rnd); }
+        }
     }
     // Put a car back to how it started (used when a replay begins: the damage then comes back bump by bump)
     reset(racer) {
@@ -226,19 +236,49 @@ export class Damage {
         }
         g.attributes.position.needsUpdate = true;
     }
+    // the next mesh from the pool, emptied (as a plain chip of bodywork, until copyPart gives it a part's shape)
+    takePiece() {
+        const p = this.pieces[this.next = (this.next + 1) % PIECES];
+        this.release(p); return p;
+    }
+    // give a pool mesh back its plain block, and throw away the copy of a part it was showing
+    release(p) {
+        p.m.visible = false;
+        if (p.own) { p.own.dispose(); p.own = null; }
+        p.m.geometry = this.box; p.m.material = p.chip; p.m.scale.set(1, 1, 1);
+    }
+    // Make a pool mesh look exactly like a loose part: a copy of the part's own points (with its paint, carbon, chrome
+    // and glass), centred on the part. Done once, at the moment the part comes off.
+    copyPart(piece, part) {
+        let n = 0; for (const r of part.ranges) n += r.count;
+        const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), mats = [], g = new THREE.BufferGeometry(), cx = part.centre.x, cy = part.centre.y, cz = part.centre.z;
+        let at = 0;
+        for (const r of part.ranges) {
+            const a = r.mesh.geometry.attributes, P = a.position.array, Nn = a.normal ? a.normal.array : null, U = a.uv ? a.uv.array : null;
+            for (let i = 0; i < r.count; i++) {
+                const j = (r.start + i) * 3, k = (at + i) * 3;
+                let z = P[j + 2]; if (r.clip && z * r.clip < r.cut) z = r.cut * r.clip;   // (of a splitter, only the end that broke off)
+                pos[k] = P[j] - cx; pos[k + 1] = P[j + 1] - cy; pos[k + 2] = z - cz;
+                if (Nn) { nor[k] = Nn[j]; nor[k + 1] = Nn[j + 1]; nor[k + 2] = Nn[j + 2]; }
+                if (U) { uv[(at + i) * 2] = U[(r.start + i) * 2]; uv[(at + i) * 2 + 1] = U[(r.start + i) * 2 + 1]; }
+            }
+            let mi = mats.indexOf(r.mesh.material); if (mi < 0) { mi = mats.length; mats.push(r.mesh.material); }
+            g.addGroup(at, r.count, mi); at += r.count;
+        }
+        g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        g.computeBoundingBox(); g.boundingBox.getSize(piece.size);
+        piece.own = g; piece.m.geometry = g; piece.m.material = mats; piece.m.scale.set(1, 1, 1);
+    }
     // A piece comes off at (x, y, z) on the car: it pops up, carries on with some of the car's speed, bounces and tumbles,
-    // lies on the road for a while and fades away. Very small parts are shown a little bigger, so they can be seen.
-    throwPiece(racer, x, y, z, sx, sy, sz, blob, colour, rnd) {
-        const p = this.pieces[this.next = (this.next + 1) % PIECES], m = p.m, c = Math.cos(racer.heading), s = Math.sin(racer.heading);
-        const big = Math.max(sx, sy, sz), k = Math.max(1, 0.16 / big);
-        m.geometry = blob ? this.blob : this.box; m.material.color.set(colour); m.material.opacity = 1;
-        m.scale.set(Math.max(0.02, sx * k), Math.max(0.02, sy * k), Math.max(0.02, sz * k));
+    // lies on the road for a while and then shrinks away.
+    throwPiece(p, racer, x, y, z, rnd) {
+        const m = p.m, c = Math.cos(racer.heading), s = Math.sin(racer.heading);
         m.position.set(racer.x + x * c + z * s, Math.max(0.1, y), racer.z - x * s + z * c);
         m.rotation.set(rnd() * 3, racer.heading, rnd() * 3); m.visible = true;
         const out = (z >= 0 ? 1 : -1) * (0.8 + rnd() * 1.6), v = racer.v * (0.6 + rnd() * 0.25);   // (out: a little way off to the car's side)
         p.vx = c * v + s * out; p.vz = -s * v + c * out; p.vy = 3.2 + rnd() * 2.2;
         p.wx = (rnd() - 0.5) * 16; p.wy = (rnd() - 0.5) * 10; p.wz = (rnd() - 0.5) * 16;
-        p.life = 0; p.rest = false; p.hy = Math.max(0.02, Math.min(m.scale.x, m.scale.y, m.scale.z) / 2) + 0.03;
+        p.life = 0; p.rest = false; p.hy = Math.max(0.01, Math.min(p.size.x, p.size.y, p.size.z) / 2) + 0.02;   // (how high its middle sits when it lies on the road)
         this.moving = true;
     }
     // every frame (it does nothing at all unless a piece is on the road)
@@ -260,13 +300,17 @@ export class Damage {
                         if (p.vx * p.vx + p.vz * p.vz < 0.05) p.rest = true;
                     }
                 }
-            } else {   // lying on the road: settle flat
-                const k = Math.min(1, dt * 8); m.rotation.x -= Math.sin(m.rotation.x * 2) * 0.5 * k; m.rotation.z -= Math.sin(m.rotation.z * 2) * 0.5 * k;
+            } else {   // lying on the road: it tips over onto its flattest side
+                const k = Math.min(1, dt * 8), S = p.size, tx = S.z < S.y && S.z <= S.x ? -Math.PI / 2 : 0, tz = S.x < S.y && S.x < S.z ? Math.PI / 2 : 0;
+                m.rotation.x += flat(tx - m.rotation.x) * k; m.rotation.z += flat(tz - m.rotation.z) * k;
             }
-            if (p.life > PIECE_STAYS) { const o = 1 - (p.life - PIECE_STAYS) / PIECE_FADES; if (o <= 0) m.visible = false; else m.material.opacity = o; }
+            if (p.life > PIECE_STAYS) {   // shrink away (it uses the car's own materials, so it can't simply fade)
+                const o = 1 - (p.life - PIECE_STAYS) / PIECE_FADES;
+                if (o <= 0) this.release(p); else if (p.own) m.scale.setScalar(o); else m.scale.copy(p.size).multiplyScalar(o);
+            }
         }
         this.moving = any;
     }
     // sweep the track (a new race, a replay starting again)
-    clearPieces() { for (const p of this.pieces) p.m.visible = false; this.moving = false; }
+    clearPieces() { for (const p of this.pieces) this.release(p); this.moving = false; }   // (this also lets go of the old cars' materials)
 }
