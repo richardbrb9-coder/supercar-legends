@@ -937,7 +937,7 @@ function updateEngine() {
     engine.o1.frequency.setTargetAtTime(f, t, 0.05); engine.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
     if (engine.real) {
         // a higher-pitched engine for the V10 and V12, and each gear starts a touch higher than the last
-        const base = { v8: 0.82, hybrid: 0.86, v10: 1.0, v12: 1.08, v6h: 1.16 }[engine.kind] || 0.9, rate = base * (0.72 + rpm * 1.15 + (gs.gear - 1) * 0.03);
+        const base = { v8: 0.82, hybrid: 0.86, v10: 1.0, v12: 1.08, v6h: 1.0 }[engine.kind] || 0.9, rate = base * (0.72 + rpm * 1.15 + (gs.gear - 1) * 0.03);
         engine.low.s.playbackRate.setTargetAtTime(rate, t, 0.04); engine.high.s.playbackRate.setTargetAtTime(0.55 + rpm * 0.75 + (gs.gear - 1) * 0.02, t, 0.04);
         const hi = Math.max(0, (rpm - 0.45) / 0.55);
         engine.low.g.gain.setTargetAtTime((0.24 - hi * 0.1) * on, t, 0.08); engine.high.g.gain.setTargetAtTime(hi * 0.2 * on, t, 0.08);

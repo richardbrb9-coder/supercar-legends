@@ -89,7 +89,7 @@ export const ENGINES = {
     v10:    { label: 'V10',       bhp: 640,  kg: 230, awd: false, note: 'High-revving V10',           sound: 120 },
     v12:    { label: 'V12',       bhp: 780,  kg: 270, awd: false, note: 'Naturally aspirated V12',    sound: 140 },
     hybrid: { label: 'Hybrid V8', bhp: 950,  kg: 350, awd: true,  note: 'V8 plus electric motors',     sound: 100 },
-    v6h:    { label: 'V6 turbo hybrid', bhp: 850, kg: 185, awd: false, note: 'A small, screaming turbo V6 with an electric boost, as in Grand Prix cars', sound: 150 },
+    v6h:    { label: 'V6 turbo hybrid', bhp: 850, kg: 185, awd: false, note: 'A small turbo V6 with an electric boost, as in Grand Prix cars', sound: 130 },   // (pitched below the V12, so it never gets shrill)
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
