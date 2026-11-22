@@ -2,6 +2,7 @@
 // Everything is made in code: no model files, no textures to download, so it works offline and stays small.
 import * as THREE from './lib/three.module.min.js';
 import { flakeTexture } from './reflections.js';
+import { isFormula, createFormulaCar, formulaStats, formulaTwoTone, formulaTeam, formulaMarks, formulaPanelLines } from './formula.js';
 
 // =====================================================================
 //  DESIGN SETTINGS
@@ -62,7 +63,14 @@ export const PRESETS = {
                 noseW: 0.55, noseW2: 0.84, noseTip: 0.8, noseLift: 2.4, wbFrac: 0.578, axleShift: 0.01, round: 0.36, fenderH: 0.05, fenderReach: 2.4,
                 cabinStyle: 'tallglass', cabinWB: 0.68, cabinWT: 0.62, grille: 'none', lamps: 'blade', bumpers: false, scoop: 'bonnetvent', exhaust: 'none',
                 mouth: false, sideIntake: true, rearGrille: true, cornerIntakes: true, tailBar: true, diffuser: true,
-                style: { wing: 'ducktail', splitter: true, skirts: true, rim: 'turbine', rimColour: 'black' } }
+                style: { wing: 'ducktail', splitter: true, skirts: true, rim: 'turbine', rimColour: 'black' } },
+    // Inspired by the Grand Prix single-seaters of the 2020s (no one team's car): a narrow tub with the wheels out in the open,
+    // wings front and rear, sidepods, an airbox over the driver's head and a 'halo' hoop round the open cockpit.
+    // It is built in its own way (see formula.js) and is recognised by its open cockpit. Of the settings below it uses the length,
+    // width, nose height, ride height and wheel size; the others are only there so every design has the same list.
+    formula:  { label: 'Formula racer',   L: 5.5,  W: 2.0,  nose: 0.30, deck: 0.70, roof: 1.0,  tail: 0.6,  cabin: [0.37, 0.5], fast: 0, ride: 0.06, wheel: 0.36,
+                wbFrac: 0.655, axleShift: 0.027, cabinStyle: 'open', grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none',
+                style: { wing: 'none', splitter: false, skirts: false, rallyLights: false, rim: 'ten', rimColour: 'black', engine: 'v6h' } }
 };
 export const PAINTS = ['#E10600', '#FFB300', '#C6FF00', '#00B8D9', '#1E3A8A', '#7E57C2', '#F4F6F8', '#9AA3AF', '#1B1F26', '#0B0C0F', '#FF6D00', '#00A86B'];
 export const FINISHES = {
@@ -80,6 +88,7 @@ export const ENGINES = {
     v10:    { label: 'V10',       bhp: 640,  kg: 230, awd: false, note: 'High-revving V10',           sound: 120 },
     v12:    { label: 'V12',       bhp: 780,  kg: 270, awd: false, note: 'Naturally aspirated V12',    sound: 140 },
     hybrid: { label: 'Hybrid V8', bhp: 950,  kg: 350, awd: true,  note: 'V8 plus electric motors',     sound: 100 },
+    v6h:    { label: 'V6 turbo hybrid', bhp: 850, kg: 185, awd: false, note: 'A small, screaming turbo V6 with an electric boost, as in Grand Prix cars', sound: 150 },
     ev:     { label: 'Electric',  bhp: 1400, kg: 620, awd: true,  note: 'Four electric motors',        sound: 0 }
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
@@ -103,7 +112,7 @@ export function saveDesign(design) { try { localStorage.setItem(STORE_KEY, JSON.
 // =====================================================================
 //  SMOOTH CURVES (monotone cubic, so the body never bulges where it shouldn't)
 // =====================================================================
-function curve(points) {
+export function curve(points) {
     const xs = points.map(p => p[0]), ys = points.map(p => p[1]), n = xs.length;
     const d = [], m = [];
     for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
@@ -543,13 +552,17 @@ function spinBlurMaterial(design) {
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     return new THREE.MeshStandardMaterial({ map: t, transparent: true, opacity: 0, depthWrite: false, metalness: 0.15, roughness: 0.4, visible: false });
 }
-function makeWheel(p, mats, front, lite = false, covered = false) {   // (covered: a smooth cover hides the spokes, so they are left out)
+// (o: the Formula racer's wheels, see FORMULA_TYRES: its own tyre width tw, a smaller rim for a taller tyre, square-shouldered slicks, one centre nut)
+export function makeWheel(p, mats, front, lite = false, covered = false, o = {}) {   // (covered: a smooth cover hides the spokes, so they are left out)
     const g = new THREE.Group(), spin = new THREE.Group(); g.add(spin); g.userData.spin = spin;
-    const R = p.wheel, tw = front ? 0.27 : 0.32, rimR = R * 0.72;
+    const R = p.wheel, tw = o.tw || (front ? 0.27 : 0.32), rimR = R * (o.rimK || 0.72);
     // tyre: a rounded profile spun around the axle
     const prof = [];
     const tp = lite ? 6 : 14, ts = lite ? 18 : 36;
-    for (let i = 0; i <= tp; i++) { const a = -Math.PI / 2 + Math.PI * i / tp; prof.push(new THREE.Vector2(rimR + (R - rimR) * (0.55 + 0.45 * Math.cos(a)), (tw / 2) * Math.sin(a))); }
+    // (a racing slick is squarer: a tall flat sidewall, a rounded shoulder and a wide flat tread; given as [how far up the sidewall, how far across])
+    const half = lite ? [[0, 0.86], [0.35, 1], [0.62, 1], [0.96, 0.88], [1, 0.45]] : [[0, 0.86], [0.12, 0.96], [0.35, 1], [0.62, 1], [0.85, 0.97], [0.96, 0.88], [1, 0.72], [1, 0.4]];
+    if (o.square) for (const [h, k] of [...half.map(([h, k]) => [h, -k]), [1, 0], ...half.slice().reverse()]) prof.push(new THREE.Vector2(rimR + (R - rimR) * h, (tw / 2) * k));
+    else for (let i = 0; i <= tp; i++) { const a = -Math.PI / 2 + Math.PI * i / tp; prof.push(new THREE.Vector2(rimR + (R - rimR) * (0.55 + 0.45 * Math.cos(a)), (tw / 2) * Math.sin(a))); }
     const tyre = new THREE.Mesh(new THREE.LatheGeometry(prof, ts), mats.tyre);
     tyre.rotation.x = Math.PI / 2; spin.add(tyre);
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(rimR, rimR, tw * 0.9, ts, 1, true), mats.rim);
@@ -566,7 +579,8 @@ function makeWheel(p, mats, front, lite = false, covered = false) {   // (covere
     const hub = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.18, rimR * 0.2, 0.05, 16), mats.rim);
     hub.rotation.x = Math.PI / 2; face.add(hub);
     // wheel nuts round the hub
-    if (!lite && !covered && p.rim !== 'wire') for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, n = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.03, 6), mats.chrome); n.rotation.x = Math.PI / 2; n.position.set(Math.cos(a) * rimR * 0.12, Math.sin(a) * rimR * 0.12, 0.03); face.add(n); }
+    if (o.nut) { const n = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.11, rimR * 0.13, 0.05, 6), mats.rim); n.rotation.x = Math.PI / 2; n.position.z = 0.04; face.add(n); }
+    else if (!lite && !covered && p.rim !== 'wire') for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, n = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.03, 6), mats.chrome); n.rotation.x = Math.PI / 2; n.position.set(Math.cos(a) * rimR * 0.12, Math.sin(a) * rimR * 0.12, 0.03); face.add(n); }
     const spoke = (n, w, twist = 0, depth = 0.035, blade = false) => {   // (blade: each spoke twists about its own length, like a fan blade, and stays inside the rim)
         for (let i = 0; i < n; i++) {
             const s = new THREE.Mesh(new THREE.BoxGeometry(w, rimR * 0.85, depth), mats.rim);
@@ -600,7 +614,7 @@ export const LIVERIES = { none: 'Plain', twin: 'Twin stripes', single: 'Offset s
 // Motorsport team paint jobs, with sponsor stickers. The sponsors are all made up (no real brands or logos).
 export const TEAM_LIVERIES = { rally: 'Rally team', endurance: 'Endurance team', gt: 'GT team' };
 const ALL_LIVERIES = [...Object.keys(LIVERIES), ...Object.keys(TEAM_LIVERIES)];
-const SPONSORS = [
+export const SPONSORS = [
     { name: 'APEX TYRES', bg: '#111418', fg: '#FFB300', mark: 'ring' }, { name: 'NITRO FUEL', bg: '#E10600', fg: '#ffffff', mark: 'bolt' },
     { name: 'VELOCITY OIL', bg: '#ffffff', fg: '#1E3A8A', mark: 'drop' }, { name: 'BOLT BRAKES', bg: '#FFB300', fg: '#111418', mark: 'bolt' },
     { name: 'ROCKET PLUGS', bg: '#1E3A8A', fg: '#ffffff', mark: 'star' }, { name: 'ZOOM RADIO', bg: '#00A86B', fg: '#ffffff', mark: 'ring' },
@@ -608,7 +622,7 @@ const SPONSORS = [
 ];
 const hasLivery = d => (d.livery && d.livery !== 'none') || d.twoTone || String(d.number || '').trim() || String(d.tag || '').trim();
 // A sponsor sticker, drawn centred on (0, 0), w x h pixels
-function sponsorSticker(x, sp, w, h) {
+export function sponsorSticker(x, sp, w, h) {
     x.fillStyle = sp.bg; x.beginPath(); x.roundRect(-w / 2, -h / 2, w, h, h * 0.18); x.fill();
     x.strokeStyle = sp.fg; x.lineWidth = Math.max(1, h * 0.06); x.stroke();
     const m = h * 0.32, mx = -w / 2 + h * 0.5;
@@ -675,7 +689,9 @@ function liveryTexture(d, hd = false) {
     const x = c.getContext('2d'); x.setTransform(S, 0, 0, S, 0, 0); x.globalAlpha = 1; x.lineCap = 'butt';
     const Y = v => (1 - v) * H;                                   // the texture is flipped vertically
     x.fillStyle = d.paint; x.fillRect(0, 0, W, H);
-    if (d.twoTone) { x.fillStyle = d.paint2; x.fillRect(0, Y(0.24), W, Y(0) - Y(0.24)); x.fillRect(0, Y(1), W, Y(0.76) - Y(1)); }   // lower half of each side
+    const f1 = isFormula(d);                                     // (the Formula racer's picture is laid out its own way: see formula.js)
+    if (d.twoTone && f1) formulaTwoTone(x, d, W, H, Y);
+    else if (d.twoTone) { x.fillStyle = d.paint2; x.fillRect(0, Y(0.24), W, Y(0) - Y(0.24)); x.fillRect(0, Y(1), W, Y(0.76) - Y(1)); }   // lower half of each side
     const sc = d.stripeColour;
     const band = (v0, v1, u0 = 0, u1 = 1) => { x.fillRect(u0 * W, Y(v1), (u1 - u0) * W, Y(v0) - Y(v1)); };
     x.fillStyle = sc;
@@ -699,9 +715,10 @@ function liveryTexture(d, hd = false) {
     // race number roundels on both doors and the driver's tag, drawn so they read the right way round on each side
     const pxU = W / d.L, pxV = H / (2 * d.W + 2 * (d.deck - d.ride) + 0.4);   // pixels per metre along and around the body
     const team = TEAM_LIVERIES[d.livery];
-    if (team) teamLivery(x, d, W, H, Y, band, pxU, pxV);
+    if (team) f1 ? formulaTeam(x, d, W, H, Y, band) : teamLivery(x, d, W, H, Y, band, pxU, pxV);
     const num = String(d.number || '').trim().slice(0, 2) || (team ? { rally: '4', endurance: '24', gt: '7' }[d.livery] : ''), tag = String(d.tag || '').trim().slice(0, 14);
-    for (const side of ['right', 'left']) {
+    if (f1) { formulaMarks(x, d, W, H, Y, num, tag); formulaPanelLines(x, d, W, H, Y); }
+    else for (const side of ['right', 'left']) {
         const v = side === 'right' ? 0.29 : 0.71, flipX = side === 'right' ? -1 : 1, flipY = side === 'right' ? 1 : -1;
         const draw = (u, vv, fn) => { x.save(); x.translate(u * W, Y(vv)); x.scale(flipX, flipY * pxV / pxU); fn(); x.restore(); };
         if (num) draw(0.5, v, () => {
@@ -735,7 +752,7 @@ const isElectric = d => d.lamps === 'blade' && d.cabinStyle === 'tallglass' && d
 const isWedge70 = d => d.lamps === 'hidden' && d.cabinStyle === 'visor' && d.scoop === 'louvres';
 // The 60s GT gets its own detail as well (a framed glasshouse you can see into, chrome trim, wood and leather inside)
 const isGT60 = d => d.lamps === 'round' && d.cabinStyle === 'glasshouse' && d.grille === 'shield';
-const isDetailed = d => isHyper(d) || isSuper90(d) || isLongtail(d) || isElectric(d) || isWedge70(d) || isGT60(d);
+const isDetailed = d => isHyper(d) || isSuper90(d) || isLongtail(d) || isElectric(d) || isWedge70(d) || isGT60(d) || isFormula(d);
 // Does the driver sit in the middle? (the 90s supercar and the Longtail, recognised by their parts, so it still holds after the sliders are moved)
 export const centreSeat = d => isSuper90(d) || isLongtail(d);
 // Where a point on the body's skin falls on the paint picture, for the cross-section at s (matches loftUV: v by distance round the ring)
@@ -1088,7 +1105,7 @@ function paintMaterial(design, plain = false, hd = false) {
         // metallic and pearl paint: tiny flakes under the smooth clear coat glint in the light
         ...(design.finish === 'metallic' || design.finish === 'pearl' ? { normalMap: flakeTexture(), normalScale: new THREE.Vector2(0.22, 0.22) } : {}) });
 }
-function buildMaterials(design, lite = false) {
+export function buildMaterials(design, lite = false) {
     const rc = RIM_COLOURS[design.rimColour];
     return {
         paint: paintMaterial(design, false, !lite),
@@ -1113,7 +1130,7 @@ function buildMaterials(design, lite = false) {
 }
 // Combine all the meshes under 'root' that share a material into one mesh each (fewer things to draw = smoother on tablets).
 // Each part keeps its exact position; the look doesn't change.
-function mergeByMaterial(root) {
+export function mergeByMaterial(root) {
     root.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), groups = new Map(), victims = [];
     root.traverse(o => {
@@ -1144,7 +1161,7 @@ function mergeByMaterial(root) {
 // turn a shape inside out, so its inner surface is the one that shows (for the insides of pipes and lamp bowls)
 function insideOut(g) { g.scale(-1, 1, 1); const n = g.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i)); return g; }
 // a bar (box) from point a to point b
-function bar(a, b, t, mat, w = t) {
+export function bar(a, b, t, mat, w = t) {
     const d = new THREE.Vector3().subVectors(b, a), m = new THREE.Mesh(new THREE.BoxGeometry(w, d.length(), t), mat);
     m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return m;
 }
@@ -1279,7 +1296,7 @@ function hyperDetail(car, p, pr, mats, X, lite) {
 // ---- parts the detailed cars share ----
 // The interior and the small outside trim share one material (hidden in the driver's-seat view).
 // (it glows very faintly in its own colours, so the bright helmet still reads through the tinted glass from the race cameras)
-function interiorKit(car, p, mats, lite) {
+export function interiorKit(car, p, mats, lite) {
     if (!lite) { const it = interiorTexture(p); mats.interior = new THREE.MeshStandardMaterial({ map: it, emissive: 0xffffff, emissiveMap: it, emissiveIntensity: 0.3, roughness: 0.5, metalness: 0.1 }); }
     const col = (g, i) => { const uv = g.attributes.uv; for (let k = 0; k < uv.count; k++) uv.setXY(k, (i + 0.5) / INTERIOR.length, 0.5); return g; };
     const part = (g, i) => { const m = new THREE.Mesh(col(g, i), mats.interior); car.add(m); return m; };
@@ -1350,7 +1367,7 @@ function bucketSeat(part, xS, hy, z, w = 0.4, tone = [0, 1, 5], empty = false) {
     const rest = part(new THREE.SphereGeometry(0.1, 12, 8), tone[1]); rest.scale.set(0.6, 0.85, 1.15); rest.position.set(xS - 0.2, hy + 0.02, z);
 }
 // the driver: racing suit shoulders and a full-face helmet with a dark visor (never a face)
-function helmetedDriver(part, xS, hy, z) {
+export function helmetedDriver(part, xS, hy, z) {
     const R = 0.125;
     const body = part(new THREE.SphereGeometry(1, 14, 10), 4); body.scale.set(0.15, 0.16, 0.25); body.position.set(xS - 0.04, hy - 0.2, z);
     const lid = part(new THREE.SphereGeometry(R, 20, 14), 3); lid.scale.set(1.12, 1, 0.94); lid.position.set(xS, hy, z);
@@ -1764,7 +1781,7 @@ function wedgeDetail(car, p, pr, mats, X, lite) {
         if (yS > yF + 0.08) { tube(V(xH, yF, zh), V(xH, yS, zh)); tube(V(xH, yF, -zh), V(xH, yS, -zh)); tube(V(xH, yS, zh), V(xH, yM, zh * 0.45)); tube(V(xH, yS, -zh), V(xH, yM, -zh * 0.45)); tube(V(xH, yM, zh * 0.45), V(xH, yM, -zh * 0.45)); tube(V(xH, yF, -zh), V(xH, yM, zh * 0.45)); } }
 }
 // a round rod from point a to point b
-function rod(a, b, r, mat, seg = 10) {
+export function rod(a, b, r, mat, seg = 10) {
     const d = new THREE.Vector3().subVectors(b, a), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, d.length(), seg), mat);
     m.position.copy(a).add(b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return m;
 }
@@ -1849,6 +1866,7 @@ export function carFrame(design) { const pr = profiles(design); return { pr, X: 
 // lite: a lighter build with fewer points on the curves (the same shape and paint), for the rival cars in a race
 // draft: use the normal-size paint picture instead of the sharp one (the builder does this while a slider is being dragged)
 export function createCar(design, { merge = false, lite = false, draft = false } = {}) {
+    if (isFormula(design)) return createFormulaCar(design, { merge, lite, draft });   // (an open-wheel racer is put together its own way)
     const mats = buildMaterials(design, lite || draft), wheels = [];
     const p = design, pr = profiles(p);
     const car = new THREE.Group();
@@ -2230,14 +2248,18 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     if (gt) gtDetail(car, p, pr, mats, X, lite);
     if (merge) { wheels.forEach(w => { const sp = w.userData.spin; sp.userData.wheelRoot = true; mergeByMaterial(sp); w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
     // (the shared tyre and disc pictures, and shared suspension parts, are kept for the next car)
-    const dispose = () => { car.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map && m.map !== TYRE_TEX && m.map !== DISC_TEX) m.map.dispose(); if (m.metalnessMap) m.metalnessMap.dispose(); m.dispose(); }); };
-    return { group: car, mats, wheels, dispose, draft: draft && fine };
+    return { group: car, mats, wheels, dispose: disposer(car, mats), draft: draft && fine };
+}
+// how to throw a car away when it is finished with, giving its memory back
+export function disposer(car, mats) {
+    return () => { car.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map && m.map !== TYRE_TEX && m.map !== DISC_TEX) m.map.dispose(); if (m.metalnessMap) m.metalnessMap.dispose(); m.dispose(); }); };
 }
 // =====================================================================
 //  STATS (simple and fair, so every style is good at something)
 // =====================================================================
 export function carStats(design) {
     const e = ENGINES[design.engine];
+    if (isFormula(design)) return formulaStats(design, e);
     const aeroWing = { none: 0, ducktail: 0.25, gt: 0.8, swan: 1 }[design.wing] + (design.splitter ? 0.25 : 0) + (design.skirts ? 0.1 : 0);
     const kg = Math.round(600 + 85 * design.L * design.W + e.kg + (design.wing !== 'none' ? 12 : 0));
     const cd = 0.27 + (design.roof - 1.0) * 0.35 + aeroWing * 0.05 + (design.preset === 'wedge70' ? 0.02 : 0) - (design.preset === 'longtail' ? 0.03 : 0);
@@ -2324,7 +2346,7 @@ export function decodeDesign(code) {
         const colour = (v, def) => typeof v === 'string' && /^#[0-9a-fA-F]{6}$/.test(v) ? v : def;
         const raw = Object.fromEntries(keys.map((k, i) => [k, arr[i]]));
         d.preset = typeof raw.preset === 'string' ? raw.preset.slice(0, 20) : 'custom';
-        d.L = num(raw.L, 3.5, 5.4, d.L); d.W = num(raw.W, 1.7, 2.1, d.W); d.nose = num(raw.nose, 0.3, 0.75, d.nose);
+        d.L = num(raw.L, 3.5, 5.6, d.L); d.W = num(raw.W, 1.7, 2.1, d.W); d.nose = num(raw.nose, 0.3, 0.75, d.nose);
         d.deck = num(raw.deck, 0.7, 0.95, d.deck); d.roof = num(raw.roof, 1.0, 1.35, d.roof); d.tail = num(raw.tail, 0.6, 1.05, d.tail);
         d.cabin = Array.isArray(raw.cabin) && raw.cabin.length === 2 ? [num(raw.cabin[0], 0.2, 0.6, 0.3), num(raw.cabin[1], 0.5, 0.95, 0.62)] : d.cabin;
         d.fast = num(raw.fast, 0, 1, d.fast); d.ride = num(raw.ride, 0.06, 0.2, d.ride); d.wheel = num(raw.wheel, 0.31, 0.38, d.wheel);
@@ -2339,9 +2361,9 @@ export function decodeDesign(code) {
         const oneOf = (v, list, def) => list.includes(v) ? v : def;
         Object.assign(d, SHAPE_DEFAULTS);
         if (ver > 1) {
-            d.wbFrac = num(raw.wbFrac, 0.5, 0.65, 0.6); d.axleShift = num(raw.axleShift, -0.08, 0.08, 0); d.round = num(raw.round, 0.3, 0.7, 0.38);
+            d.wbFrac = num(raw.wbFrac, 0.5, 0.66, 0.6); d.axleShift = num(raw.axleShift, -0.08, 0.08, 0); d.round = num(raw.round, 0.3, 0.7, 0.38);
             d.fenderH = num(raw.fenderH, 0, 0.25, 0.06); d.fenderReach = num(raw.fenderReach, 1.8, 3.5, 2.5);
-            d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass', 'visor'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
+            d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass', 'visor', 'open'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
             d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade', 'hidden', 'twin'], 'slim'); d.bumpers = !!raw.bumpers;
             d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof', 'snorkel', 'bonnetvent', 'louvres'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad'], 'none');
         }

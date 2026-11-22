@@ -4,6 +4,7 @@ import { OrbitControls } from './lib/addons/OrbitControls.js';
 import { RoomEnvironment } from './lib/addons/RoomEnvironment.js';
 import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, LIVERIES, TEAM_LIVERIES, UNLOCKS, loadDesign, saveDesign as saveDesignTo, createCar, carStats,
     medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign, applyPreset, clearPaintPool } from './carmodel.js';
+import { isFormula } from './formula.js';
 
 // =====================================================================
 //  SCENE
@@ -16,7 +17,7 @@ let sharpTimer = null;
 // draft: a quicker build with a smaller paint picture, used while a slider is being dragged; the sharp one follows when it stops
 function buildCar(draft = false) {
     if (car) { scene.remove(car.group); car.dispose(); }
-    car = createCar(design, { draft: draft === true }); mats = car.mats;
+    car = createCar(design, { draft: draft === true, ...(window.__buildOpts || {}) }); mats = car.mats;   // (__buildOpts: testing only, to look at the race builds of a car)
     clearTimeout(sharpTimer); if (car.draft) sharpTimer = setTimeout(() => buildCar(false), 450);
     setLights(lightsMode);
     scene.add(car.group);
@@ -101,14 +102,16 @@ const slider = (key, label, min, max, step) => `<label class="slider"><span>${la
 const COLOURS = ['#F4F6F8', '#0B0C0F', '#E10600', '#FFB300', '#C6FF00', '#00B8D9', '#1E3A8A', '#FF6D00', '#7E57C2', '#9AA3AF'];
 function renderPanel() {
     const tabs = { body: 'Body', wheels: 'Wheels', paint: 'Paint', livery: 'Livery', aero: 'Aero', engine: 'Engine', cars: 'My cars' };
+    const f1 = isFormula(design);     // (the Formula racer has its own short list of sliders, and its wings are built in)
     let html = `<div class="b-tabs">${Object.entries(tabs).map(([k, v]) => `<button class="b-tab ${k === panelTab ? 'active' : ''}" data-btab="${k}">${v}</button>`).join('')}</div><div class="b-body">`;
     if (panelTab === 'body') html += `<p class="b-label">Body style</p><div class="opts">${choice(PRESETS, design.preset, 'preset')}</div>
-        ${slider('L', 'Length', 4.0, 5.2, 0.05)}${slider('W', 'Width', 1.7, 2.1, 0.01)}${slider('roof', 'Roof height', 1.0, 1.35, 0.01)}
-        ${slider('nose', 'Nose height', 0.38, 0.72, 0.01)}${slider('tail', 'Tail height', 0.6, 1.05, 0.01)}${slider('ride', 'Ride height', 0.06, 0.2, 0.005)}`;
+        ${f1 ? `${slider('L', 'Length', 5.2, 5.6, 0.05)}${slider('W', 'Width', 1.9, 2.1, 0.01)}${slider('nose', 'Nose height', 0.3, 0.42, 0.01)}${slider('ride', 'Ride height', 0.06, 0.1, 0.005)}`
+        : `${slider('L', 'Length', 4.0, 5.2, 0.05)}${slider('W', 'Width', 1.7, 2.1, 0.01)}${slider('roof', 'Roof height', 1.0, 1.35, 0.01)}
+        ${slider('nose', 'Nose height', 0.38, 0.72, 0.01)}${slider('tail', 'Tail height', 0.6, 1.05, 0.01)}${slider('ride', 'Ride height', 0.06, 0.2, 0.005)}`}`;
     if (panelTab === 'wheels') html += `<p class="b-label">Rim design</p><div class="opts">${choice(RIMS, design.rim, 'rim')}</div>
         <p class="b-label">Rim colour</p><div class="swatches">${Object.entries(RIM_COLOURS).map(([k, v]) => swatch(k, design.rimColour, 'rimcol', v === 'chrome' ? 'linear-gradient(135deg,#fff,#7c8591,#fff)' : v)).join('')}</div>
-        <p class="b-label">Brake callipers</p><div class="swatches">${['#FFB300', '#E10600', '#00B8D9', '#C6FF00', '#16181C', '#F4F6F8'].map(c => swatch(c, design.caliper, 'caliper')).join('')}</div>
-        ${slider('wheel', 'Wheel size', 0.31, 0.38, 0.005)}`;
+        <p class="b-label">${f1 ? 'Tyre stripe, helmet and brake callipers' : 'Brake callipers'}</p><div class="swatches">${['#FFB300', '#E10600', '#00B8D9', '#C6FF00', '#16181C', '#F4F6F8'].map(c => swatch(c, design.caliper, 'caliper')).join('')}</div>
+        ${slider('wheel', 'Wheel size', f1 ? 0.34 : 0.31, 0.38, 0.005)}`;
     if (panelTab === 'paint') html += `<p class="b-label">Colour</p><div class="swatches">${PAINTS.map(c => swatch(c, design.paint, 'paint')).join('')}
         <label class="swatch custom" style="--sw:${design.paint}" title="Pick any colour"><input type="color" value="${design.paint}" data-paintpick="paint"></label></div>
         <p class="b-label">Finish</p><div class="opts">${choice(FINISHES, design.finish, 'finish')}</div>`;
@@ -119,7 +122,8 @@ function renderPanel() {
         ${design.twoTone ? `<div class="swatches" style="margin-top:8px">${COLOURS.map(c => swatch(c, design.paint2, 'paint2')).join('')}</div>` : ''}
         <label class="field"><span>Race number</span><input type="text" inputmode="numeric" maxlength="2" value="${esc(design.number)}" data-text="number" placeholder="e.g. 7"></label>
         <label class="field"><span>Your name or tag</span><input type="text" maxlength="14" value="${esc(design.tag)}" data-text="tag" placeholder="e.g. MAX"></label>`;
-    if (panelTab === 'aero') html += `<p class="b-label">Rear wing</p><div class="opts">${choice(WINGS, design.wing, 'wing')}</div>
+    if (panelTab === 'aero' && f1) html += `<p class="b-label">Wings</p><p class="small">A Formula racer is built around its wings, so they are all fitted already: a front wing made of four curved blades, a rear wing with a flap, a beam wing and a diffuser under the tail. Together they press the car onto the road, which is why it corners and brakes so well.</p>`;
+    else if (panelTab === 'aero') html += `<p class="b-label">Rear wing</p><div class="opts">${choice(WINGS, design.wing, 'wing')}</div>
         <p class="b-label">Extras</p><div class="opts"><button class="opt ${design.splitter ? 'active' : ''}" data-toggle="splitter">Front splitter</button><button class="opt ${design.skirts ? 'active' : ''}" data-toggle="skirts">Side skirts</button><button class="opt ${design.rallyLights ? 'active' : ''}" data-toggle="rallyLights">Rally lights</button></div>`;
     if (panelTab === 'engine') html += `<p class="b-label">Engine</p><div class="opts">${choice(ENGINES, design.engine, 'engine')}</div><p class="small">${ENGINES[design.engine].note}. Tap again to hear it.</p>`;
     if (panelTab === 'cars') {
@@ -284,12 +288,12 @@ export function enter() {
 export function leave() { if (raf) { cancelAnimationFrame(raf); raf = null; } clearPaintPool(); }   // (and give back the spare paint canvases)
 export function refreshUnits() { if (started) renderStats(); }
 // Put the camera at a fixed angle (used for photo angles and testing)
-// (zoom, targetY: testing only, for close-up photos of small details)
-export function setView(azimuthDeg, elevationDeg = 14, dist = 9, zoom, targetY = 0.6) {
+// (zoom, targetY, targetX: testing only, for close-up photos of small details)
+export function setView(azimuthDeg, elevationDeg = 14, dist = 9, zoom, targetY = 0.6, targetX = 0) {
     if (!controls) return;
     controls.autoRotate = false; syncTurntableButton();
     const az = azimuthDeg * Math.PI / 180, el = elevationDeg * Math.PI / 180;
-    camera.position.set(Math.cos(az) * Math.cos(el) * dist, 0.6 + Math.sin(el) * dist, Math.sin(az) * Math.cos(el) * dist);
-    controls.target.set(0, targetY, 0); controls.update();
+    camera.position.set(targetX + Math.cos(az) * Math.cos(el) * dist, 0.6 + Math.sin(el) * dist, Math.sin(az) * Math.cos(el) * dist);
+    controls.target.set(targetX, targetY, 0); controls.update();
     if (zoom) { camera.zoom = zoom; camera.updateProjectionMatrix(); }   // (left alone in normal use)
 }
