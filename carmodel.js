@@ -1137,7 +1137,7 @@ function mergeByMaterial(root) {
         let p = o.parent; while (p && p !== root) { if (p.userData.wheelRoot) return; p = p.parent; }
         const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
         g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
-        if (o.userData.loose) g.userData.loose = o.userData.loose;
+        if (o.userData.loose) g.userData = { loose: o.userData.loose };   // (its own note: a copied shape shares its notes with the original)
         if (!groups.has(o.material)) groups.set(o.material, []);
         groups.get(o.material).push(g); victims.push(o);
     });

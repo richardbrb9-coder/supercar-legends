@@ -675,7 +675,7 @@ function classify() {
     const before = [player, ...rivals].map(progressOf);
     const keep = rivals.map(r => ({ x: r.x, z: r.z, heading: r.heading, v: r.v, steer: r.steer, d: r.d, idx: r.idx, lap: r.lap, lapStart: r.lapStart, finished: r.finished,
         best: r.best, half: r.half, lat: r.lat, latV: r.latV, lineStart: r.lineStart, nLaps: r.laps.length }));
-    const t0 = race.raceTime; race.ff = true;
+    const t0 = race.raceTime, clock = performance.now(); race.ff = true;
     for (let i = 0; i < 40000; i++) {                           // (at most 400 more seconds of racing)
         let racing = false; for (const r of rivals) if (r.finished == null) { racing = true; break; }
         if (!racing) break;
@@ -687,7 +687,7 @@ function classify() {
         laps: c.finished == null ? [] : c.laps.slice(0, raceLaps()).map((t, i) => i === 0 ? t + c.lineStart : t), best: c.best, far: progressOf(c) }));
     rows.sort((a, b) => (a.total ?? Infinity) - (b.total ?? Infinity) || before[b.k] - before[a.k] || b.far - a.far);
     rivals.forEach((r, i) => { const { nLaps, ...was } = keep[i]; Object.assign(r, was); r.laps.length = nLaps; });
-    race.raceTime = t0; race.ff = false;
+    race.raceTime = t0; race.ff = false; race.ffMs = performance.now() - clock;   // (how long the working-out took: for testing)
     return rows;
 }
 const PODIUM_BTN = '<button class="act-btn ghost pod-only" data-race="podium">🏁 Podium</button>';
@@ -1670,5 +1670,5 @@ export function testHit(k = 0, where = 'front', sev = 0.8, colour = '#FFB300') {
     return race.hits.length > n ? { ...race.hits[n], damage: { scuffs: r.damage.scuffs, dents: r.damage.dents, lost: r.damage.lost, chips: r.damage.chips, parts: r.damage.parts.length } } : null;
 }
 export function results() { return race && race.results && race.results.map(row => ({ k: row.k, name: row.name, total: row.total, laps: row.laps })); }   // testing only
-export function damageDebug() { return { hits: race ? race.hits.length : 0, replayAt: race && race.replay ? [+race.replay.t.toFixed(1), race.replay.hit] : null, cars: [player, ...rivals].map(r => r.damage ? [r.damage.scuffs, r.damage.dents, r.damage.lost, r.damage.chips] : null) }; }   // testing only
+export function damageDebug() { return { hits: race ? race.hits.length : 0, ffMs: race && race.ffMs, replayAt: race && race.replay ? [+race.replay.t.toFixed(1), race.replay.hit] : null, cars: [player, ...rivals].map(r => r.damage ? [r.damage.scuffs, r.damage.dents, r.damage.lost, r.damage.chips] : null) }; }   // testing only
 export function testReplay() { if (race && race.tape && race.tape.length >= 20) { startReplay(); return true; } return false; }   // testing only

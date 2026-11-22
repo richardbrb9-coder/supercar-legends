@@ -175,7 +175,7 @@ export class Damage {
         for (let i = 0; i < n; i++) {
             const r = rnd(), len = 0.1 + rnd() * (0.22 + 0.35 * sev), ox = (rnd() - 0.5) * size * 1.6, oy = (rnd() - 0.5) * size * 0.9, tilt = (rnd() - 0.5) * 0.12;
             x.strokeStyle = r < 0.42 ? 'rgba(226,226,220,0.7)' : r < 0.7 || !colour ? 'rgba(24,24,27,0.65)' : colour;
-            x.lineWidth = 0.006 + rnd() * (r >= 0.7 && colour ? 0.022 : 0.01);
+            x.lineWidth = 0.004 + rnd() * (r >= 0.7 && colour ? 0.02 : 0.008);
             x.beginPath(); x.moveTo(ox - len / 2, oy - tilt * len); x.lineTo(ox + len / 2, oy + tilt * len); x.stroke();
         }
         x.restore();
