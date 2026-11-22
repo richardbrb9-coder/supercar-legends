@@ -212,7 +212,7 @@ function makeRacer(design, factor, isPlayer) {
 }
 // Rival cars are designed in code from the builder presets, so they're original designs too
 // team colours for rivals: [paint, stripes, second colour]
-const TEAM_COLOURS = [['#F4F6F8', '#E10600', '#00A86B'], ['#1E3A8A', '#FFB300', '#F4F6F8'], ['#00A86B', '#F4F6F8', '#1B1F26'],
+const TEAM_COLOURS = [['#F4F6F8', '#FF6D00', '#00B8D9'], ['#1E3A8A', '#FFB300', '#F4F6F8'], ['#00A86B', '#F4F6F8', '#1B1F26'],
     ['#E10600', '#F4F6F8', '#1B1F26'], ['#FFB300', '#1B1F26', '#E10600'], ['#1B1F26', '#C6FF00', '#9AA3AF'], ['#7E57C2', '#F4F6F8', '#00B8D9']];
 const RIVAL_NUMBERS = [4, 24, 7, 11, 33, 18, 5];
 // =====================================================================
