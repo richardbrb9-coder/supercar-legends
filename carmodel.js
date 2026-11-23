@@ -783,13 +783,14 @@ function liveryTexture(d, hd = false) {
     const num = String(d.number || '').trim().slice(0, 2) || (team ? { rally: '4', endurance: '24', gt: '7' }[d.livery] : ''), tag = String(d.tag || '').trim().slice(0, 14);
     if (f1) { formulaMarks(x, d, W, H, Y, num, tag); formulaPanelLines(x, d, W, H, Y); }
     else for (const side of ['right', 'left']) {
-        const v = side === 'right' ? (box ? 0.305 : 0.29) : (box ? 0.695 : 0.71), flipX = side === 'right' ? -1 : 1, flipY = side === 'right' ? 1 : -1;
-        const draw = (u, vv, fn) => { x.save(); x.translate(u * W, Y(vv)); x.scale(flipX, flipY * pxV / pxU); fn(); x.restore(); };
-        if (num) draw(0.5, v, () => {
+        // (on the Off-roader the number is a little smaller and sits on the back door, clear of the rubbing strip and the handles)
+        const v = side === 'right' ? (box ? 0.312 : 0.29) : (box ? 0.688 : 0.71), flipX = side === 'right' ? -1 : 1, flipY = side === 'right' ? 1 : -1;
+        const draw = (u, vv, fn, k = 1) => { x.save(); x.translate(u * W, Y(vv)); x.scale(flipX * k, flipY * k * pxV / pxU); fn(); x.restore(); };
+        if (num) draw(box ? 0.62 : 0.5, v, () => {
             x.fillStyle = '#F4F6F8'; x.beginPath(); x.arc(0, 0, 0.28 * pxU, 0, Math.PI * 2); x.fill();
             x.fillStyle = '#111'; x.font = `900 ${0.34 * pxU}px Orbitron, Arial Black, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(num, 0, 0.02 * pxU);
-        });
-        if (tag) draw(0.74, box ? (side === 'right' ? 0.318 : 0.682) : v, () => {   // (on the Off-roader: above the rear wheel arch)
+        }, box ? 0.7 : 1);
+        if (tag) draw(box ? 0.815 : 0.74, box ? (side === 'right' ? 0.344 : 0.656) : v, () => {   // (on the Off-roader: high above the rear wheel arch, clear of side stripes)
             x.fillStyle = sc === d.paint ? '#111' : sc; x.font = `800 ${0.16 * pxU}px "Exo 2", Arial, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(tag, 0, 0);
         });
     }

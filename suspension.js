@@ -18,14 +18,16 @@ export function fitSuspension(racer, parts = false) {
     const g = racer.model.group, wheels = racer.model.wheels;
     // (the Formula racer's wishbones are part of the car: when its parts are asked for they stay off the body, to follow the wheels)
     const links = racer.model.links || null, live = parts && links ? links.map(l => l.mesh) : [];
+    // (the Off-roader has solid axles instead of wishbones: each one stays off the body and follows its two wheels)
+    const axles = racer.model.axles || [];
     const sprung = new THREE.Group(); sprung.name = 'sprung';
-    for (const c of [...g.children]) if (!wheels.includes(c) && !live.includes(c)) sprung.add(c);
+    for (const c of [...g.children]) if (!wheels.includes(c) && !live.includes(c) && !axles.includes(c)) sprung.add(c);
     g.add(sprung);
     const R = racer.design.wheel;
     const s = { sprung, pitch: 0, pitchV: 0, roll: 0, rollV: 0, heave: 0, heaveV: 0, lastV: 0, lastH: null, accel: 0, lat: 0,
         bumps: wheels.map(() => 0), heat: 0, corners: [], R, links: null, stiff: links ? 0.35 : racer.model.lean || 1 };   // (stiff: a Formula racer hardly leans or dips at all; a tall Off-roader leans and dips more)
     if (live.length) { s.links = links; for (const m of live) { m.matrixAutoUpdate = false; m.frustumCulled = false; } }
-    else if (parts) { const fr = carFrame(racer.design); s.corners = wheels.map(w => buildCorner(g, w, racer.model.mats, R, racer.design, fr.pr)); }
+    else if (parts && !axles.length) { const fr = carFrame(racer.design); s.corners = wheels.map(w => buildCorner(g, w, racer.model.mats, R, racer.design, fr.pr)); }
     racer.susp = s;
     return s;
 }
@@ -155,6 +157,12 @@ export function updateSuspension(r, dt, road) {
     if (s.links) for (const q of s.links) {
         const bodyDy = s.heave + q.x * pitch - q.zi * roll, k = (q.wheel.position.y - s.R - bodyDy) / (q.zo - q.zi), e = q.mesh.matrix.elements;
         e[9] = k; e[13] = bodyDy - k * q.zi; q.mesh.matrixWorldNeedsUpdate = true;
+    }
+    // a solid axle rides with its two wheels, tipping when one of them is higher than the other
+    for (const ax of r.model.axles || []) {
+        let dl = 0, dr = 0, n = 0, zw = 1;
+        for (let i = 0; i < w.length; i++) if (Math.abs(w[i].position.x - ax.position.x) < 0.05) { if (w[i].userData.side > 0) dr = s.bumps[i]; else dl = s.bumps[i]; zw = Math.abs(w[i].position.z); n++; }
+        if (n) { ax.position.y = s.R + (dl + dr) / 2; ax.rotation.x = Math.atan2(dl - dr, 2 * zw); }
     }
     // the suspension parts follow
     for (const q of s.corners) {

@@ -214,6 +214,9 @@ export function createOffroadCar(design, { merge = false, lite = false, draft = 
     const block = (lx, ly, lz, x, y, z, mat) => { const m = add(new THREE.BoxGeometry(lx, ly, lz), mat); m.position.set(x, y, z); return m; };
     const tag = (name, ...list) => { for (const m of list) if (m) m.userData.loose = name; };     // (parts a bump in a race can knock off: see damage.js)
     // the cabin is its own copy of the paint, so the driver's-seat view can hide it; its lining and glass are marked the same way
+    // dark paint on big flat panels can vanish into a dark room: a soft sheen lights up its edges where they turn away from you
+    // (close up only, and only on dark colours)
+    const pc = new THREE.Color(p.paint); if (fine && pc.r + pc.g + pc.b < 0.25) for (const m of [mats.paint, mats.paintPlain]) Object.assign(m, { sheen: 1, sheenRoughness: 0.45, sheenColor: new THREE.Color(0x6a7486) });
     mats.cabin = mats.paint.clone(); mats.cabin.side = fine ? THREE.FrontSide : THREE.DoubleSide; mats.cabin.userData.cabinPart = true;
     mats.steel = new THREE.MeshStandardMaterial({ color: 0xb9bec6, metalness: 0.95, roughness: 0.3 });    // brushed stainless steel
     mats.tyre.map = treadTexture();
@@ -222,6 +225,9 @@ export function createOffroadCar(design, { merge = false, lite = false, draft = 
         mats.glass = new THREE.MeshPhysicalMaterial({ color: 0x06080b, metalness: 0, roughness: 0.05, clearcoat: 0.6, envMapIntensity: 0.4, transparent: true, opacity: 0.78, depthWrite: false, side: THREE.DoubleSide });   // tinted glass you can see through
     }
     mats.glass.userData.cabinPart = true;
+    // the door mirrors have their own copies too: the driver's-seat view has mirrors of its own
+    mats.mirror = mats.dark.clone(); mats.mirrorCap = mats.paintPlain.clone(); mats.mirrorGlass = mats.chrome.clone();
+    for (const k of ['mirror', 'mirrorCap', 'mirrorGlass']) mats[k].userData.cabinPart = true;
 
     // ---- the lower body, the wheel-arch flares and the cabin ----
     const [skinGeo, underGeo] = bodyGeometry(F, lite);
@@ -235,29 +241,47 @@ export function createOffroadCar(design, { merge = false, lite = false, draft = 
     for (const side of [1, -1]) block(at(SCREEN1 + 0.04) - at(REAR - 0.01), 0.02, 0.022, (at(SCREEN1 + 0.04) + at(REAR - 0.01)) / 2, edge + 0.004, side * (F.zEdge + 0.006), mats.paintPlain);
 
     // ---- the front: an upright slatted grille between two round lamps, and indicators perched on the wings ----
+    // (the grille: a body-coloured frame round a dark opening, with fine body-coloured slats leaning back into it)
     const xf = at(FRONT), gw = 0.43 * kz, gy0 = 0.775 + dy, gy1 = 1.15 + dy;
     block(0.012, gy1 - gy0, gw * 2, xf + 0.005, (gy0 + gy1) / 2, 0, mats.intake);
-    for (const y of [gy0, gy1]) block(0.045, 0.022, gw * 2 + 0.022, xf + 0.018, y, 0, mats.chrome);
-    for (const z of [-gw, gw]) block(0.045, gy1 - gy0, 0.022, xf + 0.018, (gy0 + gy1) / 2, z, mats.chrome);
-    for (let i = 0; i < 3; i++) {
-        const y = lerp(gy0, gy1, (i + 1) / 4), slat = block(0.05, 0.05, gw * 2 - 0.02, xf + 0.022, y, 0, mats.grille); slat.rotation.z = 0.3;
-        if (fine) block(0.006, 0.012, gw * 2 - 0.02, xf + 0.05, y + 0.012, 0, mats.chrome);
+    for (const y of [gy0, gy1]) block(0.04, 0.03, gw * 2 + 0.03, xf + 0.016, y, 0, mats.paintPlain);
+    for (const z of [-gw, gw]) block(0.04, gy1 - gy0 + 0.03, 0.03, xf + 0.016, (gy0 + gy1) / 2, z, mats.paintPlain);
+    const slats = fine ? 7 : 3;
+    for (let i = 0; i < slats; i++) {
+        const y = lerp(gy0, gy1, (i + 1) / (slats + 1)), slat = block(0.034, fine ? 0.016 : 0.04, gw * 2 - 0.01, xf + 0.02, y, 0, mats.paintPlain); slat.rotation.z = 0.35;
     }
+    // the round headlamps: a chrome bezel, a deep chrome reflector bowl, a ring of LED light and a lamp in the middle, under a clear lens
     const lr = 0.115, ly = 0.965 + dy;
+    const lathe = (pts, seg, mat, x, z) => { const g = new THREE.LatheGeometry(pts.map(([r, h]) => new THREE.Vector2(r, h)), seg); g.rotateZ(-Math.PI / 2); const m = add(g, mat); m.position.set(x, ly, z); return m; };
+    if (fine) mats.reflector = new THREE.MeshStandardMaterial({ color: 0xe4e8ee, metalness: 1, roughness: 0.22 });
     for (const side of [1, -1]) {
-        const z = side * 0.665 * kz, disc = (r, mat, dx, seg = 24) => { const m = add(new THREE.CircleGeometry(r, lite ? 12 : seg), mat); m.rotation.y = Math.PI / 2; m.position.set(xf + dx, ly, z); return m; };
-        const ring = (r, tube, mat, dx) => { const m = add(new THREE.TorusGeometry(r, tube, 6, lite ? 14 : 28), mat); m.rotation.y = Math.PI / 2; m.position.set(xf + dx, ly, z); return m; };
-        ring(lr, 0.013, mats.chrome, 0.012);
-        if (lite) { disc(lr * 0.96, mats.head, 0.006); continue; }
-        disc(lr * 0.98, mats.carbon, 0.004);
-        ring(lr * 0.76, 0.01, mats.head, 0.012);                                                  // a ring of light round the lamp
-        const eye = add(new THREE.SphereGeometry(lr * 0.4, 14, 10), mats.head); eye.scale.x = 0.5; eye.position.set(xf + 0.008, ly, z);
-        const cover = add(new THREE.SphereGeometry(lr * 0.97, 18, 6, 0, Math.PI * 2, 0, Math.PI / 2), mats.lens); cover.rotation.z = -Math.PI / 2; cover.scale.y = 0.22; cover.position.set(xf + 0.012, ly, z);
-        // the indicator: an amber lens on a dark base, sitting on top of the wing
-        const ix = at(0.37), iy = sh + 0.012, iz = side * 0.775 * kz;
-        tag(side > 0 ? 'podR' : 'podL', block(0.18, 0.02, 0.085, ix, iy + 0.008, iz, mats.dark), block(0.15, 0.036, 0.068, ix, iy + 0.034, iz, mats.amber));
+        const z = side * 0.665 * kz;
+        if (lite) {
+            lathe([[lr * 1.12, 0], [lr * 1.12, 0.03], [lr * 0.9, 0.04]], 14, mats.chrome, xf, z);
+            const m = add(new THREE.CircleGeometry(lr * 0.92, 12), mats.head); m.rotation.y = Math.PI / 2; m.position.set(xf + 0.038, ly, z);
+            continue;
+        }
+        lathe([[lr * 1.18, 0], [lr * 1.17, 0.03], [lr * 1.1, 0.048], [lr * 1.0, 0.053], [lr * 0.93, 0.05]], 36, mats.chrome, xf, z);   // the bezel
+        lathe([[lr * 0.22, 0.004], [lr * 0.55, 0.012], [lr * 0.8, 0.026], [lr * 0.95, 0.046]], 28, mats.reflector, xf, z).material.side = THREE.BackSide;   // the reflector (seen from inside)
+        const led = add(new THREE.TorusGeometry(lr * 0.8, 0.0075, 5, 32), mats.head); led.rotation.y = Math.PI / 2; led.position.set(xf + 0.03, ly, z);
+        const bulb = add(new THREE.SphereGeometry(lr * 0.3, 14, 10), mats.head); bulb.scale.x = 0.6; bulb.position.set(xf + 0.016, ly, z);
+        const rim = add(new THREE.TorusGeometry(lr * 0.33, 0.007, 5, 20), mats.chrome); rim.rotation.y = Math.PI / 2; rim.position.set(xf + 0.02, ly, z);
+        const cover = add(new THREE.SphereGeometry(lr * 0.95, 20, 5, 0, Math.PI * 2, 0, Math.PI / 2), mats.lens); cover.rotation.z = -Math.PI / 2; cover.scale.y = 0.16; cover.position.set(xf + 0.048, ly, z);
     }
-    if (lite) for (const side of [1, -1]) tag(side > 0 ? 'podR' : 'podL', block(0.16, 0.05, 0.075, at(0.37), sh + 0.035, side * 0.775 * kz, mats.amber));
+    // the indicators: small rounded pods perched on top of the front wings, with an amber lens facing forwards and up
+    {
+        const pod = (len, hi, wid, bev) => {
+            const s = new THREE.Shape(rounded([[-len / 2, 0], [len / 2, 0], [len / 2 - hi * 0.55, hi], [-len / 2 + hi * 0.2, hi]], hi * 0.35, fine ? 3 : 1).map(([a, b]) => new THREE.Vector2(a, b)));
+            const g = new THREE.ExtrudeGeometry(s, { depth: wid - bev * 2, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: fine ? 2 : 1, curveSegments: 1 });
+            g.translate(0, 0, -(wid - bev * 2) / 2); return g;
+        };
+        for (const side of [1, -1]) {
+            const ix = at(0.37), iy = sh + 0.004, iz = side * 0.775 * kz;
+            const base = add(pod(0.17, 0.045, 0.08, 0.008), mats.dark); base.position.set(ix, iy, iz);
+            const lens = add(pod(0.1, 0.034, 0.066, 0.006), mats.amber); lens.position.set(ix + 0.032, iy + 0.012, iz);
+            tag(side > 0 ? 'podR' : 'podL', base, lens);
+        }
+    }
 
     // ---- chunky bumpers ----
     const bumper = (pts, y0, y1, mat) => {
@@ -270,7 +294,15 @@ export function createOffroadCar(design, { merge = false, lite = false, draft = 
     bumper(mirrorZ([[0.185, 0], [0.185, 0.84], [0.3, 0.84], [0.3, 0.93], [0.14, 0.9], [0.06, 0.78], [0.035, 0.6], [0.035, 0]]), 0.43 + dy, 0.5 + dy, mats.dark);
     const xb = at(0.015) + 0.012;
     block(0.02, 0.105, 0.56 * kz, xb - 0.006, 0.6 + dy, 0, mats.intake);                           // the air intakes in the bumper: one in the middle...
-    for (const side of [1, -1]) { const s = block(0.02, 0.105, 0.2 * kz, xb - 0.012, 0.6 + dy, side * 0.47 * kz, mats.intake); s.rotation.y = -side * 0.12; }   // ...and one each side
+    for (const side of [1, -1]) {     // ...and a round fog lamp each side, in a dark surround with a chrome ring
+        const fz = side * 0.47 * kz, fy = 0.6 + dy, fr = 0.042;
+        block(0.02, 0.11, 0.17 * kz, xb - 0.003, fy, fz, mats.intake);   // (just proud of the bumper's face)
+        const lamp = add(new THREE.CircleGeometry(fr, lite ? 10 : 20), mats.head); lamp.rotation.y = Math.PI / 2; lamp.position.set(xb + 0.009, fy, fz);
+        if (fine) {
+            const ring = add(new THREE.TorusGeometry(fr + 0.004, 0.006, 5, 20), mats.chrome); ring.rotation.y = Math.PI / 2; ring.position.set(xb + 0.011, fy, fz);
+            block(0.014, 0.024, 0.045, xb + 0.0, fy, side * 0.585 * kz, mats.amber);   // and a small amber light outboard of it
+        }
+    }
     block(0.07, 0.07, 0.7 * kz, at(0.05), 0.455 + dy, 0, mats.steel).rotation.z = -0.5;             // a steel guard plate under the nose
     const xr = at(REAR);
     bumper(mirrorZ([[REAR - 0.03, 0], [REAR - 0.03, 0.86], [REAR - 0.2, 0.86], [REAR - 0.2, 0.95], [REAR + 0.03, 0.925], [REAR + 0.09, 0.8], [REAR + 0.105, 0.6], [REAR + 0.105, 0]]), 0.5 + dy, 0.7 + dy, mats.paintPlain);
@@ -304,9 +336,16 @@ export function createOffroadCar(design, { merge = false, lite = false, draft = 
         }
         // the door mirror: a big upright housing on a short arm
         const mx = at(SCREEN0 + 0.14), my = belt + 0.14, mz = side * (F.zBelt + 0.17);
-        const arm = bar(V(mx, belt + 0.07, side * (F.zBelt - 0.01)), V(mx, my - 0.03, mz - side * 0.05), 0.035, mats.dark, 0.05); car.add(arm);
-        const shell = block(0.08, 0.17, 0.18, mx, my, mz, mats.dark), cap = block(0.055, 0.178, 0.188, mx + 0.03, my, mz, mats.paintPlain);
-        const glass = add(new THREE.PlaneGeometry(0.155, 0.145), mats.chrome); glass.rotation.y = -Math.PI / 2; glass.position.set(mx - 0.042, my, mz);
+        const arm = bar(V(mx, belt + 0.07, side * (F.zBelt - 0.01)), V(mx, my - 0.03, mz - side * 0.05), 0.035, mats.mirror, 0.05); car.add(arm);
+        // (shaped like a rounded box that is a little taller at its outer end; drawn flat as [outwards, up], then stood up facing forwards)
+        const outline = k => rounded([[-0.09, -0.07], [0.09, -0.088], [0.09, 0.088], [-0.09, 0.07]], 0.04, fine ? 3 : 1).map(([a, b]) => new THREE.Vector2(side * a * k, b * k));
+        const housing = (k, depth, bev, mat, x) => {
+            const g = new THREE.ExtrudeGeometry(new THREE.Shape(outline(k)), { depth, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: fine ? 2 : 1, curveSegments: 1 });
+            g.translate(0, 0, -depth / 2); g.rotateY(-Math.PI / 2); const m = add(g, mat); m.position.set(x, my, mz); return m;
+        };
+        const shell = housing(0.94, 0.07, 0.014, mats.mirror, mx - 0.005), cap = housing(1, 0.03, 0.012, mats.mirrorCap, mx + 0.035);
+        const gg = new THREE.ShapeGeometry(new THREE.Shape(outline(0.8))); gg.rotateY(-Math.PI / 2);
+        const glass = add(gg, mats.mirrorGlass); glass.position.set(mx - 0.056, my, mz);
         tag(side > 0 ? 'mirrorR' : 'mirrorL', arm, shell, cap, glass);
     }
     if (fine) {   // two wipers parked at the bottom of the windscreen
@@ -341,9 +380,13 @@ export function createOffroadCar(design, { merge = false, lite = false, draft = 
 
     // ---- underneath: the chassis rails and the two solid axles (dark, so they sit back in the shadows) ----
     for (const side of [1, -1]) block(at(0.3) - at(REAR - 0.1), 0.1, 0.09, (at(0.3) + at(REAR - 0.1)) / 2, sill - 0.05, side * 0.4 * kz, mats.dark);
+    // (each axle is its own group, kept out of the merging, so in a race it can ride up and down with its two wheels: see suspension.js)
+    const axles = [];
     for (const [i, axle] of AXLES.entries()) {
-        const tube = add(new THREE.CylinderGeometry(0.05, 0.05, F.wheelZ * 2 - 0.3, 8), mats.dark); tube.rotation.x = Math.PI / 2; tube.position.set(at(axle), R, 0);
-        const diff = add(new THREE.SphereGeometry(0.14, 10, 8), mats.dark); diff.position.set(at(axle), R, (i ? 0.1 : 0.2) * kz); diff.scale.set(1, 1, 0.8);
+        const ag = new THREE.Group(); ag.position.set(at(axle), R, 0); car.add(ag); axles.push(ag);
+        const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, F.wheelZ * 2 - 0.3, 8), mats.dark); tube.rotation.x = Math.PI / 2;
+        const diff = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), mats.dark); diff.position.set(0, 0, (i ? 0.1 : 0.2) * kz); diff.scale.set(1, 1, 0.8);
+        for (const m of [tube, diff]) { m.userData.keep = true; ag.add(m); }
     }
 
     // ---- extras: roof lights, a bull bar, and a spoiler on the back of the roof ----
@@ -387,16 +430,31 @@ export function createOffroadCar(design, { merge = false, lite = false, draft = 
         for (const dz of [-1, 1]) { const arm = bar(V(xs + 0.04, hy - 0.2, -zs + dz * 0.2), V(at(2.08), belt + 0.08, -zs + dz * 0.14), 0.075, mats.interior); col(arm.geometry, 4); car.add(arm); }
     }
 
-    // ---- wheels: tall all-terrain tyres on big rims ----
+    // ---- wheels: tall all-terrain tyres on big rims (close up, with chunky tread blocks standing out on their shoulders) ----
+    let lugs = null; if (fine) mats.lug = new THREE.MeshStandardMaterial({ color: 0x232427, roughness: 0.92 });
     for (const [i, axle] of AXLES.entries()) for (const side of [1, -1]) {
         const front = i === 0, w = makeWheel(p, mats, front, lite, false, TYRE);
+        if (fine) w.userData.spin.add(new THREE.Mesh(lugs || (lugs = lugGeometry(R)), mats.lug));
         w.position.set(at(axle), R, side * F.wheelZ);
         if (side < 0) { w.rotation.y = Math.PI; const cal = w.userData.cal; cal.position.x *= -1; cal.rotation.z *= -1; }
         Object.assign(w.userData, { front, side });
         car.add(w); wheels.push(w);
     }
     if (merge) { wheels.forEach(w => { const sp = w.userData.spin; sp.userData.wheelRoot = true; mergeByMaterial(sp); w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
-    return { group: car, mats, wheels, lean: 1.35, dispose: disposer(car, mats), draft: draft && fine };   // (lean: tall and softly sprung, it rolls and dips more than a supercar: looks only)
+    return { group: car, mats, wheels, axles, lean: 1.35, dispose: disposer(car, mats), draft: draft && fine };   // (lean: tall and softly sprung, it rolls and dips more than a supercar: looks only)
+}
+// The tread blocks on a tyre's two shoulders: n blocks round each side, the two sides staggered by half a block
+// (one shape, shared by the car's four wheels; the tyre turns about z, and its outer face is +z)
+function lugGeometry(R, n = 28) {
+    const pos = [], nor = [], m = new THREE.Matrix4(), half = TYRE.tw / 2;
+    for (const side of [1, -1]) for (let i = 0; i < n; i++) {
+        const a = (i + (side > 0 ? 0 : 0.5)) / n * Math.PI * 2;
+        const g = new THREE.BoxGeometry(0.068, 0.034, 0.072).toNonIndexed();
+        g.applyMatrix4(m.makeRotationZ(a - Math.PI / 2).setPosition(Math.cos(a) * (R - 0.012), Math.sin(a) * (R - 0.012), side * (half - 0.036)));
+        pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); g.dispose();
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    return g;
 }
 // The all-terrain tyre's picture: big chunky tread blocks with deep grooves between them, and lugs wrapping onto the
 // sidewalls (no maker's name anywhere). Across the picture = around the tyre; down = sidewall, tread, sidewall.
