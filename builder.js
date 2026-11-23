@@ -5,11 +5,12 @@ import { RoomEnvironment } from './lib/addons/RoomEnvironment.js';
 import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, LIVERIES, TEAM_LIVERIES, UNLOCKS, loadDesign, saveDesign as saveDesignTo, createCar, carStats,
     medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign, applyPreset, tidyDesign, clearPaintPool } from './carmodel.js';
 import { isFormula } from './formula.js';
+import { GarageStage } from './garagelights.js';
 
 // =====================================================================
 //  SCENE
 // =====================================================================
-let renderer, scene, camera, controls, car = null, ground, raf = null, started = false, mats, lightsMode = 'studio';
+let renderer, scene, camera, controls, car = null, ground, floor, stage = null, lastT = 0, raf = null, started = false, mats, lightsMode = 'studio';
 let design = loadDesign();
 const saveDesign = () => saveDesignTo(design);
 const stats = () => carStats(design);
@@ -35,13 +36,17 @@ function groundTexture() {
 }
 function setLights(mode) {
     lightsMode = mode;
-    const bg = { studio: 0x15171c, day: 0x8fa3b8, night: 0x05070d }[mode];
+    // (Spotlight and Showroom bring their own room, floor and lights: see garagelights.js)
+    const bg = { studio: 0x15171c, day: 0x8fa3b8, night: 0x05070d, spotlight: 0x000000, showroom: 0xf4f5f6 }[mode];
     scene.background = new THREE.Color(bg);
-    hemi.intensity = { studio: 0.6, day: 1.4, night: 0.15 }[mode];
-    sun.intensity = { studio: 1.6, day: 2.6, night: 0.3 }[mode];
+    hemi.intensity = { studio: 0.6, day: 1.4, night: 0.15, spotlight: 0, showroom: 0 }[mode];
+    sun.intensity = { studio: 1.6, day: 2.6, night: 0.3, spotlight: 0, showroom: 0 }[mode];
     accent.intensity = mode === 'night' ? 6 : 0;
-    scene.environmentIntensity = { studio: 1, day: 1.2, night: 0.35 }[mode];
-    if (mats) { mats.head.emissiveIntensity = mode === 'night' ? 3 : 1.2; mats.tail.emissiveIntensity = mode === 'night' ? 3 : 1.4; }
+    scene.environmentIntensity = { studio: 1, day: 1.2, night: 0.35, spotlight: 1, showroom: 1 }[mode];
+    const dark = mode === 'night' || mode === 'spotlight';
+    if (mats) { mats.head.emissiveIntensity = dark ? 3 : 1.2; mats.tail.emissiveIntensity = dark ? 3 : 1.4; }
+    if (!stage) stage = new GarageStage(renderer, scene);
+    stage.set(mode, car, [ground, floor]);
 }
 
 function init(container) {
@@ -67,7 +72,7 @@ function init(container) {
     scene.add(hemi, sun, accent);
     ground = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), new THREE.MeshBasicMaterial({ map: groundTexture(), transparent: true, depthWrite: false }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = 0.002; scene.add(ground);
-    const floor = new THREE.Mesh(new THREE.CircleGeometry(9, 48), new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.55, metalness: 0.2 }));
+    floor = new THREE.Mesh(new THREE.CircleGeometry(9, 48), new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.55, metalness: 0.2 }));
     floor.rotation.x = -Math.PI / 2; scene.add(floor);
     buildCar(); resize();
     new ResizeObserver(resize).observe(container);
@@ -81,7 +86,9 @@ function resize() {
 }
 function frame() {
     raf = requestAnimationFrame(frame);
-    controls.update(); renderer.render(scene, camera);
+    const now = performance.now(), dt = Math.min(0.1, (now - lastT) / 1000 || 0); lastT = now;
+    controls.update(); if (stage) stage.update(camera, controls.target, dt);
+    renderer.render(scene, camera);
 }
 
 // =====================================================================
@@ -253,6 +260,7 @@ function syncTurntableButton() {
     const b = document.getElementById('build-turntable'); if (b) b.classList.toggle('active', controls.autoRotate);
 }
 function photo() {
+    if (stage) stage.update(camera, controls.target, 0);
     renderer.render(scene, camera);
     const a = document.createElement('a');
     a.download = `${(design.name || 'my-supercar').replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.png`;
@@ -296,4 +304,17 @@ export function setView(azimuthDeg, elevationDeg = 14, dist = 9, zoom, targetY =
     camera.position.set(targetX + Math.cos(az) * Math.cos(el) * dist, 0.6 + Math.sin(el) * dist, Math.sin(az) * Math.cos(el) * dist);
     controls.target.set(targetX, targetY, 0); controls.update();
     if (zoom) { camera.zoom = zoom; camera.updateProjectionMatrix(); }   // (left alone in normal use)
+}
+// Testing only: how long one garage picture takes to draw (waiting for the graphics chip to finish), and what is held in memory
+export function measure(n = 60) {
+    const gl = renderer.getContext(), px = new Uint8Array(4), times = [];
+    for (let i = 0; i < n; i++) {
+        const t = performance.now();
+        if (stage) stage.update(camera, controls.target, 0.016);
+        renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        times.push(performance.now() - t);
+    }
+    times.sort((a, b) => a - b);
+    const i = renderer.info;
+    return { median: +times[n >> 1].toFixed(2), worst: +times[n - 1].toFixed(2), calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, programs: i.programs.length };
 }

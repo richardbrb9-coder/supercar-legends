@@ -18,6 +18,7 @@ const CORE_FILES = [
     './stories.js',
     './games.js',
     './builder.js',
+    './garagelights.js',
     './carmodel.js',
     './formula.js',
     './curves.js',
