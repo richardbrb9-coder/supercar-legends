@@ -4,6 +4,7 @@ import * as THREE from './lib/three.module.min.js';
 import { flakeTexture } from './reflections.js';
 import { curve, lerp } from './curves.js';
 import { isFormula, createFormulaCar, formulaStats, formulaTwoTone, formulaTeam, formulaMarks, formulaPanelLines } from './formula.js';
+import { isOffroad, createOffroadCar, offroadStats, offroadPanelLines, isOffroadTexture, OFFROAD_LIMITS, V_SIDE, V_TOP } from './offroad.js';
 
 // =====================================================================
 //  DESIGN SETTINGS
@@ -82,7 +83,18 @@ export const PRESETS = {
     // width, nose height, ride height and wheel size; the others are only there so every design has the same list.
     formula:  { label: 'Formula racer',   L: 5.5,  W: 2.0,  nose: 0.30, deck: 0.70, roof: 1.0,  tail: 0.6,  cabin: [0.37, 0.5], fast: 0, ride: 0.06, wheel: 0.36,
                 wbFrac: 0.655, axleShift: 0.027, cabinStyle: 'open', grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none',
-                style: { wing: 'none', splitter: false, skirts: false, rallyLights: false, rim: 'ten', rimColour: 'black', engine: 'v6h' } }
+                style: { wing: 'none', splitter: false, skirts: false, rallyLights: false, rim: 'ten', rimColour: 'black', engine: 'v6h' } },
+    // Inspired by the classic square luxury off-roaders (no one maker's car, and no badges): a tall, upright, slab-sided box
+    // with flat glass and thin pillars, round lamps, indicators perched on the front wings, a slatted grille, chunky bumpers,
+    // flared arches over big all-terrain tyres, side steps with exhausts poking out under them, and the spare wheel on the back door.
+    // It is built in its own way (see offroad.js) and is recognised by its box cabin. Of the settings below it uses the length,
+    // width, roof height, ride height and wheel size; the others describe the same shape to the cockpit view and the suspension.
+    // (typical sizes of the class: 4.82 m long with the spare wheel, 1.98 m wide, 1.97 m high, 2.89 m between the axles)
+    offroad:  { label: 'Off-roader',      L: 4.82, W: 1.98, nose: 1.2,  deck: 1.3,  roof: 1.97, tail: 1.3,  cabin: [0.315, 0.93], fast: 0, ride: 0.24, wheel: 0.405,
+                rake: 0.08, screenBow: 0.5, roofLen: 0.96, roofDrop: 1, waist: 1, noseW: 0.9, noseW2: 0.95, noseTip: 1, noseLift: 0, wbFrac: 0.6, axleShift: -0.028,
+                round: 0.25, fenderH: 0, fenderReach: 1.8, tailMid: 1, tailW: 0.98, cabinStyle: 'box', cabinWB: 0.87, cabinWT: 0.8,
+                grille: 'none', lamps: 'round', bumpers: true, scoop: 'none', exhaust: 'none',
+                style: { wing: 'none', splitter: false, skirts: true, rallyLights: false, rim: 'five', rimColour: 'black', engine: 'v8' } }
 };
 export const PAINTS = ['#E10600', '#FFB300', '#C6FF00', '#00B8D9', '#1E3A8A', '#7E57C2', '#F4F6F8', '#9AA3AF', '#1B1F26', '#0B0C0F', '#FF6D00', '#00A86B'];
 export const FINISHES = {
@@ -124,9 +136,17 @@ const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 export function tidyDesign(d) {
     if (d.cabinStyle === 'open') {
         d.L = clampTo(d.L, 5.2, 5.6); d.W = clampTo(d.W, 1.9, 2.1); d.nose = clampTo(d.nose, 0.3, 0.42); d.ride = clampTo(d.ride, 0.06, 0.1); d.wheel = clampTo(d.wheel, 0.34, 0.38);
+    } else if (d.cabinStyle === 'box') {
+        // the Off-roader: its own slider ranges, and the rest of its shape is always the same (so a share code can't bend it)
+        const { label, style, L, W, roof, ride, wheel, ...fixed } = PRESETS.offroad;
+        Object.assign(d, SHAPE_DEFAULTS, fixed, { rallyLights: !!d.rallyLights });
+        for (const [k, [lo, hi]] of Object.entries(OFFROAD_LIMITS)) d[k] = clampTo(d[k], lo, hi);
+        if (d.engine === 'v6h') d.engine = 'v8';
     } else {
         if (d.engine === 'v6h') d.engine = 'v8';
         d.L = Math.min(d.L, 5.4); if (d.wbFrac > 0.65) d.wbFrac = 0.65;
+        // (the Off-roader's height, ride height and wheels are for it alone)
+        d.roof = Math.min(d.roof, 1.35); d.ride = Math.min(d.ride, 0.2); d.wheel = Math.min(d.wheel, 0.38); d.deck = Math.min(d.deck, 0.95); d.nose = Math.min(d.nose, 0.75);
     }
     return d;
 }
@@ -680,14 +700,14 @@ function sponsorSticker(x, sp, w, h) {
     x.save(); x.translate(tx, h * 0.03); if (tw > avail) x.scale(avail / tw, 1); x.fillText(sp.name, 0, 0); x.restore();
 }
 // Motorsport team schemes: stripes and colour blocks in the paint and stripe colours, then sponsor stickers
-function teamLivery(x, d, W, H, Y, band, pxU, pxV) {
+function teamLivery(x, d, W, H, Y, band, pxU, pxV, kTop = 0) {   // (kTop: the Off-roader's bonnet is laid out on its own scale)
     const sc = d.stripeColour, p2 = d.paint2, k = pxV / pxU;
     // a sticker on a side of the car (reads the right way round on each side), or on the bonnet (reads from the front)
     const onSide = (u, v, wM, hM, sp, side) => {
         x.save(); x.translate(u * W, Y(v)); x.scale(side === 'right' ? -1 : 1, (side === 'right' ? 1 : -1) * k);
         sponsorSticker(x, sp, wM * pxU, hM * pxU); x.restore();
     };
-    const onTop = (u, wM, hM, sp) => { x.save(); x.transform(0, -k, -1, 0, u * W, Y(0.5)); sponsorSticker(x, sp, wM * pxU, hM * pxU); x.restore(); };
+    const onTop = (u, wM, hM, sp) => { x.save(); x.transform(0, -(kTop || k), -1, 0, u * W, Y(0.5)); sponsorSticker(x, sp, wM * pxU, hM * pxU); x.restore(); };
     const S = i => SPONSORS[i % SPONSORS.length];
     const bonnetU = d.scoop === 'louvres' ? 0.235 : d.scoop === 'bonnetvent' || d.scoop === 'bonnet' ? 0.2 : 0.1;   // the bonnet sticker goes behind any louvres or vents
     if (d.livery === 'rally') {
@@ -756,9 +776,10 @@ function liveryTexture(d, hd = false) {
         }
     }
     // race number roundels on both doors and the driver's tag, drawn so they read the right way round on each side
-    const pxU = W / d.L, pxV = H / (2 * d.W + 2 * (d.deck - d.ride) + 0.4);   // pixels per metre along and around the body
+    const box = isOffroad(d);                                    // (the Off-roader's sides are laid out by height: see offroad.js)
+    const pxU = W / d.L, pxV = box ? H * V_SIDE : H / (2 * d.W + 2 * (d.deck - d.ride) + 0.4);   // pixels per metre along and around the body
     const team = TEAM_LIVERIES[d.livery];
-    if (team) f1 ? formulaTeam(x, d, W, H, Y, band, { sponsorSticker, SPONSORS }) : teamLivery(x, d, W, H, Y, band, pxU, pxV);
+    if (team) f1 ? formulaTeam(x, d, W, H, Y, band, { sponsorSticker, SPONSORS }) : teamLivery(x, d, W, H, Y, band, pxU, pxV, box ? H * V_TOP / pxU : 0);
     const num = String(d.number || '').trim().slice(0, 2) || (team ? { rally: '4', endurance: '24', gt: '7' }[d.livery] : ''), tag = String(d.tag || '').trim().slice(0, 14);
     if (f1) { formulaMarks(x, d, W, H, Y, num, tag); formulaPanelLines(x, d, W, H, Y); }
     else for (const side of ['right', 'left']) {
@@ -768,11 +789,11 @@ function liveryTexture(d, hd = false) {
             x.fillStyle = '#F4F6F8'; x.beginPath(); x.arc(0, 0, 0.28 * pxU, 0, Math.PI * 2); x.fill();
             x.fillStyle = '#111'; x.font = `900 ${0.34 * pxU}px Orbitron, Arial Black, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(num, 0, 0.02 * pxU);
         });
-        if (tag) draw(0.74, v, () => {
+        if (tag) draw(0.74, box ? (side === 'right' ? 0.318 : 0.682) : v, () => {   // (on the Off-roader: above the rear wheel arch)
             x.fillStyle = sc === d.paint ? '#111' : sc; x.font = `800 ${0.16 * pxU}px "Exo 2", Arial, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(tag, 0, 0);
         });
     }
-    if (isHyper(d)) panelLines(x, d, W, H, Y, pxU, pxV); else if (isSuper90(d)) panelLines90(x, d, W, H, Y, pxU, pxV); else if (isLongtail(d)) panelLinesLT(x, d, W, H, Y, pxU, pxV); else if (isElectric(d)) panelLinesEV(x, d, W, H, Y, pxU, pxV); else if (isWedge70(d)) panelLines70(x, d, W, H, Y, pxU, pxV); else if (isGT60(d)) panelLines60(x, d, W, H, Y, pxU, pxV); else if (isV8it(d)) panelLinesV8(x, d, W, H, Y, pxU, pxV);
+    if (isHyper(d)) panelLines(x, d, W, H, Y, pxU, pxV); else if (isSuper90(d)) panelLines90(x, d, W, H, Y, pxU, pxV); else if (isLongtail(d)) panelLinesLT(x, d, W, H, Y, pxU, pxV); else if (isElectric(d)) panelLinesEV(x, d, W, H, Y, pxU, pxV); else if (isWedge70(d)) panelLines70(x, d, W, H, Y, pxU, pxV); else if (isGT60(d)) panelLines60(x, d, W, H, Y, pxU, pxV); else if (isV8it(d)) panelLinesV8(x, d, W, H, Y, pxU, pxV); else if (box) offroadPanelLines(x, d, W, H, Y);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = hd ? 8 : 4;
     t.addEventListener('dispose', () => { if (CANVAS_POOL[S].length < 1) CANVAS_POOL[S].push(c); });   // (kept for the next car, see CANVAS_POOL)
     return t;
@@ -797,7 +818,7 @@ const isWedge70 = d => d.lamps === 'hidden' && d.cabinStyle === 'visor' && d.sco
 const isGT60 = d => d.lamps === 'round' && d.cabinStyle === 'glasshouse' && d.grille === 'shield';
 // The Italian V8 gets its own detail too (swept lamps, nose intakes, the engine under glass between two sail panels, twin round tail lamps)
 const isV8it = d => d.lamps === 'swept' && d.cabinStyle === 'berlinetta';
-const isDetailed = d => isV8it(d) || isHyper(d) || isSuper90(d) || isLongtail(d) || isElectric(d) || isWedge70(d) || isGT60(d) || isFormula(d);
+const isDetailed = d => isV8it(d) || isHyper(d) || isSuper90(d) || isLongtail(d) || isElectric(d) || isWedge70(d) || isGT60(d) || isFormula(d) || isOffroad(d);
 // Does the driver sit in the middle? (the 90s supercar and the Longtail, recognised by their parts, so it still holds after the sliders are moved)
 export const centreSeat = d => isSuper90(d) || isLongtail(d);
 // Where a point on the body's skin falls on the paint picture, for the cross-section at s (matches loftUV: v by distance round the ring)
@@ -2263,6 +2284,7 @@ export function carFrame(design) { const pr = profiles(design); return { pr, X: 
 // draft: use the normal-size paint picture instead of the sharp one (the builder does this while a slider is being dragged)
 export function createCar(design, { merge = false, lite = false, draft = false } = {}) {
     if (isFormula(design)) return createFormulaCar(design, { merge, lite, draft }, { makeWheel, buildMaterials, mergeByMaterial, interiorKit, helmetedDriver, bar, rod, disposer });   // (an open-wheel racer is put together its own way)
+    if (isOffroad(design)) return createOffroadCar(design, { merge, lite, draft }, { makeWheel, buildMaterials, mergeByMaterial, interiorKit, helmetedDriver, bucketSeat, bar, rod, disposer });   // (and so is the square Off-roader)
     const mats = buildMaterials(design, lite || draft), wheels = [];
     const p = design, pr = profiles(p);
     const car = new THREE.Group();
@@ -2653,7 +2675,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
 }
 // how to throw a car away when it is finished with, giving its memory back
 function disposer(car, mats) {
-    return () => { car.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map && m.map !== TYRE_TEX && m.map !== DISC_TEX) m.map.dispose(); if (m.metalnessMap) m.metalnessMap.dispose(); m.dispose(); }); };
+    return () => { car.traverse(o => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); Object.values(mats).forEach(m => { if (m.map && m.map !== TYRE_TEX && m.map !== DISC_TEX && !isOffroadTexture(m.map)) m.map.dispose(); if (m.metalnessMap) m.metalnessMap.dispose(); m.dispose(); }); };
 }
 // =====================================================================
 //  STATS (simple and fair, so every style is good at something)
@@ -2661,6 +2683,7 @@ function disposer(car, mats) {
 export function carStats(design) {
     const e = ENGINES[design.engine];
     if (isFormula(design)) return formulaStats(design, e);
+    if (isOffroad(design)) return offroadStats(design, e);
     const aeroWing = { none: 0, ducktail: 0.25, gt: 0.8, swan: 1 }[design.wing] + (design.splitter ? 0.25 : 0) + (design.skirts ? 0.1 : 0);
     const kg = Math.round(600 + 85 * design.L * design.W + e.kg + (design.wing !== 'none' ? 12 : 0));
     const cd = 0.27 + (design.roof - 1.0) * 0.35 + aeroWing * 0.05 + (design.preset === 'wedge70' ? 0.02 : 0) - (design.preset === 'longtail' ? 0.03 : 0);
@@ -2749,9 +2772,10 @@ export function decodeDesign(code) {
         const raw = Object.fromEntries(keys.map((k, i) => [k, arr[i]]));
         d.preset = typeof raw.preset === 'string' ? raw.preset.slice(0, 20) : 'custom';
         d.L = num(raw.L, 3.5, 5.6, d.L); d.W = num(raw.W, 1.7, 2.1, d.W); d.nose = num(raw.nose, 0.3, 0.75, d.nose);
-        d.deck = num(raw.deck, 0.7, 0.95, d.deck); d.roof = num(raw.roof, 1.0, 1.35, d.roof); d.tail = num(raw.tail, 0.6, 1.05, d.tail);
+        const box = raw.cabinStyle === 'box' && ver > 1, lim = OFFROAD_LIMITS;   // (an Off-roader is taller, rides higher and has bigger wheels than the other styles allow)
+        d.deck = num(raw.deck, 0.7, 0.95, d.deck); d.roof = box ? num(raw.roof, lim.roof[0], lim.roof[1], 1.97) : num(raw.roof, 1.0, 1.35, d.roof); d.tail = num(raw.tail, 0.6, 1.05, d.tail);
         d.cabin = Array.isArray(raw.cabin) && raw.cabin.length === 2 ? [num(raw.cabin[0], 0.2, 0.6, 0.3), num(raw.cabin[1], 0.5, 0.95, 0.62)] : d.cabin;
-        d.fast = num(raw.fast, 0, 1, d.fast); d.ride = num(raw.ride, 0.06, 0.2, d.ride); d.wheel = num(raw.wheel, 0.31, 0.38, d.wheel);
+        d.fast = num(raw.fast, 0, 1, d.fast); d.ride = box ? num(raw.ride, lim.ride[0], lim.ride[1], 0.24) : num(raw.ride, 0.06, 0.2, d.ride); d.wheel = box ? num(raw.wheel, lim.wheel[0], lim.wheel[1], 0.405) : num(raw.wheel, 0.31, 0.38, d.wheel);
         d.paint = colour(raw.paint, d.paint); d.finish = pickKey(raw.finish, FINISHES, d.finish); d.rim = pickKey(raw.rim, RIMS, d.rim);
         d.rimColour = pickKey(raw.rimColour, RIM_COLOURS, d.rimColour); d.caliper = colour(raw.caliper, d.caliper); d.wing = pickKey(raw.wing, WINGS, d.wing);
         d.splitter = !!raw.splitter; d.skirts = !!raw.skirts; d.engine = pickKey(raw.engine, ENGINES, d.engine);
@@ -2765,7 +2789,7 @@ export function decodeDesign(code) {
         if (ver > 1) {
             d.wbFrac = num(raw.wbFrac, 0.5, 0.66, 0.6); d.axleShift = num(raw.axleShift, -0.08, 0.08, 0); d.round = num(raw.round, 0.25, 0.7, 0.38);
             d.fenderH = num(raw.fenderH, 0, 0.25, 0.06); d.fenderReach = num(raw.fenderReach, 1.8, 3.5, 2.5);
-            d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass', 'visor', 'open', 'berlinetta'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
+            d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass', 'visor', 'open', 'berlinetta', 'box'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
             d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade', 'hidden', 'twin', 'swept'], 'slim'); d.bumpers = !!raw.bumpers;
             d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof', 'snorkel', 'bonnetvent', 'louvres'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad', 'high'], 'none');
         }

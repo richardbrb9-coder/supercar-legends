@@ -5,6 +5,7 @@ import { RoomEnvironment } from './lib/addons/RoomEnvironment.js';
 import { PRESETS, PAINTS, FINISHES, RIMS, RIM_COLOURS, WINGS, ENGINES, DEFAULT, LIVERIES, TEAM_LIVERIES, UNLOCKS, loadDesign, saveDesign as saveDesignTo, createCar, carStats,
     medalPoints, lockFor, loadSavedCars, storeSavedCars, encodeDesign, decodeDesign, applyPreset, tidyDesign, clearPaintPool } from './carmodel.js';
 import { isFormula } from './formula.js';
+import { isOffroad, OFFROAD_LIMITS } from './offroad.js';
 import { GarageStage } from './garagelights.js';
 
 // =====================================================================
@@ -112,15 +113,17 @@ const COLOURS = ['#F4F6F8', '#0B0C0F', '#E10600', '#FFB300', '#C6FF00', '#00B8D9
 function renderPanel() {
     const tabs = { body: 'Body', wheels: 'Wheels', paint: 'Paint', livery: 'Livery', aero: 'Aero', engine: 'Engine', cars: 'My cars' };
     const f1 = isFormula(design);     // (the Formula racer has its own short list of sliders, and its wings are built in)
+    const box = isOffroad(design), OL = OFFROAD_LIMITS;     // (the Off-roader has its own sliders too, and off-road extras instead of racing ones)
     let html = `<div class="b-tabs">${Object.entries(tabs).map(([k, v]) => `<button class="b-tab ${k === panelTab ? 'active' : ''}" data-btab="${k}">${v}</button>`).join('')}</div><div class="b-body">`;
     if (panelTab === 'body') html += `<p class="b-label">Body style</p><div class="opts">${choice(PRESETS, design.preset, 'preset')}</div>
         ${f1 ? `${slider('L', 'Length', 5.2, 5.6, 0.05)}${slider('W', 'Width', 1.9, 2.1, 0.01)}${slider('nose', 'Nose height', 0.3, 0.42, 0.01)}${slider('ride', 'Ride height', 0.06, 0.1, 0.005)}`
+        : box ? `${slider('L', 'Length', OL.L[0], OL.L[1], 0.05)}${slider('W', 'Width', OL.W[0], OL.W[1], 0.01)}${slider('roof', 'Roof height', OL.roof[0], OL.roof[1], 0.01)}${slider('ride', 'Ride height', OL.ride[0], OL.ride[1], 0.005)}`
         : `${slider('L', 'Length', 4.0, 5.2, 0.05)}${slider('W', 'Width', 1.7, 2.1, 0.01)}${slider('roof', 'Roof height', 1.0, 1.35, 0.01)}
         ${slider('nose', 'Nose height', 0.38, 0.72, 0.01)}${slider('tail', 'Tail height', 0.6, 1.05, 0.01)}${slider('ride', 'Ride height', 0.06, 0.2, 0.005)}`}`;
     if (panelTab === 'wheels') html += `<p class="b-label">Rim design</p><div class="opts">${choice(RIMS, design.rim, 'rim')}</div>
         <p class="b-label">Rim colour</p><div class="swatches">${Object.entries(RIM_COLOURS).map(([k, v]) => swatch(k, design.rimColour, 'rimcol', v === 'chrome' ? 'linear-gradient(135deg,#fff,#7c8591,#fff)' : v)).join('')}</div>
         <p class="b-label">${f1 ? 'Tyre stripe, helmet and brake callipers' : 'Brake callipers'}</p><div class="swatches">${['#FFB300', '#E10600', '#00B8D9', '#C6FF00', '#16181C', '#F4F6F8'].map(c => swatch(c, design.caliper, 'caliper')).join('')}</div>
-        ${slider('wheel', 'Wheel size', f1 ? 0.34 : 0.31, 0.38, 0.005)}`;
+        ${box ? slider('wheel', 'Wheel size', OL.wheel[0], OL.wheel[1], 0.005) : slider('wheel', 'Wheel size', f1 ? 0.34 : 0.31, 0.38, 0.005)}`;
     if (panelTab === 'paint') html += `<p class="b-label">Colour</p><div class="swatches">${PAINTS.map(c => swatch(c, design.paint, 'paint')).join('')}
         <label class="swatch custom" style="--sw:${design.paint}" title="Pick any colour"><input type="color" value="${design.paint}" data-paintpick="paint"></label></div>
         <p class="b-label">Finish</p><div class="opts">${choice(FINISHES, design.finish, 'finish')}</div>`;
@@ -132,6 +135,9 @@ function renderPanel() {
         <label class="field"><span>Race number</span><input type="text" inputmode="numeric" maxlength="2" value="${esc(design.number)}" data-text="number" placeholder="e.g. 7"></label>
         <label class="field"><span>Your name or tag</span><input type="text" maxlength="14" value="${esc(design.tag)}" data-text="tag" placeholder="e.g. MAX"></label>`;
     if (panelTab === 'aero' && f1) html += `<p class="b-label">Wings</p><p class="small">A Formula racer is built around its wings, so they are all fitted already: a front wing made of four curved blades, a rear wing with a flap, a beam wing and a diffuser under the tail. Together they press the car onto the road, which is why it corners and brakes so well.</p>`;
+    else if (panelTab === 'aero' && box) html += `<p class="b-label">Roof spoiler</p><div class="opts">${choice(WINGS, design.wing, 'wing')}</div>
+        <p class="small">A racing wing would look silly on a tall off-roader, so each choice fits a spoiler on the back edge of the roof instead.</p>
+        <p class="b-label">Extras</p><div class="opts"><button class="opt ${design.splitter ? 'active' : ''}" data-toggle="splitter">Bull bar</button><button class="opt ${design.skirts ? 'active' : ''}" data-toggle="skirts">Side steps</button><button class="opt ${design.rallyLights ? 'active' : ''}" data-toggle="rallyLights">Roof lights</button></div>`;
     else if (panelTab === 'aero') html += `<p class="b-label">Rear wing</p><div class="opts">${choice(WINGS, design.wing, 'wing')}</div>
         <p class="b-label">Extras</p><div class="opts"><button class="opt ${design.splitter ? 'active' : ''}" data-toggle="splitter">Front splitter</button><button class="opt ${design.skirts ? 'active' : ''}" data-toggle="skirts">Side skirts</button><button class="opt ${design.rallyLights ? 'active' : ''}" data-toggle="rallyLights">Rally lights</button></div>`;
     if (panelTab === 'engine') html += `<p class="b-label">Engine</p><div class="opts">${choice(f1 ? ENGINES : Object.fromEntries(Object.entries(ENGINES).filter(([k]) => k !== 'v6h')), design.engine, 'engine')}</div><p class="small">${ENGINES[design.engine].note}. Tap again to hear it.</p>`;

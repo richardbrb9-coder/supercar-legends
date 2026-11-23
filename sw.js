@@ -21,6 +21,7 @@ const CORE_FILES = [
     './garagelights.js',
     './carmodel.js',
     './formula.js',
+    './offroad.js',
     './curves.js',
     './race.js',
     './scenery.js',

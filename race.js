@@ -265,7 +265,7 @@ const ordinal = n => n + (['th', 'st', 'nd', 'rd'][(n % 100 > 10 && n % 100 < 14
 function rivalDesign(i) {
     const keys = Object.keys(PRESETS).filter(k => k !== 'formula'), preset = keys[(i * 2 + 1 + Math.floor(Math.random() * 2)) % keys.length];
     const paint = PAINTS.filter(c => c !== loadDesign().paint)[(i * 3 + Math.floor(Math.random() * 3)) % 10];
-    const engines = Object.keys(ENGINES).filter(k => k !== 'v6h'), rims = Object.keys(RIMS);   // (the Formula racer and its engine are yours alone: the rivals keep to the six road-car styles)
+    const engines = Object.keys(ENGINES).filter(k => k !== 'v6h'), rims = Object.keys(RIMS);   // (the Formula racer and its engine are yours alone: the rivals keep to the road-going styles)
     const d = applyPreset({ ...DEFAULT }, preset);
     // each rival runs a motorsport team paint job in its own team colours, with its own race number
     const team = TEAM_COLOURS[i % TEAM_COLOURS.length];
@@ -295,7 +295,7 @@ function nextCamera() { if (race && (race.replay || race.podium)) return; camMod
 function applyCameraView() {
     if (!player) return;
     const inside = camMode === 3;
-    player.model.group.traverse(o => { if (o.isMesh && (o.material === player.model.mats.cabin || o.material === player.model.mats.interior)) o.visible = !inside; });   // (and the seats, driver, wiper and door mirrors, which the cockpit model replaces)
+    player.model.group.traverse(o => { if (o.isMesh && (o.material === player.model.mats.cabin || o.material === player.model.mats.interior || o.material.userData.cabinPart)) o.visible = !inside; });   // (and the seats, driver, wiper and door mirrors, which the cockpit model replaces)
     camera.near = camMode === 2 || (inside && player.cockpit && player.cockpit.openTop) ? 0.06 : 0.5; camera.updateProjectionMatrix();   // (an open cockpit shows the car's own nose and halo close up)
     const st = document.getElementById('race-stage'); if (st) st.classList.toggle('in-cockpit', inside);   // the dash has its own speedometer
 }
