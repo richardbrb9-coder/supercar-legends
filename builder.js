@@ -26,6 +26,8 @@ function buildCar(draft = false) {
 const hemi = new THREE.HemisphereLight(0xdde6ff, 0x1a1c20, 0.6);
 const sun = new THREE.DirectionalLight(0xffffff, 1.6);
 const accent = new THREE.PointLight(0xE10600, 0, 12);
+// (two spare lights, off in Studio, Day and Night: Spotlight and Showroom borrow them, so the number of lights never changes)
+const spare = [new THREE.DirectionalLight(0xffffff, 0), new THREE.DirectionalLight(0xffffff, 0)];
 
 function groundTexture() {
     const c = document.createElement('canvas'); c.width = c.height = 512;
@@ -45,7 +47,7 @@ function setLights(mode) {
     scene.environmentIntensity = { studio: 1, day: 1.2, night: 0.35, spotlight: 0.8, showroom: 1 }[mode];
     const dark = mode === 'night' || mode === 'spotlight';
     if (mats) { mats.head.emissiveIntensity = dark ? 3 : 1.2; mats.tail.emissiveIntensity = dark ? 3 : 1.4; }
-    if (!stage) stage = new GarageStage(renderer, scene);
+    if (!stage) stage = new GarageStage(renderer, scene, { hemi, sun, spare });
     stage.set(mode, car, [ground, floor]);
 }
 
@@ -69,7 +71,7 @@ function init(container) {
     controls.autoRotate = true; controls.autoRotateSpeed = 0.8;
     controls.addEventListener('start', () => { controls.autoRotate = false; syncTurntableButton(); });
     sun.position.set(4, 8, 5); accent.position.set(-3, 1.5, -3);
-    scene.add(hemi, sun, accent);
+    scene.add(hemi, sun, accent, ...spare);
     ground = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), new THREE.MeshBasicMaterial({ map: groundTexture(), transparent: true, depthWrite: false }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = 0.002; scene.add(ground);
     floor = new THREE.Mesh(new THREE.CircleGeometry(9, 48), new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.55, metalness: 0.2 }));
@@ -316,5 +318,6 @@ export function measure(n = 60) {
     }
     times.sort((a, b) => a - b);
     const i = renderer.info;
-    return { median: +times[n >> 1].toFixed(2), worst: +times[n - 1].toFixed(2), calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, programs: i.programs.length };
+    return { median: +times[n >> 1].toFixed(2), worst: +times[n - 1].toFixed(2), calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, programs: i.programs.length,
+        mirror: stage && stage.refl ? { on: stage.refl.on, ready: stage.refl.ready, slow: stage.refl.slow } : null };
 }

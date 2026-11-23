@@ -345,6 +345,14 @@ button.stat:active { transform: scale(.98); }
 .build-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
 .build-head h1 { font-size: clamp(1.4rem, 3vw, 2rem); }
 .build-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.build-tools .light-set, .build-tools .tool-set { display: contents; }
+/* Upright phone: the five lighting looks in one even row, the three tools in a second row underneath */
+@media (max-width: 600px) {
+    .build-tools { display: grid; gap: 6px; width: 100%; }
+    .build-tools .light-set { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+    .build-tools .tool-set { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+    .build-tools .opt { padding: 9px 2px; font-size: .74rem; line-height: 1.2; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
 .build-layout { display: grid; grid-template-columns: 1fr 360px; gap: 14px; height: calc(100vh - 210px); min-height: 460px; }
 .build-stage { position: relative; background: #15171c; border: 1px solid var(--line); overflow: hidden; touch-action: none;
                clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 24px 100%, 0 calc(100% - 24px)); }
