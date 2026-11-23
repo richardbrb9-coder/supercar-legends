@@ -23,7 +23,7 @@ export function fitSuspension(racer, parts = false) {
     g.add(sprung);
     const R = racer.design.wheel;
     const s = { sprung, pitch: 0, pitchV: 0, roll: 0, rollV: 0, heave: 0, heaveV: 0, lastV: 0, lastH: null, accel: 0, lat: 0,
-        bumps: wheels.map(() => 0), heat: 0, corners: [], R, links: null, stiff: links ? 0.35 : 1 };   // (stiff: a Formula racer hardly leans or dips at all)
+        bumps: wheels.map(() => 0), heat: 0, corners: [], R, links: null, stiff: links ? 0.35 : racer.model.lean || 1 };   // (stiff: a Formula racer hardly leans or dips at all; a tall Off-roader leans and dips more)
     if (live.length) { s.links = links; for (const m of live) { m.matrixAutoUpdate = false; m.frustumCulled = false; } }
     else if (parts) { const fr = carFrame(racer.design); s.corners = wheels.map(w => buildCorner(g, w, racer.model.mats, R, racer.design, fr.pr)); }
     racer.susp = s;

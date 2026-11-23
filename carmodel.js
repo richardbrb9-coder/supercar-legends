@@ -783,7 +783,7 @@ function liveryTexture(d, hd = false) {
     const num = String(d.number || '').trim().slice(0, 2) || (team ? { rally: '4', endurance: '24', gt: '7' }[d.livery] : ''), tag = String(d.tag || '').trim().slice(0, 14);
     if (f1) { formulaMarks(x, d, W, H, Y, num, tag); formulaPanelLines(x, d, W, H, Y); }
     else for (const side of ['right', 'left']) {
-        const v = side === 'right' ? 0.29 : 0.71, flipX = side === 'right' ? -1 : 1, flipY = side === 'right' ? 1 : -1;
+        const v = side === 'right' ? (box ? 0.305 : 0.29) : (box ? 0.695 : 0.71), flipX = side === 'right' ? -1 : 1, flipY = side === 'right' ? 1 : -1;
         const draw = (u, vv, fn) => { x.save(); x.translate(u * W, Y(vv)); x.scale(flipX, flipY * pxV / pxU); fn(); x.restore(); };
         if (num) draw(0.5, v, () => {
             x.fillStyle = '#F4F6F8'; x.beginPath(); x.arc(0, 0, 0.28 * pxU, 0, Math.PI * 2); x.fill();

@@ -32,8 +32,9 @@ const BELT = 1.3, SHOULDER = 1.19, SILL = 0.46;   // the bottom of the windows, 
 const DOORS = [1.5, 2.62, 3.56];            // door edges: front of the front door, between the doors, back of the rear door
 // The paint picture: along the picture = along the car. Around it, each side is laid out by height (V_SIDE of the picture
 // per metre, the bottom of the windows at V_BELT) and the top, front and back by distance from the centre line (V_TOP per metre).
-export const V_SIDE = 0.2, V_TOP = 0.1125;
-const V_BELT = 0.36, V_ROOF = 0.41;
+// (the thin window pillars get only a sliver of the picture, which leaves the roof and bonnet enough for stripes of a sensible width)
+export const V_SIDE = 0.2, V_TOP = 0.156;
+const V_BELT = 0.36, V_ROOF = 0.375;
 export function offroadFrame(d) {
     const L = d.L, kx = L / STD_L, kz = d.W / STD_W, R = d.wheel, dy = (d.ride || STD_RIDE) - STD_RIDE;
     const at = m => L / 2 - m * kx;
@@ -304,8 +305,8 @@ export function createOffroadCar(design, { merge = false, lite = false, draft = 
         // the door mirror: a big upright housing on a short arm
         const mx = at(SCREEN0 + 0.14), my = belt + 0.14, mz = side * (F.zBelt + 0.17);
         const arm = bar(V(mx, belt + 0.07, side * (F.zBelt - 0.01)), V(mx, my - 0.03, mz - side * 0.05), 0.035, mats.dark, 0.05); car.add(arm);
-        const shell = block(0.09, 0.19, 0.21, mx, my, mz, mats.dark), cap = block(0.06, 0.2, 0.22, mx + 0.035, my, mz, mats.paintPlain);
-        const glass = add(new THREE.PlaneGeometry(0.18, 0.16), mats.chrome); glass.rotation.y = -Math.PI / 2; glass.position.set(mx - 0.047, my, mz);
+        const shell = block(0.08, 0.17, 0.18, mx, my, mz, mats.dark), cap = block(0.055, 0.178, 0.188, mx + 0.03, my, mz, mats.paintPlain);
+        const glass = add(new THREE.PlaneGeometry(0.155, 0.145), mats.chrome); glass.rotation.y = -Math.PI / 2; glass.position.set(mx - 0.042, my, mz);
         tag(side > 0 ? 'mirrorR' : 'mirrorL', arm, shell, cap, glass);
     }
     if (fine) {   // two wipers parked at the bottom of the windscreen
@@ -395,7 +396,7 @@ export function createOffroadCar(design, { merge = false, lite = false, draft = 
         car.add(w); wheels.push(w);
     }
     if (merge) { wheels.forEach(w => { const sp = w.userData.spin; sp.userData.wheelRoot = true; mergeByMaterial(sp); w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
-    return { group: car, mats, wheels, dispose: disposer(car, mats), draft: draft && fine };
+    return { group: car, mats, wheels, lean: 1.35, dispose: disposer(car, mats), draft: draft && fine };   // (lean: tall and softly sprung, it rolls and dips more than a supercar: looks only)
 }
 // The all-terrain tyre's picture: big chunky tread blocks with deep grooves between them, and lugs wrapping onto the
 // sidewalls (no maker's name anywhere). Across the picture = around the tyre; down = sidewall, tread, sidewall.
