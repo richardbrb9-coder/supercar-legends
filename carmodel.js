@@ -669,7 +669,7 @@ function makeWheel(p, mats, front, lite = false, covered = false, o = {}) {   //
         for (let i = 0; i < 6; i++) { const h = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.1, rimR * 0.1, 0.035, 12), mats.dark); h.rotation.x = Math.PI / 2; h.position.set(Math.cos(i * 1.047) * rimR * 0.62, Math.sin(i * 1.047) * rimR * 0.62, 0.005); face.add(h); }
     }
     // at speed the spokes blur into a soft disc, like a real wheel filmed going fast (see in the race)
-    if (mats.spinBlur && !covered) { const b = new THREE.Mesh(new THREE.CircleGeometry(rimR * 0.97, 32), mats.spinBlur); b.position.z = tw * 0.42 + 0.045; g.add(b); }
+    if (mats.spinBlur && !covered) { const b = new THREE.Mesh(new THREE.CircleGeometry(rimR * 0.97, 32), mats.spinBlur); b.position.z = tw * 0.42 + (wire && !lite ? 0.062 : 0.045); g.add(b); }   // (further out on a wire wheel, in front of its spinner)
     return g;
 }
 
@@ -1211,9 +1211,9 @@ function panelLines60(x, d, W, H, Y, pxU, pxV) {
 // that draws the bright line along the side that deep, hand-polished paint shows, with rich dark colour under it, and it
 // gives the chrome the bright-over-dark look of a mirror. Nothing is added that the surroundings don't already hold, so a
 // dark garage or a night race stays dark. Only this car's materials get it (they are given their own shader program).
-// low: how bright reflections from below the horizon stay (1 = untouched). band: how much brighter the line is.
-const GT_SHINE = { paint: [0.42, 0.55], chrome: [0.6, 0.8] };
-function horizonShine(mat, [low, band]) {
+// low: how bright reflections from below the horizon stay (1 = untouched). band: how much brighter the line is. top: how far up the line reaches (smaller: a slimmer, crisper line).
+const GT_SHINE = { paint: [0.68, 1.5, 0.16], chrome: [0.6, 0.8, 0.3] };   // (paint kept fairly bright below the horizon, so a dark colour in shade keeps its colour)
+function horizonShine(mat, [low, band, top]) {
     mat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( RE_IndirectSpecular ) && defined( USE_ENVMAP )
 {
@@ -1223,11 +1223,11 @@ function horizonShine(mat, [low, band]) {
         vec3 hzN = geometryNormal;
     #endif
     float hzY = inverseTransformDirection( reflect( - geometryViewDir, hzN ), viewMatrix ).y;
-    float hzK = mix( ${low.toFixed(3)}, 1.0, smoothstep( -0.12, 0.0, hzY ) ) + ${band.toFixed(3)} * smoothstep( -0.04, 0.015, hzY ) * ( 1.0 - smoothstep( 0.015, 0.3, hzY ) );
+    float hzK = mix( ${low.toFixed(3)}, 1.0, smoothstep( -0.12, 0.0, hzY ) ) + ${band.toFixed(3)} * smoothstep( -0.04, 0.015, hzY ) * ( 1.0 - smoothstep( 0.015, ${top.toFixed(3)}, hzY ) );
     radiance *= hzK; clearcoatRadiance *= hzK;
 }
 #endif`); };
-    mat.customProgramCacheKey = () => 'gtshine' + low + '/' + band;
+    mat.customProgramCacheKey = () => 'gtshine' + low + '/' + band + '/' + top;
     return mat;
 }
 // (the GT's paint is also smoother under its clear coat than the other cars', so reflections in it are crisper)
@@ -2749,7 +2749,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     if (merge) { wheels.forEach(w => { const sp = w.userData.spin; sp.userData.wheelRoot = true; mergeByMaterial(sp); w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
     // (the shared tyre and disc pictures, and shared suspension parts, are kept for the next car)
     // (the 60s GT asks the garage for a soft shadow where it sits on the floor: its size, and where each tyre touches)
-    const ground = gt && !lite ? { L: p.L, W: p.W, tyres: wheels.map(w => [w.position.x, w.position.z, w.userData.front ? 0.27 : 0.32]) } : null;
+    const ground = gt && !lite ? { L: p.L, W: p.W, tyres: wheels.map(w => [w.position.x, w.position.z, w.position.x > 0 ? 0.27 : 0.32]) } : null;
     return { group: car, mats, wheels, dispose: disposer(car, mats), draft: draft && fine, ground };
 }
 // how to throw a car away when it is finished with, giving its memory back

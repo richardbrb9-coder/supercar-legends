@@ -42,8 +42,9 @@ function setContactShadow(g) {
     // (a blurred shape, the way that works in every browser: the shape itself is drawn far off the picture and only its soft shadow lands on it)
     const soft = (cx, cz, len, wid, blur, alpha, round) => { x.shadowColor = `rgba(0,0,0,${alpha})`; x.shadowBlur = blur * K; x.shadowOffsetX = FAR; x.fillStyle = '#000';
         x.beginPath(); x[x.roundRect ? 'roundRect' : 'rect']((cx + w / 2 - len / 2) * K - FAR, (cz + h / 2 - wid / 2) * K, len * K, wid * K, round * K); x.fill(); };   // (square corners on an old browser: the blur hides them)
-    soft(0, 0, g.L * 0.98, g.W * 0.92, 0.5, 0.5, 0.5);        // wide and pale
-    soft(0, 0, g.L * 0.86, g.W * 0.72, 0.22, 0.6, 0.3);       // under the body
+    soft(0, 0, g.L * 1.06, g.W * 1.1, 0.42, 0.55, 0.5);       // wide and pale, reaching out past the body
+    soft(0, 0, g.L * 0.96, g.W * 0.98, 0.16, 0.7, 0.3);       // dark right up to the body's edge, then fading fast
+    soft(0, 0, g.L * 0.8, g.W * 0.7, 0.12, 0.8, 0.2);         // darkest under the middle
     for (const [tx, tz, tw] of g.tyres) soft(tx, tz, 0.3, tw * 0.9, 0.05, 0.85, 0.06);   // where each tyre touches
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     contact = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
@@ -345,7 +346,7 @@ export function enter() {
             if (b.dataset.light) { setLights(b.dataset.light); document.querySelectorAll('[data-light]').forEach(x => x.classList.toggle('active', x === b)); }
             if (b.id === 'build-turntable') { controls.autoRotate = !controls.autoRotate; syncTurntableButton(); }
             if (b.id === 'build-photo') photo();
-            if (b.id === 'build-reset') { design = { ...DEFAULT }; saveDesign(); renderPanel(); buildCar(); }
+            if (b.id === 'build-reset') { design = { ...DEFAULT }; saveDesign(); renderPanel(); autoDist = camera.position.distanceTo(controls.target); buildCar(); }   // (and the camera goes back to fit the car, even after a zoom)
         });
         renderPanel(); syncTurntableButton();
     }
