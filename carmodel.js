@@ -65,6 +65,17 @@ export const PRESETS = {
                 cabinStyle: 'tallglass', cabinWB: 0.68, cabinWT: 0.62, grille: 'none', lamps: 'blade', bumpers: false, scoop: 'bonnetvent', exhaust: 'none',
                 mouth: false, sideIntake: true, rearGrille: true, cornerIntakes: true, tailBar: true, diffuser: true,
                 style: { wing: 'ducktail', splitter: true, skirts: true, rim: 'turbine', rimColour: 'black' } },
+    // Inspired by the Italian mid-engined V8 berlinettas of the 2020s (no one maker's car): low and wide with a short nose,
+    // the cabin well forward, muscular wings over the wheels and a pinched waist, a deep scallop along each door running into a
+    // big air intake ahead of the rear wheel, sail panels ('flying buttresses') either side of a glass engine cover, and a short,
+    // high, square tail with twin round lamps, a lip spoiler, high centre exhausts and a deep diffuser
+    // (proportions from the typical sizes of the class: 4.6 m long, 1.98 m wide, 1.2 m high, 2.65 m between the axles)
+    v8it:     { label: 'Italian V8',      L: 4.61, W: 1.98, nose: 0.42, deck: 0.8, roof: 1.21, tail: 0.96, cabin: [0.25, 0.9], fast: 0, ride: 0.11, wheel: 0.345,
+                rake: 0.36, screenBow: 0.62, roofLen: 0.5, roofDrop: 0.975, deckRear: 1.17, waist: 0.87,
+                noseW: 0.64, noseW2: 0.86, noseTip: 0.9, noseLift: 1.3, wbFrac: 0.575, axleShift: 0, round: 0.36, fenderH: 0.09, fenderReach: 2.3,
+                tailMid: 0.97, tailW: 0.9, cabinStyle: 'berlinetta', cabinWB: 0.78, cabinWT: 0.56, grille: 'none', lamps: 'swept', bumpers: false, scoop: 'none', exhaust: 'high',
+                noseDucts: true, scallop: true, buttress: true, engineGlass: true, tailRound: true,
+                style: { wing: 'ducktail', splitter: false, skirts: false, rim: 'five', rimColour: 'silver', engine: 'v8' } },
     // Inspired by the Grand Prix single-seaters of the 2020s (no one team's car): a narrow tub with the wheels out in the open,
     // wings front and rear, sidepods, an airbox over the driver's head and a 'halo' hoop round the open cockpit.
     // It is built in its own way (see formula.js) and is recognised by its open cockpit. Of the settings below it uses the length,
@@ -94,7 +105,8 @@ export const ENGINES = {
 };
 // Shape and detail settings every design has (presets that don't mention one get these)
 export const SHAPE_DEFAULTS = { waist: 0.95, rallyLights: false, rake: 0.34, screenBow: 0.74, roofDrop: 0.995, bulge: 0, deckRear: 1, roofLen: 0, noseW2: 0.9, cross: 'flat', crossB: 0.07, crossW: 0.09, noseW: 0.72, noseTip: 0.78, noseLift: 2.4, wbFrac: 0.6, axleShift: 0, round: 0.38, fenderH: 0.06, fenderReach: 2.5, cabinStyle: 'canopy', cabinWB: 0.82, cabinWT: 0.58,
-    grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false, cornerIntakes: false, tailBar: false, diffuser: false, roofBar: false, tailBig: false, tailMid: 0.96, tailW: 0.88, wheelCovers: false };
+    grille: 'none', lamps: 'slim', bumpers: false, scoop: 'none', exhaust: 'none', mouth: false, sideIntake: false, rearGrille: false, cornerIntakes: false, tailBar: false, diffuser: false, roofBar: false, tailBig: false, tailMid: 0.96, tailW: 0.88, wheelCovers: false,
+    noseDucts: false, scallop: false, buttress: false, engineGlass: false, tailRound: false };
 // Apply a body style: its shape, its details, and the parts that suit it
 export function applyPreset(design, key) {
     const { label, style, ...shape } = PRESETS[key];
@@ -163,7 +175,11 @@ function profiles(p) {
         let y = 0; const x = s * p.L, reach = archR * q.fenderReach;
         for (const ax of [frontAxle, rearAxle]) {
             const dx = Math.abs(x - ax * p.L);
-            if (dx < reach) { const t = 0.5 + 0.5 * Math.cos(Math.PI * dx / reach); y = Math.max(y, lerp(centre(s) + 0.03, wheelR + archR + q.fenderH, t)); }
+            if (q.noseDucts && ax === frontAxle && s < ax) {   // (the Italian V8: its front wings sit a little lower than its rear ones, but run on
+                const r = ax * p.L, k = Math.pow(Math.min(1, dx / r), 1.3), t = lerp(WING_NOSE, 1, 0.5 + 0.5 * Math.cos(Math.PI * k));   //  right to the nose, either side of a lower bonnet)
+                y = Math.max(y, lerp(centre(s) + 0.03, wheelR + archR + q.fenderH - FRONT_WING_DROP, t)); continue; }
+            const fh = q.noseDucts && ax === frontAxle ? q.fenderH - FRONT_WING_DROP : q.fenderH;
+            if (dx < reach) { const t = 0.5 + 0.5 * Math.cos(Math.PI * dx / reach); y = Math.max(y, lerp(centre(s) + 0.03, wheelR + archR + fh, t)); }
         }
         return y;
     };
@@ -195,12 +211,32 @@ function profiles(p) {
     };
     const bottomAt = (s, u) => { const b0 = base(s), a = arch(s), t = Math.min(1, Math.max(0, (Math.abs(u) - 0.5) / 0.16)); return b0 + Math.max(0, a - b0) * t * t * (3 - 2 * t); };
     // the real height of the body's skin at side position u (topAt is the top of the cross-section; the rounded edges fall away below it)
+    // how the cross-section's sides curve over into its top (ex: smaller = squarer). A crisp nose (the Italian V8): towards the
+    // front its sides stand upright and turn sharply into the top, so the nose has a crisp edge all round its face instead of
+    // a rounded snout (every other style keeps the same curve all along)
+    const ex0 = 0.5 + (q.round - 0.38) * 0.6, ex = !q.noseDucts ? () => ex0 : s => ex0 * lerp(NOSE_SQUARE, 1, sstep(0.09, 0.2, s));
     const surfAt = (s, u) => {
         const a = Math.min(0.999, Math.abs(u)), c = Math.pow(a, 1 / q.round), sn = Math.sqrt(1 - c * c);
-        const v = Math.pow(sn, 0.5 + (q.round - 0.38) * 0.6), yt = topAt(s, a), yb = Math.min(yt - 0.03, bottomAt(s, a));
+        const v = Math.pow(sn, ex(s)), yt = topAt(s, a), yb = Math.min(yt - 0.03, bottomAt(s, a));
         return lerp((yt + yb) / 2, yt, v);
     };
-    return { centre, width, arch, base, roof, topAt, bottomAt, surfAt, veeHalf, top: centre, c0, c1, frontAxle, rearAxle, wheelR, rakeEnd, roofEnd, q };
+    // scallop (the Italian V8): each side is hollowed out between the wheels, a little at the front of the door and deeper
+    // towards the back, where it stops at an air intake just ahead of the rear wheel. dent = how far in the skin sits (metres)
+    // at height y; it only ever applies to the sides of the body (see bodyGeometry)
+    const sc0 = frontAxle + archR / p.L + 0.035, sc1 = rearAxle - archR / p.L - 0.014, scEnd = 0.016;
+    const dent = !q.scallop ? () => 0 : (s, y) => {
+        if (s <= sc0 || s >= sc1 + scEnd) return 0;
+        const t = Math.min(1, (s - sc0) / (sc1 - sc0)), end = s > sc1 ? 1 - sstep(0, scEnd, s - sc1) : 1, H = shoulder(s) - p.ride;
+        const yc = p.ride + H * lerp(0.4, 0.5, t), k = (y - yc) / (H * (y > yc ? lerp(0.16, 0.25, t) : lerp(0.2, 0.3, t)));
+        return Math.abs(k) >= 1 ? 0 : 0.14 * Math.pow(t, 1.1) * end * Math.pow(1 - k * k, 1.5);
+    };
+    // buttress (the Italian V8): the cabin narrows towards the back like a teardrop, leaving the rear wings standing out
+    // either side of it (cabinK: how much of its usual width the cabin has at s)
+    const cabinK = !q.buttress ? () => 1 : s => lerp(1, 0.7, sstep(lerp(c0, c1, 0.42), c1, s));
+    // ...and behind the rear window the middle of the cabin drops into a channel between the two sail panels, where the engine
+    // cover lies (channel: how deep it is at s)
+    const channel = !q.buttress ? () => 0 : s => 0.085 * sstep(roofEnd + 0.008, roofEnd + 0.03, s) * (1 - sstep(c1 - 0.15, c1 - 0.04, s));
+    return { centre, width, arch, base, roof, topAt, bottomAt, surfAt, ex, veeHalf, dent, cabinK, channel, sstep, shoulder, scallop: [sc0, sc1], top: centre, c0, c1, frontAxle, rearAxle, wheelR, rakeEnd, roofEnd, q };
 }
 
 // Build a closed tube from rings of points, with caps at both ends
@@ -251,13 +287,14 @@ function loftUV(rings, byArc = true) {
 function bodyGeometry(p, pr, lite = false) {
     const N = lite ? 54 : 90, K = lite ? 48 : 84, rings = [];
     for (let i = 0; i <= N; i++) {
-        const s = i / N, x = p.L / 2 - s * p.L, w = pr.width(s), ring = [];
+        const s = i / N, x = p.L / 2 - s * p.L, w = pr.width(s), e = pr.ex(s), ring = [];
         for (let k = 0; k < K; k++) {
             const a = (k / K) * Math.PI * 2 - Math.PI / 2, c = Math.cos(a), sn = Math.sin(a);   // start underneath
-            const u = spow(c, pr.q.round), v = spow(sn, 0.5 + (pr.q.round - 0.38) * 0.6);   // a rounded square (rounder for older styles)
+            const u = spow(c, pr.q.round), v = spow(sn, e);   // a rounded square (rounder for older styles)
             const yt = pr.topAt(s, u), yb = Math.min(yt - 0.03, pr.bottomAt(s, u)), mid = (yt + yb) / 2;
             const y = v >= 0 ? lerp(mid, yt, v) : lerp(mid, yb, -v);
-            ring.push(new THREE.Vector3(x, y, u * w * (1 - Math.max(0, v) * 0.06)));
+            const z = u * w * (1 - Math.max(0, v) * 0.06), dz = Math.abs(u) > 0.6 ? pr.dent(s, y) * Math.min(1, (Math.abs(u) - 0.6) / 0.25) : 0;   // (dz: a scallop in the side, if the style has one)
+            ring.push(new THREE.Vector3(x, y, z - Math.sign(u) * dz));
         }
         rings.push(ring);
     }
@@ -266,12 +303,12 @@ function bodyGeometry(p, pr, lite = false) {
 function cabinGeometry(p, pr, lite = false) {
     // The windows rise from the body's edge (the beltline), leaning in a little, to a flatter roof.
     // The lower half of each ring is tucked down inside the body so the cabin grows out of it with no ledge.
-    const N = lite ? 28 : 48, K = p.cabinStyle === 'glasshouse' ? (lite ? 40 : 52) : (lite ? 28 : 36), rings = [];   // (more points round a glasshouse, for its crisp roof edge)
+    const N = lite ? 28 : 48, K = p.cabinStyle === 'glasshouse' || p.cabinStyle === 'berlinetta' ? (lite ? 40 : 52) : (lite ? 28 : 36), rings = [];   // (more points round a glasshouse, for its crisp roof edge, and round a berlinetta, for its sail panels)
     for (let i = 0; i <= N; i++) {
         const s = lerp(pr.c0, pr.c1, i / N), x = p.L / 2 - s * p.L;
-        const f = pr.q.cabinWB, w = pr.width(s);
+        const ck = pr.cabinK(s), ch = pr.channel(s), f = pr.q.cabinWB * ck, w = pr.width(s);
         const yb = pr.topAt(s, f) - 0.015, yt = Math.max(yb + 0.015, pr.roof(s));
-        const wb = w * f, wt = w * pr.q.cabinWT, ring = [];
+        const wb = w * f, wt = w * pr.q.cabinWT * ck, ring = [];
         // a fastback roof runs down to meet the rear deck, so there it follows the deck's own curve (no step at the end)
         const hug = pr.q.roofDrop < 0.99;
         for (let k = 0; k < K; k++) {
@@ -287,7 +324,9 @@ function cabinGeometry(p, pr, lite = false) {
                 }
                 // (where the roof dips below the deck the ring sinks out of sight inside the body)
                 const y0 = hug ? pr.surfAt(s, z / w) - 0.02 : yb, y1 = hug ? pr.roof(s) : yt;
-                ring.push(new THREE.Vector3(x, y0 + (y1 - y0) * rise, z));
+                let y = y0 + (y1 - y0) * rise;
+                if (ch) y = Math.max(y0 + 0.004, y - ch * (1 - pr.sstep(wt * CHANNEL[0], wt * CHANNEL[1], Math.abs(z))));   // (the channel between the sail panels)
+                ring.push(new THREE.Vector3(x, y, z));
             } else {
                 ring.push(new THREE.Vector3(x, yb - 0.14 * Math.pow(-sn, 0.5), c * wb * 0.98));   // hidden inside the body
             }
@@ -296,16 +335,18 @@ function cabinGeometry(p, pr, lite = false) {
     }
     return loft(rings, true, true, false);
 }
+const CHANNEL = [0.6, 0.86];
+const NOSE_SQUARE = 0.7, FRONT_WING_DROP = 0.08, WING_NOSE = 0.32;   // (WING_NOSE: how much of their height the front wings keep at the very nose)   // (how much squarer the Italian V8's cross-section is right at the nose)   // (how far out the channel's floor and its top edge are, as parts of the roof's width)
 // The cabin is painted with its windows: framed glasshouse (60s), glass bubble with a painted roof spine, or all-glass canopy
 // seeThrough (the detailed hypercar): the glass is tinted but lets you see the seats and driver inside
 function cabinTexture(d, pr, seeThrough = false) {
-    const s90 = isSuper90(pr.q), lt = isLongtail(pr.q), ev = isElectric(pr.q), w70 = isWedge70(pr.q), gt = isGT60(pr.q), S = (s90 || lt || ev || w70 || gt) && seeThrough ? 2 : 1; let gloss = null;   // (the closely-seen 90s supercar has fine lines on its cabin, so its picture is sharper)
+    const s90 = isSuper90(pr.q), lt = isLongtail(pr.q), ev = isElectric(pr.q), w70 = isWedge70(pr.q), gt = isGT60(pr.q), v8 = isV8it(pr.q), S = (s90 || lt || ev || w70 || gt || v8) && seeThrough ? 2 : 1; let gloss = null;   // (the closely-seen 90s supercar has fine lines on its cabin, so its picture is sharper)
     const W = 512, H = 256, c = document.createElement('canvas'); c.width = W * S; c.height = H * S;
     const x = c.getContext('2d'), Y = v => (1 - v) * H, glass = seeThrough ? (lt ? 'rgba(9,13,18,0.7)' : 'rgba(9,13,18,0.58)') : '#0b0f14'; x.scale(S, S);   // (a deeper tint on the Longtail: its canopy is nearly all glass)
     const span = pr.c1 - pr.c0, rake = (pr.rakeEnd - pr.c0) / span, roofEnd = (pr.roofEnd - pr.c0) / span;
     const rect = (u0, u1, v0, v1) => x.fillRect(u0 * W, Y(v1), (u1 - u0) * W, Y(v0) - Y(v1));
     const style = pr.q.cabinStyle;
-    x.fillStyle = style === 'glasshouse' || style === 'tallglass' || style === 'visor' ? d.paint : glass; x.fillRect(0, 0, W, H);
+    x.fillStyle = style === 'glasshouse' || style === 'tallglass' || style === 'visor' || style === 'berlinetta' ? d.paint : glass; x.fillRect(0, 0, W, H);
     if (style === 'glasshouse' && gt && seeThrough) {
         gloss = document.createElement('canvas'); gloss.width = W / 2; gloss.height = H / 2; const mk = gloss.getContext('2d'); mk.scale(0.5, 0.5);
         cabin60(x, d, pr, W, Y, rake, 'rgba(9,13,18,0.67)', mk);
@@ -354,6 +395,10 @@ function cabinTexture(d, pr, seeThrough = false) {
         if (d.engine !== 'ev' && d.preset !== 'electric') {      // engine cover vents (an electric car has no engine to cool there)
             x.fillStyle = 'rgba(0,0,0,.55)'; for (let i = 0; i < 4; i++) rect(0.72 + i * 0.05, 0.75 + i * 0.05, 0.42, 0.58);
         }
+    }
+    if (style === 'berlinetta') {
+        let mk = null; if (seeThrough) { gloss = document.createElement('canvas'); gloss.width = W / 2; gloss.height = H / 2; mk = gloss.getContext('2d'); mk.scale(0.5, 0.5); }
+        cabinV8(x, d, pr, W, Y, rake, seeThrough ? 'rgba(9,13,18,0.66)' : glass, mk);
     }
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
     if (gloss) t.userData.gloss = new THREE.CanvasTexture(gloss);   // (which parts are glass and which are paint)
@@ -727,7 +772,7 @@ function liveryTexture(d, hd = false) {
             x.fillStyle = sc === d.paint ? '#111' : sc; x.font = `800 ${0.16 * pxU}px "Exo 2", Arial, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(tag, 0, 0);
         });
     }
-    if (isHyper(d)) panelLines(x, d, W, H, Y, pxU, pxV); else if (isSuper90(d)) panelLines90(x, d, W, H, Y, pxU, pxV); else if (isLongtail(d)) panelLinesLT(x, d, W, H, Y, pxU, pxV); else if (isElectric(d)) panelLinesEV(x, d, W, H, Y, pxU, pxV); else if (isWedge70(d)) panelLines70(x, d, W, H, Y, pxU, pxV); else if (isGT60(d)) panelLines60(x, d, W, H, Y, pxU, pxV);
+    if (isHyper(d)) panelLines(x, d, W, H, Y, pxU, pxV); else if (isSuper90(d)) panelLines90(x, d, W, H, Y, pxU, pxV); else if (isLongtail(d)) panelLinesLT(x, d, W, H, Y, pxU, pxV); else if (isElectric(d)) panelLinesEV(x, d, W, H, Y, pxU, pxV); else if (isWedge70(d)) panelLines70(x, d, W, H, Y, pxU, pxV); else if (isGT60(d)) panelLines60(x, d, W, H, Y, pxU, pxV); else if (isV8it(d)) panelLinesV8(x, d, W, H, Y, pxU, pxV);
     const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = hd ? 8 : 4;
     t.addEventListener('dispose', () => { if (CANVAS_POOL[S].length < 1) CANVAS_POOL[S].push(c); });   // (kept for the next car, see CANVAS_POOL)
     return t;
@@ -750,26 +795,29 @@ const isElectric = d => d.lamps === 'blade' && d.cabinStyle === 'tallglass' && d
 const isWedge70 = d => d.lamps === 'hidden' && d.cabinStyle === 'visor' && d.scoop === 'louvres';
 // The 60s GT gets its own detail as well (a framed glasshouse you can see into, chrome trim, wood and leather inside)
 const isGT60 = d => d.lamps === 'round' && d.cabinStyle === 'glasshouse' && d.grille === 'shield';
-const isDetailed = d => isHyper(d) || isSuper90(d) || isLongtail(d) || isElectric(d) || isWedge70(d) || isGT60(d) || isFormula(d);
+// The Italian V8 gets its own detail too (swept lamps, nose intakes, the engine under glass between two sail panels, twin round tail lamps)
+const isV8it = d => d.lamps === 'swept' && d.cabinStyle === 'berlinetta';
+const isDetailed = d => isV8it(d) || isHyper(d) || isSuper90(d) || isLongtail(d) || isElectric(d) || isWedge70(d) || isGT60(d) || isFormula(d);
 // Does the driver sit in the middle? (the 90s supercar and the Longtail, recognised by their parts, so it still holds after the sliders are moved)
 export const centreSeat = d => isSuper90(d) || isLongtail(d);
 // Where a point on the body's skin falls on the paint picture, for the cross-section at s (matches loftUV: v by distance round the ring)
 function ringV(p, pr, s) {
-    const K = 84, pts = [], cum = [0], w = pr.width(s), e = 0.5 + (pr.q.round - 0.38) * 0.6;
+    const K = 84, pts = [], cum = [0], w = pr.width(s), r = pr.q.round, e = pr.ex(s);
     for (let k = 0; k <= K; k++) {
         const a = ((k % K) / K) * Math.PI * 2 - Math.PI / 2, c = Math.cos(a), sn = Math.sin(a);
-        const u = spow(c, pr.q.round), v = spow(sn, e), yt = pr.topAt(s, u), yb = Math.min(yt - 0.03, pr.bottomAt(s, u)), mid = (yt + yb) / 2;
-        pts.push([v >= 0 ? lerp(mid, yt, v) : lerp(mid, yb, -v), u * w * (1 - Math.max(0, v) * 0.06)]);
+        const u = spow(c, r), v = spow(sn, e), yt = pr.topAt(s, u), yb = Math.min(yt - 0.03, pr.bottomAt(s, u)), mid = (yt + yb) / 2;
+        const y = v >= 0 ? lerp(mid, yt, v) : lerp(mid, yb, -v), dz = Math.abs(u) > 0.6 ? pr.dent(s, y) * Math.min(1, (Math.abs(u) - 0.6) / 0.25) : 0;
+        pts.push([y, u * w * (1 - Math.max(0, v) * 0.06) - Math.sign(u) * dz]);
         if (k) cum.push(cum[k - 1] + Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]));
     }
     const vK = kf => { const i = Math.min(K - 1, Math.floor(kf)); return lerp(cum[i], cum[i + 1], kf - i) / cum[K]; };
     return {
         // on the top of the body, u across (0 = middle, 1 = right edge)
-        atU: u => vK((Math.acos(Math.pow(Math.min(1, Math.max(0, u)), 1 / pr.q.round)) + Math.PI / 2) / (Math.PI * 2) * K),
+        atU: u => vK((Math.acos(Math.pow(Math.min(1, Math.max(0, u)), 1 / r)) + Math.PI / 2) / (Math.PI * 2) * K),
         // on the right side of the body, at height y
         atY: y => { for (let k = 2; k < K / 2 - 1; k++) if (pts[k][0] <= y && pts[k + 1][0] > y) return vK(k + (y - pts[k][0]) / (pts[k + 1][0] - pts[k][0])); return vK(K / 4); },
         // on the top of the body again, but worked out from the body's own points (exact even near the middle, where those points are far apart)
-        atUx: u => { const a = Math.min(0.985, Math.max(0, u)), z = a * w * (1 - Math.pow(Math.sqrt(1 - Math.pow(a, 2 / pr.q.round)), e) * 0.06);
+        atUx: u => { const a = Math.min(0.985, Math.max(0, u)), z = a * w * (1 - Math.pow(Math.sqrt(1 - Math.pow(a, 2 / r)), e) * 0.06);
             for (let k = K / 4; k < K / 2; k++) if (pts[k][1] >= z && pts[k + 1][1] <= z) return vK(k + (pts[k][1] - z) / Math.max(1e-6, pts[k][1] - pts[k + 1][1])); return 0.5; }
     };
 }
@@ -1172,8 +1220,8 @@ function bar(a, b, t, mat, w = t) {
 }
 // the height of the cabin glass above a point (matches cabinGeometry for the bubble and canopy styles)
 function cabinY(pr, s, zAbs) {
-    const w = pr.width(s), wb = w * pr.q.cabinWB, wt = w * pr.q.cabinWT, hug = pr.q.roofDrop < 0.99;
-    const yb = pr.topAt(s, pr.q.cabinWB) - 0.015, yt = Math.max(yb + 0.015, pr.roof(s));
+    const w = pr.width(s), ck = pr.cabinK(s), wb = w * pr.q.cabinWB * ck, wt = w * pr.q.cabinWT * ck, hug = pr.q.roofDrop < 0.99;
+    const yb = pr.topAt(s, pr.q.cabinWB * ck) - 0.015, yt = Math.max(yb + 0.015, pr.roof(s));
     if (pr.q.cabinStyle === 'glasshouse') for (let i = 0; i <= 48; i++) {   // (straight sides, a crisp edge, then a flat roof panel: see cabinGeometry)
         const t = i / 48, edge = 0.48, f = t < edge ? t / edge : (t - edge) / (1 - edge), rise = t < edge ? 0.88 * f : 0.88 + 0.12 * (1 - (1 - f) * (1 - f)), z = t < edge ? lerp(wb, wt, f) : wt * (1 - f) * (1 + 0.15 * f);
         if (z <= zAbs || i === 48) { const y0 = hug ? pr.surfAt(s, z / w) - 0.02 : yb, y1 = hug ? pr.roof(s) : yt; return y0 + (y1 - y0) * rise; }
@@ -1194,9 +1242,16 @@ function detailTexture(s90 = false) {
     x.restore();
     const old = s90 === 'gt';   // (the 60s GT wears an old-style plate: silver letters on black)
     x.fillStyle = old ? '#0c0d0f' : '#f2c200'; x.fillRect(0, 0, 256, 64); x.strokeStyle = old ? '#c9ced6' : '#111'; x.lineWidth = 3; x.strokeRect(3.5, 3.5, 249, 57);
-    x.fillStyle = old ? '#e8ebef' : '#111'; x.font = '900 40px "Arial Black", Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(old ? 'LEGEND 6' : s90 === 'w70' ? 'LEGEND 7' : s90 === 'ev' ? 'LEGEND 5' : s90 === 'lt' ? 'LEGEND 3' : s90 ? 'LEGEND 9' : 'LEGEND 1', 128, 34, 228);
+    x.fillStyle = old ? '#e8ebef' : '#111'; x.font = '900 40px "Arial Black", Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(old ? 'LEGEND 6' : s90 === 'v8' ? 'LEGEND 8' : s90 === 'w70' ? 'LEGEND 7' : s90 === 'ev' ? 'LEGEND 5' : s90 === 'lt' ? 'LEGEND 3' : s90 ? 'LEGEND 9' : 'LEGEND 1', 128, 34, 228);
     x.fillStyle = '#0b0c0f'; x.fillRect(0, 64, 64, 64);
     x.fillStyle = '#c9a227'; x.beginPath(); x.arc(32, 96, 31, 0, Math.PI * 2); x.fill(); x.fillStyle = '#0b0c0f'; x.beginPath(); x.arc(32, 96, 28, 0, Math.PI * 2); x.fill();
+    if (s90 === 'v8') {   // the Italian V8's own badge: a silver ring round a dark blue disc, with a white rev-counter dial and a red needle on it (no letters, no animal, no shield)
+        x.fillStyle = '#d5dae0'; x.beginPath(); x.arc(32, 96, 31, 0, Math.PI * 2); x.fill(); x.fillStyle = '#10204a'; x.beginPath(); x.arc(32, 96, 27, 0, Math.PI * 2); x.fill();
+        x.strokeStyle = '#f4f6f8'; x.lineWidth = 3.2; x.lineCap = 'butt'; x.beginPath(); x.arc(32, 99, 17, Math.PI * 0.85, Math.PI * 2.15); x.stroke();
+        x.lineWidth = 2; for (let i = 0; i < 8; i++) { const a = Math.PI * (0.85 + 1.3 * i / 7); x.beginPath(); x.moveTo(32 + Math.cos(a) * 17, 99 + Math.sin(a) * 17); x.lineTo(32 + Math.cos(a) * 11.5, 99 + Math.sin(a) * 11.5); x.stroke(); }
+        x.strokeStyle = '#e10600'; x.lineWidth = 3; x.lineCap = 'round'; x.beginPath(); x.moveTo(32, 99); x.lineTo(43, 85); x.stroke(); x.fillStyle = '#f4f6f8'; x.beginPath(); x.arc(32, 99, 3.6, 0, Math.PI * 2); x.fill();
+        const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+    }
     if (s90 === 'ev') {   // the Electric's own badge: a bright blue ring round a white six-sided outline with a blue pulse line across it, on a black disc (no letters)
         x.fillStyle = EVBLUE; x.beginPath(); x.arc(32, 96, 31, 0, Math.PI * 2); x.fill(); x.fillStyle = '#0b0c0f'; x.beginPath(); x.arc(32, 96, 27, 0, Math.PI * 2); x.fill();
         x.strokeStyle = '#f4f6f8'; x.lineWidth = 3; x.lineJoin = 'round'; x.lineCap = 'round'; x.beginPath(); for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + Math.PI / 6; x.lineTo(32 + Math.cos(a) * 20, 96 + Math.sin(a) * 20); } x.closePath(); x.stroke();
@@ -1485,14 +1540,14 @@ function super90Tail(car, p, pr, mats, X, lite) {
 // lift = how far it stands off the skin (straight out from it, whichever way the skin faces there)
 // (skinPoint: the exact place on the body's skin, allowing for the way the body draws in a little towards its top)
 function skinPoint(pr, X, side, s, u) {
-    const a = Math.min(0.985, Math.abs(u)), v = Math.pow(Math.sqrt(1 - Math.pow(a, 2 / pr.q.round)), 0.5 + (pr.q.round - 0.38) * 0.6);
+    const r = pr.q.round, a = Math.min(0.985, Math.abs(u)), v = Math.pow(Math.sqrt(1 - Math.pow(a, 2 / r)), pr.ex(s));
     return new THREE.Vector3(X(s), pr.surfAt(s, a), side * a * pr.width(s) * (1 - v * 0.06));
 }
 // how far out the body's skin is at height y, on the cross-section at s (for parts fixed to the car's sides)
 function sideZ(pr, s, y) {
-    const w = pr.width(s), e = 0.5 + (pr.q.round - 0.38) * 0.6, N = 40; let py = 0, pz = 0;
-    for (let i = 0; i <= N; i++) { const a = lerp(-1.45, 1.45, i / N), u = Math.pow(Math.cos(a), pr.q.round), v = spow(Math.sin(a), e), yt = pr.topAt(s, u), yb = Math.min(yt - 0.03, pr.bottomAt(s, u)), mid = (yt + yb) / 2;
-        const yy = v >= 0 ? lerp(mid, yt, v) : lerp(mid, yb, -v), zz = u * w * (1 - Math.max(0, v) * 0.06);
+    const w = pr.width(s), r = pr.q.round, e = pr.ex(s), N = 40; let py = 0, pz = 0;
+    for (let i = 0; i <= N; i++) { const a = lerp(-1.45, 1.45, i / N), u = Math.pow(Math.cos(a), r), v = spow(Math.sin(a), e), yt = pr.topAt(s, u), yb = Math.min(yt - 0.03, pr.bottomAt(s, u)), mid = (yt + yb) / 2;
+        const yy = v >= 0 ? lerp(mid, yt, v) : lerp(mid, yb, -v), zz = u * w * (1 - Math.max(0, v) * 0.06) - (u > 0.6 ? pr.dent(s, yy) * Math.min(1, (u - 0.6) / 0.25) : 0);
         if (i && (py - y) * (yy - y) <= 0 && yy !== py) return lerp(pz, zz, (y - py) / (yy - py));
         py = yy; pz = zz; }
     return w;
@@ -1681,11 +1736,341 @@ function electricDetail(car, p, pr, mats, X, lite) {
     bucketSeat(part, xS, head(-zSeat), -zSeat, 0.4, [0, 1, 13]);
     helmetedDriver(part, xS, head(-zSeat), -zSeat);
 }
+// =====================================================================
+//  THE ITALIAN V8 (its own cabin picture, panel lines, nose, tail and small parts)
+// =====================================================================
+// the line each swept lamp follows: from its inner end near the nose (t = 0), back and outwards along the top of the wing (t = 1)
+const lampV8 = t => [0.014 + 0.095 * Math.pow(t, 1.3), lerp(0.6, 0.91, t)], LAMP_V8 = { lens: 0.08 };   // (lens: how wide the dark glass is, in metres)
+// the two vents in the bonnet (where the air that comes in through the nose flows out again): from s0 back to s1, and how far
+// out from the middle each one reaches, at the front (u0) and the back (u1)
+const VENTS_V8 = { s0: 0.085, s1: 0.135, u0: [0.08, 0.34], u1: [0.1, 0.4] };
+// Where the Italian V8's doors start and end, along the body (sA, sB, and sP: the foot of the windscreen pillar) and along the
+// cabin's picture (uP, uB; uR: where the roof ends at the rear window)
+function doorsV8(pr) {
+    const span = pr.c1 - pr.c0, rake = (pr.rakeEnd - pr.c0) / span, uR = (pr.roofEnd - pr.c0) / span, archR = (pr.wheelR + 0.055) / pr.q.L, fArch = pr.frontAxle + archR, rearArch = pr.rearAxle - archR;
+    const sA = fArch + 0.028, uP = Math.max(0.03, rake * 0.42);
+    const uB = Math.max(rake + 0.1, uR - 0.004), sB = Math.max(sA + 0.1, Math.min(rearArch - 0.03, pr.c0 + span * uB + 0.012));
+    return { span, rake, uR, fArch, rearArch, uP, sP: pr.c0 + span * (uP + 0.02), sA, sB, uB };
+}
+// how far round the cabin's picture (from the middle of the roof) a point sits that is 'fr' of the roof's width out from the middle
+function cabinHalfV(pr, fr) {
+    const rb = pr.q.cabinWB / pr.q.cabinWT; let lo = 0, hi = Math.PI / 2;
+    for (let i = 0; i < 24; i++) { const a = (lo + hi) / 2, z = Math.pow(Math.cos(a), 0.7) * lerp(rb, 1, Math.pow(Math.sin(a), 1.4)); if (z > fr) lo = a; else hi = a; }
+    return 0.25 - lo / (Math.PI * 2);
+}
+// The Italian V8's cabin: a windscreen that wraps round to slim painted pillars, door glass that tapers to a point at the back,
+// a painted roof, and a sail panel running back from each side of it. Between the sail panels: an upright rear window, then
+// the engine cover, a sheet of glass with the V8 showing under it (red intake boxes either side of a bright centre) and three
+// louvres across its back end. mk (if given): a second picture marking glass and paint (see cabinEV)
+function cabinV8(x, d, pr, W, Y, rake, glass, mk) {
+    const D = doorsV8(pr), uP = D.uP, uB = D.uB, belt = 0.255, top = 0.372, hd = rake + 0.03, H = Y(0);   // (top: where the side glass ends and the roof begins)
+    const poly = (c, pts) => { c.beginPath(); pts.forEach(([u, v], i) => i ? c.lineTo(u * W, Y(v)) : c.moveTo(u * W, Y(v))); c.closePath(); };
+    const mir = pts => pts.map(([u, v]) => [u, 1 - v]);
+    const screen = [[0.02, belt], [uP, belt], [hd, top], [hd, 1 - top], [uP, 1 - belt], [0.02, 1 - belt]];
+    const win = [[uP + 0.03, belt], [hd + 0.026, top - 0.004], [lerp(hd, uB, 0.7), top - 0.008], [uB - 0.02, lerp(belt, top, 0.7)], [uB - 0.004, belt + 0.02], [uB - 0.008, belt]];
+    const quarter = [[uB + 0.022, belt + 0.004], [uB + 0.012, lerp(belt, top, 0.62)], [uB + 0.05, lerp(belt, top, 0.42)], [uB + 0.17, belt + 0.004]];   // a small dark window behind each door, tapering back along the sail panel
+    x.lineJoin = 'round'; x.lineCap = 'round'; if (mk) { mk.fillStyle = 'rgb(255,255,255)'; mk.fillRect(0, 0, W, H); }
+    const asGlass = () => { if (mk) { mk.globalCompositeOperation = 'destination-out'; mk.fillStyle = '#000'; mk.fill(); mk.globalCompositeOperation = 'source-over'; mk.fillStyle = GLASS_EV; mk.fill(); } };
+    // (each pane is cut out of the paint first, so see-through glass really is see-through; then a black band goes round it, where the glass is bonded in)
+    for (const p of [screen, win, mir(win)]) {
+        poly(x, p); x.globalCompositeOperation = 'destination-out'; x.fillStyle = '#000'; x.fill(); x.globalCompositeOperation = 'source-over'; x.fillStyle = glass; x.fill(); x.strokeStyle = '#07090c'; x.lineWidth = 2.6; x.stroke();
+        if (mk) { poly(mk, p); asGlass(); } }
+    for (const p of [quarter, mir(quarter)]) { poly(x, p); x.fillStyle = '#090b0f'; x.fill(); x.strokeStyle = '#07090c'; x.lineWidth = 2; x.stroke(); if (mk) { poly(mk, p); asGlass(); } }
+    // the top of each door: a cut that runs up the pillar and back along the edge of the roof
+    const cut = [[hd + 0.028, top], [hd + 0.04, top + 0.022], [lerp(hd, uB, 0.7), top + 0.02], [uB - 0.01, top - 0.02]];
+    for (const pts of [cut, mir(cut)]) for (const [col, off, wd] of [['rgba(255,255,255,0.2)', 0.7, 0.9], ['rgba(0,0,0,0.75)', 0, 1.3]]) {
+        x.strokeStyle = col; x.lineWidth = wd; x.beginPath(); pts.forEach(([u, v], i) => i ? x.lineTo(u * W + off, Y(v) + off) : x.moveTo(u * W + off, Y(v) + off)); x.stroke(); }
+    // between the sail panels: the rear window, standing nearly upright behind the seats...
+    const hv = cabinHalfV(pr, CHANNEL[0]) * 0.96, c2u = s => (s - pr.c0) / D.span;
+    const rw0 = c2u(pr.roofEnd + 0.006), rw1 = c2u(pr.roofEnd + 0.032), e0 = rw1 + 0.022, e1 = Math.max(e0 + 0.05, c2u(pr.c1 - 0.085));
+    const rr = (c, u0, u1, r) => { c.beginPath(); c.roundRect(u0 * W, Y(0.5 + hv), (u1 - u0) * W, Y(0.5 - hv) - Y(0.5 + hv), r); };
+    rr(x, rw0, rw1, 2); x.fillStyle = '#090b0f'; x.fill(); if (mk) { rr(mk, rw0, rw1, 2); asGlass(); }
+    // ...and the engine cover
+    const ex = e0 * W, ew = (e1 - e0) * W, ey = Y(0.5 + hv), eh = Y(0.5 - hv) - ey, cy = Y(0.5);
+    const eg = !!pr.q.engineGlass;   // (without it the engine cover is a painted panel, with just the louvres)
+    if (eg) { rr(x, e0, e1, 5); x.fillStyle = '#0a0b0e'; x.fill(); if (mk) { rr(mk, e0, e1, 5); asGlass(); } }
+    if (mk && eg) {   // (the closely-seen car) the engine under the glass
+        x.save(); rr(x, e0, e1, 5); x.clip();
+        const hot = d.engine === 'ev' ? '#2a2d33' : '#b3121a', bx = ex + ew * 0.1, bl = ew * 0.5;   // (an electric one has plain dark covers there instead)
+        x.fillStyle = '#15171b'; x.fillRect(ex, ey, ew, eh);
+        for (const sg of [-1, 1]) {   // an intake box along each side, ribbed, with a bright line along it
+            const by = cy + sg * eh * 0.25, bh = eh * 0.27;
+            x.fillStyle = hot; x.beginPath(); x.roundRect(bx, by - bh / 2, bl, bh, 3); x.fill();
+            x.strokeStyle = 'rgba(0,0,0,0.38)'; x.lineWidth = 1; for (let i = 1; i < 8; i++) { const px = bx + bl * i / 8; x.beginPath(); x.moveTo(px, by - bh / 2 + 1); x.lineTo(px, by + bh / 2 - 1); x.stroke(); }
+            x.fillStyle = 'rgba(255,255,255,0.25)'; x.fillRect(bx + 2, by - bh * 0.1 * sg - 0.6, bl - 4, 1.2);
+        }
+        x.fillStyle = '#9aa3af'; x.fillRect(bx - ew * 0.03, cy - eh * 0.045, bl + ew * 0.1, eh * 0.09);                            // the bright centre between them
+        x.fillStyle = '#c9ced6'; x.beginPath(); x.roundRect(bx + bl + ew * 0.04, cy - eh * 0.2, ew * 0.07, eh * 0.4, 2); x.fill();   // and a cross-piece behind
+        x.strokeStyle = '#3a3f47'; x.lineWidth = 1.6; x.beginPath(); x.moveTo(ex + 2, ey + 2); x.lineTo(bx + bl * 0.3, cy); x.lineTo(ex + 2, ey + eh - 2); x.stroke();   // bracing bars at the front
+        x.fillStyle = 'rgba(9,13,18,0.34)'; x.fillRect(ex, ey, ew, eh);                                                          // the tint of the glass over it all
+        const g = x.createLinearGradient(ex, 0, ex + ew, 0); g.addColorStop(0, 'rgba(255,255,255,0.10)'); g.addColorStop(0.4, 'rgba(255,255,255,0)'); x.fillStyle = g; x.fillRect(ex, ey, ew, eh);
+        x.restore();
+    }
+    // three louvres across the back of the cover
+    for (let i = 0; i < 3; i++) { const lx = ex + ew * (0.72 + i * 0.085); x.fillStyle = '#050506'; x.fillRect(lx, ey + eh * 0.1, ew * 0.045, eh * 0.8); x.fillStyle = 'rgba(160,168,180,0.35)'; x.fillRect(lx + ew * 0.045, ey + eh * 0.1, 1, eh * 0.8); }
+    x.strokeStyle = '#07090c'; x.lineWidth = eg ? 2.6 : 1.2; rr(x, e0, e1, 5); x.stroke(); x.lineWidth = 2.6; rr(x, rw0, rw1, 2); x.stroke();
+}
+// The Italian V8's panel lines: black sills, doors whose front edge slants down from the windscreen pillar, the dark air intake
+// at the back of each side scallop, the front lid and the outlet in it, the beds of the swept lamps, the engine lid with rows
+// of cooling slots, a fuel flap, the bumper joins and a dark lower panel round the tail
+function panelLinesV8(x, d, W, H, Y, pxU, pxV) {
+    const { pr, k, R, archR, PY, each, line, vTop, vLow, handle } = panelTools(x, d, W, H, Y, pxU, pxV);
+    const D = doorsV8(pr), dA = D.sA, fArch = D.fArch, rearArch = D.rearArch, sP = D.sP, dB = D.sB;
+    x.save(); x.scale(1, k);
+    // black sills from wheel to wheel, with a fine bright edge
+    each(P => { for (const [col, y, wd] of [['#0c0d10', d.ride + 0.1, 0.07], ['rgba(170,178,190,0.4)', d.ride + 0.139, 0.004]]) { x.strokeStyle = col; x.lineWidth = wd * pxU; x.lineCap = 'butt'; x.beginPath();
+        for (let i = 0; i <= 12; i++) { const s = lerp(fArch + 0.004, rearArch - 0.004, i / 12), q = [s * W, P(R(s).atY(y))]; i ? x.lineTo(...q) : x.moveTo(...q); } x.stroke(); } });
+    // the scallop: shaded deeper towards the back, and the dark intake it ends in (the body steps out again there, facing forwards)
+    if (pr.q.scallop) each(P => { const [sc0, sc1] = pr.scallop, at = (s, y) => [s * W, P(R(s).atY(y))], Hs = s => pr.shoulder(s) - d.ride;
+        const band = (s, t, f) => { const h = Hs(s), yc = d.ride + h * lerp(0.4, 0.5, t); return [yc - h * lerp(0.2, 0.3, t) * f, yc + h * lerp(0.16, 0.25, t) * f]; };
+        const sh0 = lerp(sc0, sc1, 0.3), g = x.createLinearGradient(sh0 * W, 0, sc1 * W, 0); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.6, 'rgba(0,0,0,0.3)'); g.addColorStop(1, 'rgba(0,0,0,0.62)');
+        x.beginPath(); for (let i = 0; i <= 8; i++) { const s = lerp(sh0, sc1, i / 8), t = (s - sc0) / (sc1 - sc0), q = at(s, band(s, t, 0.7 * Math.pow(i / 8, 0.5))[1]); i ? x.lineTo(...q) : x.moveTo(...q); }
+        for (let i = 8; i >= 0; i--) { const s = lerp(sh0, sc1, i / 8), t = (s - sc0) / (sc1 - sc0); x.lineTo(...at(s, band(s, t, 0.7 * Math.pow(i / 8, 0.5))[0])); }
+        x.closePath(); x.fillStyle = g; x.fill();
+        // a bright crease along the top edge of the scallop, where the door turns in
+        x.strokeStyle = 'rgba(255,255,255,0.32)'; x.lineWidth = 0.007 * pxU; x.lineCap = 'round'; x.beginPath();
+        for (let i = 0; i <= 12; i++) { const s = lerp(sc0 + 0.02, sc1 - 0.004, i / 12), t = (s - sc0) / (sc1 - sc0), q = at(s, band(s, t, 0.92)[1]); i ? x.lineTo(...q) : x.moveTo(...q); } x.stroke();
+        const m0 = sc1 - 0.01, m1 = sc1 + 0.021, [ya, yb] = band(sc1, 1, 0.95), ym = (ya + yb) / 2;
+        x.beginPath(); x.moveTo(...at(m0, lerp(ym, ya, 0.82))); x.lineTo(...at(m1 - 0.006, ya)); x.lineTo(...at(m1, lerp(ya, yb, 0.2))); x.lineTo(...at(m1, lerp(ya, yb, 0.85))); x.lineTo(...at(m1 - 0.006, yb)); x.lineTo(...at(m0, lerp(ym, yb, 0.82))); x.closePath();
+        const gm = x.createLinearGradient(m0 * W, 0, m1 * W, 0); gm.addColorStop(0, '#1d2025'); gm.addColorStop(0.3, '#08090b'); gm.addColorStop(1, '#000'); x.fillStyle = gm; x.fill();
+        x.strokeStyle = 'rgba(125,133,146,0.75)'; x.lineWidth = 0.008 * pxU; x.lineCap = 'round';                               // two slats across the opening
+        for (const f of [0.36, 0.64]) { x.beginPath(); x.moveTo(...at(m0 + 0.003, lerp(ya, yb, f))); x.lineTo(...at(m1 - 0.002, lerp(ya, yb, f))); x.stroke(); }
+    });
+    // doors: the front edge slants down and forwards from the foot of the windscreen pillar, then the sill and an upright back edge
+    const sM = lerp(sP, dA, 0.6), door = [[sP, vTop(sP)], [sM, lerp(vLow(sM), vTop(sM), 0.55)], [dA, lerp(vLow(dA), vTop(dA), 0.2)], [dA + 0.012, vLow(dA + 0.012)]];
+    for (let i = 1; i <= 5; i++) { const s = lerp(dA + 0.012, dB - 0.01, i / 5); door.push([s, vLow(s)]); }
+    door.push([dB, lerp(vLow(dB), vTop(dB), 0.2)], [dB + 0.006, vTop(dB + 0.006)]);
+    line(door);
+    handle(dB - 0.04, 0.9);                                       // flush handles, up under the windows
+    // front lid: from behind the lamps to the windscreen, round the outlet
+    const l0 = 0.058, l1 = Math.max(l0 + 0.04, pr.c0 - 0.02), lh = s => lerp(0.36, 0.7, Math.min(1, (s - l0) / (l1 - l0) * 1.7)), lid = [[l0, 0.5]];
+    for (let i = 0; i <= 10; i++) { const s = lerp(l0, l1, i / 10); lid.push([s, R(s).atU(lh(s))]); }
+    lid.push([l1, 0.5]); line(lid, 0.007);
+    // the two vents in the bonnet, side by side (louvres lie across them: see v8Detail): dark and deep at the front, their
+    // floors rising into the light at the back, with a fine bright edge along the back
+    each(P => { const B = VENTS_V8, N = 6, pts = [], at = (s, u) => [s * W, P(R(s).atUx(u))];
+        for (let i = 0; i <= N; i++) pts.push(at(B.s0, lerp(B.u0[0], B.u0[1], i / N)));
+        for (let i = N; i >= 0; i--) pts.push(at(B.s1, lerp(B.u1[0], B.u1[1], i / N)));
+        const g = x.createLinearGradient(B.s0 * W, 0, B.s1 * W, 0); g.addColorStop(0, '#000'); g.addColorStop(0.55, '#0b0c0f'); g.addColorStop(1, '#2a2e35');
+        x.beginPath(); pts.forEach((q, i) => i ? x.lineTo(...q) : x.moveTo(...q)); x.closePath(); x.fillStyle = g; x.fill(); x.lineJoin = 'round'; x.strokeStyle = '#050506'; x.lineWidth = 0.008 * pxU; x.stroke();
+        x.strokeStyle = 'rgba(255,255,255,0.35)'; x.lineWidth = 0.005 * pxU; x.beginPath(); for (let i = 0; i <= N; i++) { const q = at(B.s1 + 0.002, lerp(B.u1[0], B.u1[1], i / N)); i ? x.lineTo(...q) : x.moveTo(...q); } x.stroke(); });
+    // the engine lid: its edge runs back from the top of each door, over the rear wing and across the tail, with cooling slots behind the glass
+    const sE = 0.94, cs = [];
+    for (let i = 0; i <= 10; i++) { const s = lerp(Math.min(dB, sE - 0.1), sE, i / 10); cs.push([s, R(s).atU(lerp(pr.q.cabinWB + 0.03, 0.86, Math.min(1, i / 3)))]); }
+    cs.push([sE, 0.5]); line(cs, 0.007);
+    each(P => { x.strokeStyle = 'rgba(0,0,0,0.82)'; x.lineWidth = 0.018 * pxU; x.lineCap = 'round';
+        for (let i = 0; i < 4; i++) { const s = lerp(pr.c1 - 0.012, sE - 0.022, i / 3); x.beginPath(); x.moveTo(s * W, P(R(s).atU(0.14))); x.lineTo((s + 0.004) * W, P(R(s).atU(0.56))); x.stroke(); } });
+    // fuel flap, on top of the left rear wing
+    { const s = pr.rearAxle - 0.02, cx = s * W, cy = PY(1 - R(s).atU(0.84)), r = 0.05 * pxU;
+        for (const [col, off] of [['rgba(255,255,255,0.16)', 0.9], ['rgba(0,0,0,0.72)', 0]]) { x.strokeStyle = col; x.lineWidth = 0.008 * pxU; x.beginPath(); x.arc(cx + off, cy + off, r, 0, Math.PI * 2); x.stroke(); } }
+    // the bumper join at each back corner (the nose is one smooth piece)
+    { const s = Math.min(0.975, pr.rearAxle + archR + 0.022); line([[s, R(s).atY(pr.base(s) + 0.04)], [s, R(s).atU(0.96)]], 0.006); }
+    // a dark lower panel round each back corner, joining up with the diffuser
+    each(P => { const s0 = pr.rearAxle + archR + 0.004, s1 = 0.985; x.fillStyle = '#0c0d10'; x.beginPath(); x.moveTo(s0 * W, P(0)); x.lineTo(s1 * W, P(0));
+        for (let i = 0; i <= 6; i++) { const s = lerp(s1, s0, i / 6); x.lineTo(s * W, P(R(s).atY(pr.base(s) + lerp(0.16, 0.05, i / 6)))); } x.closePath(); x.fill(); });
+    x.restore();
+}
+// The Italian V8's nose. Its face is flat and upright (see NOSE_SQUARE), and nearly all of it is air intake: a big opening in
+// each corner, its top edge rising towards the lamp, with a body-coloured blade across it; a low slot in the middle; and a
+// dark lip under it all. Each opening is let into the face: a raised edge of bodywork runs round it (a sharp crest that
+// catches the light) and the dark floor sits back from that edge, so it reads as a hole in the bumper rather than a panel
+// stuck on. Every point is laid onto the nose itself (see faceAt). lite: fewer points, no blades or slats.
+function v8Nose(car, p, pr, mats, X, body, lite, fine) {
+    const yB = pr.base(0), yT = pr.topAt(0, 0), Hn = yT - yB, FW = pr.width(0), V = (x, y, z) => new THREE.Vector3(x, y, z);
+    // where the face is (its x) at height y, distance z out from the middle: found once on a coarse grid by casting rays at the
+    // nose, then read off that grid (far quicker than a ray for every point)
+    const ray = new THREE.Raycaster(), from = new THREE.Vector3(), back = new THREE.Vector3(-1, 0, 0); body.updateMatrixWorld(true);
+    const GZ = lite ? 10 : 16, GY = lite ? 6 : 10, z0 = 0, z1 = FW * 1.02, gy0 = yB - 0.01, gy1 = yT, grid = [];
+    for (let j = 0; j <= GY; j++) for (let i = 0; i <= GZ; i++) { ray.set(from.set(p.L, lerp(gy0, gy1, j / GY), lerp(z0, z1, i / GZ)), back); const hit = ray.intersectObject(body)[0]; grid.push(hit ? hit.point.x : X(0.04)); }
+    const faceAt = (y, z) => {
+        const fz = Math.min(GZ - 1e-6, Math.max(0, Math.abs(z) / z1 * GZ)), fy = Math.min(GY - 1e-6, Math.max(0, (y - gy0) / (gy1 - gy0) * GY)), i = Math.floor(fz), j = Math.floor(fy), a = fz - i, b = fy - j, G = (jj, ii) => grid[jj * (GZ + 1) + ii];
+        return lerp(lerp(G(j, i), G(j, i + 1), a), lerp(G(j + 1, i), G(j + 1, i + 1), a), b);
+    };
+    const mesh = (pos, idx, mat) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); const m = new THREE.Mesh(g, mat); car.add(m); return m; };
+    // the openings, each an outline in (z, y) going round anticlockwise as seen from the front of the car
+    const yLo = yB + Hn * 0.1, zIn = FW * 0.33, zOut = FW * 0.9, yInTop = yB + Hn * 0.62, yOutTop = lerp(yB, pr.topAt(0, 0.9), 0.8);   // (the wings stand up at the corners of the nose, so the corner openings can reach higher there)
+    const corner = side => { const pts = [], N = lite ? 4 : 8;
+        for (let i = 0; i <= N; i++) pts.push([lerp(zIn, zOut, i / N), yLo]);                                                        // along the bottom
+        for (let i = 1; i <= 3; i++) pts.push([lerp(zOut, FW * 0.94, Math.sin(i / 3 * Math.PI / 2)), lerp(yLo, yOutTop, i / 3)]);    // up the outside, following the corner
+        for (let i = 1; i <= N; i++) { const t = i / N; pts.push([lerp(FW * 0.94, zIn + 0.02, t), lerp(yOutTop, yInTop, Math.pow(t, 0.8))]); }   // the top edge, falling inwards
+        pts.push([zIn, lerp(yInTop, yLo, 0.5)]);
+        return pts.map(([z, y]) => [side * z, y]); };
+    const slotH = Hn * 0.26, slotW = FW * 0.24, slot = [[-slotW, yLo], [slotW, yLo], [slotW + 0.01, yLo + slotH], [-slotW - 0.01, yLo + slotH]];
+    const openings = [corner(1), corner(-1).reverse(), slot];
+    const DEPTH = lite ? 0.012 : 0.02;   // how far the raised edge stands out from the dark floor
+    for (const out of openings) {
+        const n = out.length, cz = out.reduce((a, q) => a + q[0], 0) / n, cy = out.reduce((a, q) => a + q[1], 0) / n;
+        // the dark floor: a fan from the middle of the opening, laid on the face
+        const fp = [faceAt(cy, cz) + 0.003, cy, cz], fi = [];
+        for (let i = 0; i < n; i++) { const [z, y] = out[i]; fp.push(faceAt(y, z) + 0.003, y, z); fi.push(0, 1 + i, 1 + (i + 1) % n); }
+        mesh(fp, fi, mats.intake);
+        // the raised edge round it: inner foot (on the floor, a little inside), crest (standing out), outer foot (on the face)
+        const ep = [], ei = [];
+        for (let i = 0; i < n; i++) {
+            const [za, ya] = out[(i + n - 1) % n], [zb, yb] = out[(i + 1) % n], [z, y] = out[i];
+            let tz = zb - za, ty = yb - ya; const l = Math.hypot(tz, ty) || 1; tz /= l; ty /= l;
+            let nz = ty, ny = -tz; if ((z + nz * 0.01 - cz) ** 2 + (y + ny * 0.01 - cy) ** 2 < (z - cz) ** 2 + (y - cy) ** 2) { nz = -nz; ny = -ny; }   // (pointing out of the opening)
+            const top = Math.max(0, ny), wIn = 0.006, wOut = 0.03 + 0.012 * top;   // (the top edge is a deeper brow, so it shades the opening)
+            for (const [d, lift] of [[-wIn, 0.004], [0, DEPTH], [wOut, 0.002]]) { const zz = z + nz * d, yy = y + ny * d; ep.push(faceAt(yy, zz) + lift, yy, zz); }
+        }
+        for (let i = 0; i < n; i++) { const a = i * 3, b = ((i + 1) % n) * 3; ei.push(a, b, a + 1, b, b + 1, a + 1, a + 1, b + 1, a + 2, b + 1, b + 2, a + 2); }
+        mesh(ep, ei, mats.paintPlain);
+    }
+    // a dark lip under the nose, a little proud of it all the way across
+    { const cp = [], ci = [], NB = lite ? 10 : 22, yc = yB + 0.002;
+        for (let i = 0; i <= NB; i++) { const z = lerp(-FW * 0.98, FW * 0.98, i / NB), xn = faceAt(yB + 0.02, z); cp.push(xn - 0.05, yc + 0.012, z, xn + 0.028, yc + 0.006, z, xn + 0.032, yc - 0.01, z, xn - 0.05, yc - 0.014, z); }
+        for (let i = 0; i < NB; i++) for (let f = 0; f < 3; f++) { const a = i * 4 + f, b = a + 4; ci.push(a, a + 1, b, a + 1, b + 1, b); }
+        mesh(cp, ci, mats.intake); }
+    if (lite) return;
+    // the blade across each corner opening: a slim body-coloured wing, its front edge level with the raised edge round the
+    // opening, rising a little towards the outside
+    for (const side of [1, -1]) { const bp = [], bi = [], NB = 10;
+        for (let i = 0; i <= NB; i++) { const t = i / NB, z = side * lerp(zIn + 0.005, FW * 0.915, t), y = lerp(yLo + Hn * 0.2, yLo + Hn * 0.33, t), th = lerp(0.011, 0.008, t), xf = faceAt(y, z);
+            bp.push(xf + 0.002, y + th * 1.4, z, xf + DEPTH, y + th, z, xf + DEPTH, y - th, z, xf + 0.002, y - th * 1.4, z); }
+        for (let i = 0; i < NB; i++) for (let f = 0; f < 3; f++) { const a = i * 4 + f, b = a + 4; side > 0 ? bi.push(a, a + 1, b, a + 1, b + 1, b) : bi.push(a, b, a + 1, a + 1, b, b + 1); }
+        mesh(bp, bi, mats.paintPlain); }
+    if (!fine) return;
+    // fine dark slats across the floor of each opening, below the blade and in the middle slot (just catching the light)
+    const slat = (za, zb, y) => { const pts = []; for (let i = 0; i <= 6; i++) { const z = lerp(za, zb, i / 6); pts.push(V(faceAt(y, z) + 0.008, y, z)); }
+        car.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 8, 0.0045, 4), mats.carbon)); };
+    for (const side of [1, -1]) for (const f of [0.35, 0.65]) slat(side * (zIn + 0.02), side * FW * 0.88, yLo + Hn * 0.2 * f);
+    for (const f of [0.33, 0.66]) slat(-slotW + 0.01, slotW - 0.01, yLo + slotH * f);
+}
+// The Italian V8's lamps: a slim swept unit at each front corner, running back and out along the top of the wing. A dark glass
+// lens; inside it, a bright strip of light along its front edge that turns back along its outer end (an 'L'), and a second,
+// shorter strip below it. lite: just the main strip.
+function v8Lamps(car, pr, mats, X, lite) {
+    const P = (side, s, u) => skinPoint(pr, X, side, s, u);
+    // a strip on the skin along a path of [s, u] points, 'wd' wide (in metres, across the path), 'lift' off the skin
+    const strip = (side, path, wd, lift, mat) => { const pos = [], idx = [], n = path.length, W = typeof wd === 'function' ? wd : () => wd;
+        for (let i = 0; i < n; i++) {
+            const [s, u] = path[i], [sa, ua] = path[Math.max(0, i - 1)], [sb, ub] = path[Math.min(n - 1, i + 1)];
+            const c = P(side, s, u), dir = P(side, sb, ub).sub(P(side, sa, ua)).normalize(), nrm = P(side, s + 0.004, u).sub(P(side, s - 0.004, u)).cross(P(side, s, u + 0.02).sub(P(side, s, u - 0.02))).normalize();
+            if (nrm.y < 0) nrm.negate(); const off = new THREE.Vector3().crossVectors(nrm, dir).normalize().multiplyScalar(W(i / (n - 1)) / 2);
+            for (const k of [-1, 1]) { const v = c.clone().addScaledVector(off, k).addScaledVector(nrm, lift); pos.push(v.x, v.y, v.z); } }
+        // (wound so that the strip faces outwards, whichever side of the car it is on)
+        const p0 = new THREE.Vector3(...pos.slice(0, 3)), e1 = new THREE.Vector3(...pos.slice(6, 9)).sub(p0), e2 = new THREE.Vector3(...pos.slice(3, 6)).sub(p0), up = e1.cross(e2).y > 0;
+        for (let i = 0; i < n - 1; i++) { const a = i * 2; up ? idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3) : idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+        const m = new THREE.Mesh(g, mat); car.add(m); return m; };
+    const N = lite ? 6 : 14, line = (t0, t1, ds = 0, du = 0) => Array.from({ length: N + 1 }, (_, i) => { const [s, u] = lampV8(lerp(t0, t1, i / N)); return [s + ds, u + du]; });
+    for (const side of [1, -1]) {
+        if (lite) { strip(side, line(0, 1), 0.02, 0.006, mats.head); continue; }
+        if (!mats.lampBed) mats.lampBed = new THREE.MeshStandardMaterial({ color: 0x040507, roughness: 0.18, metalness: 0.5 });
+        strip(side, line(0, 1, 0.004), t => LAMP_V8.lens * lerp(0.3, 1, Math.sqrt(t)), 0.004, mats.lampBed);   // the dark lens, a slim point at its inner end
+        if (!mats.reflector) mats.reflector = new THREE.MeshStandardMaterial({ color: 0x8a929c, metalness: 0.9, roughness: 0.25 });
+        strip(side, line(0.45, 0.93, 0.0072), t => lerp(0.012, 0.03, t), 0.0055, mats.reflector);                 // the lamp's own bright reflector, deep in the outer end
+        strip(side, line(0.02, 0.97, -0.0012 - 0.004 * 0.5), t => lerp(0.007, 0.014, t), 0.0075, mats.head);     // the strip of light along its front edge
+        const [s1, u1] = lampV8(0.97); strip(side, [[s1 - 0.003, u1], [s1 + 0.005, u1 - 0.004], [s1 + 0.014, u1 - 0.008]], 0.014, 0.0075, mats.head);   // ...turning back at the outer end
+    }
+}
+// The Italian V8's lip spoiler: the back edge of the tail turned up right across the car (the 'ducktail' it comes with)
+function v8Lip(car, pr, mats, X, lite, fine) {
+    const NU = lite ? 8 : 18, s0 = 0.935, s1 = 0.998, pos = [], idx = [], ep = [], ei = [];
+    for (let j = 0; j <= NU; j++) { const u = lerp(-0.95, 0.95, j / NU), side = u < 0 ? -1 : 1, a = topPoint(pr, X, side, s0, Math.abs(u)), b = topPoint(pr, X, side, s1, Math.abs(u)), rise = 0.068 * (1 - 0.5 * Math.pow(Math.abs(u), 4));
+        pos.push(a.x, a.y + 0.002, a.z, b.x, b.y + rise, b.z, b.x - 0.004, b.y - 0.01, b.z); ep.push(b.x + 0.012, b.y + rise + 0.0015, b.z, b.x - 0.001, b.y + rise + 0.003, b.z); }
+    for (let j = 0; j < NU; j++) { const a = j * 3, c = j * 2; idx.push(a, a + 1, a + 3, a + 1, a + 4, a + 3, a + 1, a + 2, a + 4, a + 2, a + 5, a + 4); ei.push(c, c + 1, c + 2, c + 1, c + 3, c + 2); }
+    const mk = (pp, ii, mat) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pp, 3)); g.setIndex(ii); g.computeVertexNormals(); const m = new THREE.Mesh(g, mat); car.add(m); return m; };
+    loose('lip', mk(pos, idx, mats.paintPlain), fine ? mk(ep, ei, mats.intake) : null);   // (close up, a fine dark edge along the top)
+}
+// The Italian V8's tail: two round lamps each side (each a ring of light round a bright centre), two big exhaust pipes high
+// in the middle between them, a band of black mesh across the tail under those with the number plate on it, and a deep dark
+// diffuser panel at the bottom. Everything is sized from the tail's own end face, so it follows the sliders.
+// lite (rival cars in a race): plain discs, pipes and panels.
+function v8Tail(car, p, pr, mats, X, lite, fine) {
+    const add = m => { car.add(m); return m; }, box = (dx, dy, dz, mat, x, y, z) => { const m = add(new THREE.Mesh(new THREE.BoxGeometry(dx, dy, dz), mat)); m.position.set(x, y, z); return m; };
+    const xb = X(1), w1 = pr.width(1), yC = pr.topAt(1, 0), yB = Math.min(yC - 0.03, pr.bottomAt(1, 0)), mid = (yB + yC) / 2, H = yC - yB, e = 0.5 + (pr.q.round - 0.38) * 0.6;
+    const halfAt = y => { const v = Math.min(1, Math.abs(y - mid) / (H / 2)), c = Math.sqrt(Math.max(0, 1 - Math.pow(v, 2 / e))); return Math.pow(c, pr.q.round) * w1 * (1 - Math.max(0, (y - mid) / (H / 2)) * 0.06); };
+    const r = Math.max(0.035, Math.min(0.074, H * 0.135)), ty = lerp(yB, yC, 0.73), zOut = Math.max(r * 2.6, halfAt(ty + r) - r * 1.25), zIn = zOut - r * 2.35;
+    if (fine && !mats.detail) mats.detail = new THREE.MeshStandardMaterial({ map: detailTexture('v8'), roughness: 0.45, metalness: 0.05 });
+    // the lamps
+    for (const side of [1, -1]) for (const [z0, inner] of [[zIn, true], [zOut, false]]) {
+        const z = side * z0, at = (m, dx) => { m.position.set(xb - dx, ty, z); car.add(m); return m; };
+        if (!fine) { const l = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.03, 14), mats.tail); l.rotation.z = Math.PI / 2; at(l, 0.005); continue; }
+        at(new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r * 1.06, 0.02, 28), mats.dark), -0.004).rotation.z = Math.PI / 2;          // a dark bezel let into the tail
+        at(new THREE.Mesh(new THREE.TorusGeometry(r * 0.8, r * 0.14, 8, 32), mats.tail), 0.01).rotation.y = Math.PI / 2;                     // the ring of light
+        at(new THREE.Mesh(new THREE.SphereGeometry(r * 0.62, 18, 10), mats.carbon), 0.006).scale.x = 0.3;                                    // a dark dished lens inside it
+        at(new THREE.Mesh(new THREE.SphereGeometry(r * 0.3, 14, 8), inner ? mats.tail : mats.amber), 0.014).scale.x = 0.45;                  // the centre lamp (amber indicators outside)
+        at(new THREE.Mesh(new THREE.TorusGeometry(r * 1.03, 0.0045, 6, 32), mats.chrome), 0.008).rotation.y = Math.PI / 2;
+    }
+    // the exhausts: two big pipes side by side, high in the middle (an electric one has none)
+    if (p.engine !== 'ev') { const pr2 = Math.min(0.058, r * 0.85), gap = Math.min(pr2 * 1.5, (zIn - r) * 0.45);
+        if (gap > pr2 * 1.05) for (const side of [1, -1]) { const z = side * gap;
+            const pipe = add(new THREE.Mesh(new THREE.CylinderGeometry(pr2, pr2, 0.13, lite ? 10 : 18, 1, true), mats.chrome)); pipe.rotation.z = Math.PI / 2; pipe.position.set(xb - 0.025, ty, z);
+            const end = add(new THREE.Mesh(new THREE.CircleGeometry(pr2 * 0.9, lite ? 10 : 16), mats.dark)); end.rotation.y = -Math.PI / 2; end.position.set(xb - (fine ? 0.004 : 0.04), ty, z);
+            if (fine) { const inside = add(new THREE.Mesh(insideOut(new THREE.CylinderGeometry(pr2 * 0.92, pr2 * 0.8, 0.11, 16, 1, true)), mats.dark)); inside.rotation.z = Math.PI / 2; inside.position.set(xb - 0.03, ty, z);
+                const lip = add(new THREE.Mesh(new THREE.TorusGeometry(pr2, 0.006, 6, 20), mats.chrome)); lip.rotation.y = Math.PI / 2; lip.position.set(xb - 0.09, ty, z);
+                const sur = add(new THREE.Mesh(new THREE.TorusGeometry(pr2 * 1.22, 0.012, 6, 24), mats.dark)); sur.rotation.y = Math.PI / 2; sur.position.set(xb - 0.004, ty, z); }
+        } }
+    // the band of mesh under the lamps, in a dark frame, with the number plate in the middle of it
+    const y0 = lerp(yB, yC, 0.3), y1 = Math.min(lerp(yB, yC, 0.56), ty - r - 0.03), gh = y1 - y0, gy = (y0 + y1) / 2, gw = Math.max(0.2, 2 * Math.min(halfAt(y0), halfAt(y1)) - 0.1);
+    if (gh > 0.04) {
+        if (fine) { const g = new THREE.PlaneGeometry(gw, gh), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, lerp(0.26, 0.99, uv.getX(i)), lerp(0.02, 0.48, uv.getY(i)));
+            g.rotateY(-Math.PI / 2); add(new THREE.Mesh(g, mats.detail)).position.set(xb - 0.004, gy, 0);
+            for (const y of [y0, y1]) box(0.04, 0.014, gw + 0.014, mats.dark, xb - 0.014, y, 0);
+            for (const side of [1, -1]) box(0.04, gh, 0.014, mats.dark, xb - 0.014, gy, side * gw / 2);
+            const ph = Math.min(0.085, gh * 0.72), pw = Math.min(0.4, gw * 0.4, ph * 4.2), pg = new THREE.PlaneGeometry(pw, ph), puv = pg.attributes.uv;
+            for (let i = 0; i < puv.count; i++) puv.setY(i, 0.5 + puv.getY(i) * 0.5);
+            pg.rotateY(-Math.PI / 2); add(new THREE.Mesh(pg, mats.detail)).position.set(xb - 0.0245, gy, 0); box(0.02, ph + 0.012, pw + 0.012, mats.carbon, xb - 0.014, gy, 0);
+        } else box(0.02, gh, gw, mats.grille, xb - 0.005, gy, 0);
+    }
+    // the diffuser: a deep dark panel across the bottom of the tail, with a slim red lamp in the middle of it
+    { const yd = lerp(yB, yC, 0.285), sh = new THREE.Shape(), N = 6;   // (it follows the rounded bottom corners of the tail)
+        for (let i = 0; i <= N; i++) { const y = lerp(yB + 0.004, yd, i / N), z = Math.max(0.05, halfAt(y) - 0.012); i ? sh.lineTo(z, y) : sh.moveTo(z, y); }
+        for (let i = N; i >= 0; i--) { const y = lerp(yB + 0.004, yd, i / N); sh.lineTo(-Math.max(0.05, halfAt(y) - 0.012), y); }
+        const dg = new THREE.ShapeGeometry(sh); dg.rotateY(-Math.PI / 2); add(new THREE.Mesh(dg, mats.intake)).position.set(xb - 0.006, 0, 0);
+        if (fine) { box(0.012, 0.02, 0.11, mats.tail, xb - 0.024, lerp(yB, yd, 0.5), 0);
+            const r2 = 0.02, g = new THREE.CircleGeometry(r2, 20), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 0.25, uv.getY(i) * 0.5);   // the badge, between the lamps and the top of the tail
+            g.rotateY(-Math.PI / 2); add(new THREE.Mesh(g, mats.detail)).position.set(xb - 0.003, Math.min(yC - r2 - 0.012, ty + r + 0.03), 0); } }
+}
+// The extra detail on the Italian V8: door mirrors on slim stalks, diffuser fins, wiper, badge, a blade across each side
+// intake, splitter fences, and the interior seen through the glass (the driver on the left with a helmet on, and an empty
+// passenger seat). lite (rival cars in a race): only the mirrors.
+function v8Detail(car, p, pr, mats, X, lite) {
+    const q = pr.q, V = (x, y, z) => new THREE.Vector3(x, y, z), add = m => { car.add(m); return m; };
+    const kit = interiorKit(car, p, mats, lite), { col, part } = kit, D = doorsV8(pr);
+    // door mirrors: a body-coloured shell on a thin stalk from the top of each door, beside the windscreen pillar
+    for (const side of [1, -1]) {
+        const s = D.sP + 0.016, w = pr.width(s), u = q.cabinWB + 0.05, base = V(X(s), pr.surfAt(s, u) - 0.008, side * w * u);
+        const head = V(X(s) + 0.03, base.y + 0.085, side * Math.min(w * u + 0.13, w + 0.02));
+        const arm = add(bar(base, V(head.x - 0.01, head.y - 0.008, head.z - side * 0.02), 0.014, lite ? mats.carbon : mats.interior, 0.028)); if (!lite) col(arm.geometry, 2);
+        const shell = add(new THREE.Mesh(new THREE.SphereGeometry(1, lite ? 8 : 14, lite ? 6 : 10), mats.paintPlain)); shell.scale.set(0.055, 0.03, 0.075); shell.position.copy(head);
+        loose(side > 0 ? 'mirrorR' : 'mirrorL', arm, shell);
+        if (!lite) { const glass = part(new THREE.SphereGeometry(1, 12, 8), 7); glass.scale.set(0.012, 0.022, 0.062); glass.position.set(head.x - 0.046, head.y, head.z); loose(side > 0 ? 'mirrorR' : 'mirrorL', glass); }
+    }
+    if (lite) return;
+    if (!mats.detail) mats.detail = new THREE.MeshStandardMaterial({ map: detailTexture('v8'), roughness: 0.45, metalness: 0.05 });
+    { const w1 = pr.width(1), xT = X(1), yT = pr.base(1), xF = X(0.92), yF = pr.base(0.92);   // diffuser fins: six slim dark blades standing in the diffuser, not hanging below it
+        for (const f of [-0.62, -0.37, -0.12, 0.12, 0.37, 0.62]) { const sh = new THREE.Shape(); sh.moveTo(xT + 0.008, yT + 0.075); sh.lineTo(xF, yF + 0.01); sh.lineTo(xF, yF - 0.004); sh.lineTo(xT + 0.008, yT - 0.022);
+            const g = new THREE.ExtrudeGeometry(sh, { depth: 0.012, bevelEnabled: false, curveSegments: 1 }); g.translate(0, 0, f * w1 - 0.006); add(new THREE.Mesh(g, mats.intake)); } }
+    noseBadge(car, pr, mats, X, 0.035);
+    { const B = VENTS_V8; for (let i = 0; i < 4; i++) { const f = (i + 0.6) / 4.2, s = lerp(B.s0, B.s1, f), ua = lerp(B.u0[0], B.u1[0], f) + 0.012, ub = lerp(B.u0[1], B.u1[1], f) - 0.012;   // louvres across the bonnet vents
+        for (const side of [1, -1]) add(louvreSlat(pr, X, s, 0.0045, side * (side > 0 ? ua : ub), side * (side > 0 ? ub : ua), 0.012, mats.carbon, 4)); } }
+    parkedWiper(car, pr, mats, X, col);
+    // a body-coloured blade across the mouth of each side intake
+    if (q.scallop) for (const side of [1, -1]) { const [, sc1] = pr.scallop, h = pr.shoulder(sc1) - p.ride, y = p.ride + h * 0.5, a = V(X(sc1 - 0.035), y - 0.01, side * (sideZ(pr, sc1 - 0.035, y) + 0.004)), b = V(X(sc1 + 0.02), y + 0.01, side * (sideZ(pr, sc1 + 0.03, y) - 0.012));
+        add(bar(a, b, 0.012, mats.paintPlain, 0.03)); }
+    // splitter end fences
+    if (p.splitter) for (const side of [1, -1]) {
+        const y = pr.base(0.03) + 0.01, xs = X(0.02) - 0.12;
+        const fence = add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.012), mats.carbon)); fence.position.set(xs, y + 0.025, side * p.W * 0.424); loose(side > 0 ? 'splitterR' : 'splitterL', fence);
+    }
+    // ---- the interior, seen through the glass: a dark tub, dashboard, steering wheel, two seats and a helmeted driver ----
+    const span = pr.c1 - pr.c0;
+    cabinFloor(pr, X, pr.c0 + 0.004, pr.c0 + span * Math.min(0.74, D.uR + 0.02), part);
+    const sSeat = Math.min(pr.c1 - 0.05, Math.max(pr.rakeEnd + 0.3 / p.L, pr.c0 + 0.38 * span));   // (the same place as the cockpit view's eye)
+    const wS = pr.width(sSeat), zSeat = wS * q.cabinWB * 0.3, deck = pr.topAt(sSeat, 0.3), xS = X(sSeat);
+    const head = z => Math.max(deck - 0.02, Math.min(deck + 0.17, cabinY(pr, sSeat, Math.abs(z) + 0.05) - 0.13));     // how high a helmet or headrest can sit under the glass
+    dashAndWheel(car, pr, mats, X, kit, { sD: lerp(pr.c0, sSeat, 0.52), sSeat, zD: -zSeat, uD: 0.3, screen: true });
+    bucketSeat(part, xS, head(zSeat), zSeat, 0.4, [0, 1, 5], true);
+    bucketSeat(part, xS, head(-zSeat), -zSeat);
+    helmetedDriver(part, xS, head(-zSeat), -zSeat);
+}
 // A point on the top of the body as it is really built (straight between the body's own points, which are far apart near the
 // middle), for parts that must lie flat on it
 function topPoint(pr, X, side, s, u) {
-    const K = 84, w = pr.width(s), e = 0.5 + (pr.q.round - 0.38) * 0.6, a = Math.min(0.985, Math.abs(u)), z = a * w * (1 - Math.pow(Math.sqrt(1 - Math.pow(a, 2 / pr.q.round)), e) * 0.06); let pz = 0, py = 0;
-    for (let k = K / 4; k <= K / 2; k++) { const an = (k / K) * Math.PI * 2 - Math.PI / 2, uu = Math.pow(Math.max(0, Math.cos(an)), pr.q.round), v = Math.pow(Math.sin(an), e), yt = pr.topAt(s, uu), yb = Math.min(yt - 0.03, pr.bottomAt(s, uu)), y = lerp((yt + yb) / 2, yt, v), zz = uu * w * (1 - v * 0.06);
+    const K = 84, w = pr.width(s), r = pr.q.round, e = pr.ex(s), a = Math.min(0.985, Math.abs(u)), z = a * w * (1 - Math.pow(Math.sqrt(1 - Math.pow(a, 2 / r)), e) * 0.06); let pz = 0, py = 0;
+    for (let k = K / 4; k <= K / 2; k++) { const an = (k / K) * Math.PI * 2 - Math.PI / 2, uu = Math.pow(Math.max(0, Math.cos(an)), r), v = Math.pow(Math.sin(an), e), yt = pr.topAt(s, uu), yb = Math.min(yt - 0.03, pr.bottomAt(s, uu)), y = lerp((yt + yb) / 2, yt, v), zz = uu * w * (1 - v * 0.06);
         if (k > K / 4 && zz <= z) return new THREE.Vector3(X(s), lerp(py, y, (pz - z) / Math.max(1e-6, pz - zz)), side * z);
         pz = zz; py = y; }
     return new THREE.Vector3(X(s), py, side * z);
@@ -1884,11 +2269,11 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     const body = new THREE.Mesh(bodyGeometry(p, pr, lite), mats.paint); car.add(body);
     // the cabin uses the same paint finish as the body, so the roof matches; the dark windows still shine through the clearcoat
     const fin = FINISHES[p.finish] || FINISHES.gloss;
-    const hyper = isHyper(pr.q), s90 = isSuper90(pr.q), lt = isLongtail(pr.q), ev = isElectric(pr.q), w70 = isWedge70(pr.q), gt = isGT60(pr.q), fine = (hyper || s90 || lt || ev || w70 || gt) && !lite;        // fine: the small parts only the closely-seen car gets
+    const hyper = isHyper(pr.q), s90 = isSuper90(pr.q), lt = isLongtail(pr.q), ev = isElectric(pr.q), w70 = isWedge70(pr.q), gt = isGT60(pr.q), v8 = isV8it(pr.q), fine = (hyper || s90 || lt || ev || w70 || gt || v8) && !lite;        // fine: the small parts only the closely-seen car gets
     const cabinMat = new THREE.MeshPhysicalMaterial({ map: cabinTexture(p, pr, fine), transparent: fine, metalness: fin.metalness, roughness: Math.min(fin.roughness, 0.4), clearcoat: 1, clearcoatRoughness: 0.05,
         iridescence: fin.iridescence, iridescenceIOR: 1.6, side: fine ? THREE.BackSide : THREE.DoubleSide });   // (see-through glass shows only its outer skin, so it stays clear; the cabin's faces are wound inwards, so that is 'BackSide')
     if (fine && lt) Object.assign(cabinMat, { metalness: 0, roughness: 0.06, clearcoat: 0.5, envMapIntensity: 0.45, iridescence: 0 });   // (nearly all glass: dark and glossy, without the paint's metal flake washing it out)
-    if (fine && (ev || w70 || gt) && cabinMat.map.userData.gloss) cabinMat.roughnessMap = cabinMat.metalnessMap = cabinMat.clearcoatMap = cabinMat.specularIntensityMap = cabinMat.map.userData.gloss;   // (smooth dark glass; the painted roof keeps the paint's finish)
+    if (fine && (ev || w70 || gt || v8) && cabinMat.map.userData.gloss) cabinMat.roughnessMap = cabinMat.metalnessMap = cabinMat.clearcoatMap = cabinMat.specularIntensityMap = cabinMat.map.userData.gloss;   // (smooth dark glass; the painted roof keeps the paint's finish)
     mats.cabin = cabinMat;
     car.add(new THREE.Mesh(cabinGeometry(p, pr, lite), cabinMat));
     const X = s => p.L / 2 - s * p.L;
@@ -1986,13 +2371,15 @@ export function createCar(design, { merge = false, lite = false, draft = false }
             a.position.set(X(ls) - 0.04, y, z + side * 0.03); a.rotation.y = side * 0.45; a.rotation.z = -0.28; car.add(a);
             const b = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.03, 0.18), mats.head);
             b.position.set(X(ls) + 0.12, y - 0.045, z - side * 0.05); b.rotation.z = -0.28; car.add(b);
-        } else if (!lt && !ev) {
+        } else if (!lt && !ev && q.lamps !== 'swept') {
             const h = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.36), mats.head);
             h.position.set(X(0.045), pr.topAt(0.045, 0.62) - 0.02, side * pr.width(0.045) * 0.62); h.rotation.z = -0.3; car.add(h);
         }
     }
     if (lt) longtailLamps(car, pr, mats, X, lite);
     if (ev) longtailLamps(car, pr, mats, X, lite, lampEV, [0.3, 0.5]);   // blade lamps: a strip of light and two small lenses under a clear cover, swept back along each wing
+    if (q.lamps === 'swept') v8Lamps(car, pr, mats, X, lite);   // slim lamps swept back along the top of each front wing
+    if (q.noseDucts) v8Nose(car, p, pr, mats, X, body, lite, fine && v8);
     // grille: a wide shield shape on the nose (about 0.95 m across on the 60s GT, like the real car)
     if (q.grille === 'shield') {
         const gw = pr.width(0) * 0.68, gh = (pr.centre(0) - pr.base(0)) * 0.55, sh = new THREE.Shape();
@@ -2103,7 +2490,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     if (q.diffuser) {
         const w = pr.width(1) * 1.5, y = pr.base(1) + 0.03;
         const d = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.03, w), mats.carbon); d.position.set(X(1) - 0.02, y, 0); d.rotation.z = 0.22; car.add(d);
-        if (!(fine && ev)) for (let i = -3; i <= 3; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.09, 0.015), mats.carbon); fin.position.set(X(1) - 0.04, y + 0.05, i * w / 7); car.add(fin); }
+        if (!(fine && (ev || v8))) for (let i = -3; i <= 3; i++) { const fin = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.09, 0.015), mats.carbon); fin.position.set(X(1) - 0.04, y + 0.05, i * w / 7); car.add(fin); }
     }
     // a low oval air intake in the nose
     if (q.mouth) {
@@ -2144,6 +2531,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
         }
     }
     if (s90) super90Tail(car, p, pr, mats, X, lite);
+    else if (q.tailRound) v8Tail(car, p, pr, mats, X, lite, fine && v8);
     else if (fine && gt) gtTail(car, p, pr, mats, X);
     else if (p.lamps === 'round' || p.lamps === 'pods') {   // classic round tail lamps, two each side
         const ty = lerp(pr.base(1), pr.centre(1), p.rearGrille ? 0.78 : 0.7);
@@ -2232,7 +2620,8 @@ export function createCar(design, { merge = false, lite = false, draft = false }
         const sk = new THREE.Mesh(new THREE.BoxGeometry(p.L * 0.3, 0.06, 0.05), mats.carbon);
         sk.position.set(X(0.5), p.ride + 0.04, side * (pr.width(0.5) + 0.0)); car.add(sk);
     }
-    if (p.wing === 'ducktail') {
+    if (p.wing === 'ducktail' && v8) v8Lip(car, pr, mats, X, lite, fine);   // (the Italian V8's is the turned-up back edge of its own tail)
+    else if (p.wing === 'ducktail') {
         const d = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.07, pr.width(0.95) * 1.9), mats.paintPlain);
         d.position.set(X(0.95), pr.centre(0.95) + 0.03, 0); d.rotation.z = -0.25; car.add(d);
         if (fine && ev) { const lip = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, pr.width(0.95) * 1.9), mats.carbon); lip.position.set(X(0.95) - 0.143, pr.centre(0.95) + 0.03 + 0.079, 0); lip.rotation.z = -0.25; car.add(lip); }   // a fine carbon lip along its top edge
@@ -2257,6 +2646,7 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     if (ev) electricDetail(car, p, pr, mats, X, lite);
     if (w70) wedgeDetail(car, p, pr, mats, X, lite);
     if (gt) gtDetail(car, p, pr, mats, X, lite);
+    if (v8) v8Detail(car, p, pr, mats, X, lite);
     if (merge) { wheels.forEach(w => { const sp = w.userData.spin; sp.userData.wheelRoot = true; mergeByMaterial(sp); w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
     // (the shared tyre and disc pictures, and shared suspension parts, are kept for the next car)
     return { group: car, mats, wheels, dispose: disposer(car, mats), draft: draft && fine };
@@ -2330,7 +2720,8 @@ const CODE_KEYS_6 = [...CODE_KEYS_5, 'tailMid', 'tailW', 'wheelCovers', 'noseW2'
 const CODE_KEYS_7 = [...CODE_KEYS_6, 'rake', 'screenBow', 'roofDrop', 'bulge'];
 const CODE_KEYS_8 = [...CODE_KEYS_7, 'deckRear'];
 const CODE_KEYS_9 = [...CODE_KEYS_8, 'roofLen', 'rallyLights'];
-const CODE_KEYS = [...CODE_KEYS_9, 'waist'];
+const CODE_KEYS_10 = [...CODE_KEYS_9, 'waist'];
+const CODE_KEYS = [...CODE_KEYS_10, 'noseDucts', 'scallop', 'buttress', 'engineGlass', 'tailRound'];
 export function encodeDesign(d) {
     const arr = CODE_KEYS.map(k => {
         const v = d[k];
@@ -2340,12 +2731,12 @@ export function encodeDesign(d) {
         return v;
     });
     const json = JSON.stringify(arr);
-    return 'SL10-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return 'SL11-' + btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 export function decodeDesign(code) {
     const m = String(code || '').trim().match(/^SL(\d{1,2})-([A-Za-z0-9_-]+)$/);
     if (!m) return null;
-    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS_6, 7: CODE_KEYS_7, 8: CODE_KEYS_8, 9: CODE_KEYS_9, 10: CODE_KEYS }[m[1]];
+    const keys = { 1: CODE_KEYS_1, 2: CODE_KEYS_2, 3: CODE_KEYS_3, 4: CODE_KEYS_4, 5: CODE_KEYS_5, 6: CODE_KEYS_6, 7: CODE_KEYS_7, 8: CODE_KEYS_8, 9: CODE_KEYS_9, 10: CODE_KEYS_10, 11: CODE_KEYS }[m[1]];
     const ver = +m[1];
     try {
         let b = m[2].replace(/-/g, '+').replace(/_/g, '/'); while (b.length % 4) b += '=';
@@ -2372,11 +2763,11 @@ export function decodeDesign(code) {
         const oneOf = (v, list, def) => list.includes(v) ? v : def;
         Object.assign(d, SHAPE_DEFAULTS);
         if (ver > 1) {
-            d.wbFrac = num(raw.wbFrac, 0.5, 0.66, 0.6); d.axleShift = num(raw.axleShift, -0.08, 0.08, 0); d.round = num(raw.round, 0.3, 0.7, 0.38);
+            d.wbFrac = num(raw.wbFrac, 0.5, 0.66, 0.6); d.axleShift = num(raw.axleShift, -0.08, 0.08, 0); d.round = num(raw.round, 0.25, 0.7, 0.38);
             d.fenderH = num(raw.fenderH, 0, 0.25, 0.06); d.fenderReach = num(raw.fenderReach, 1.8, 3.5, 2.5);
-            d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass', 'visor', 'open'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
-            d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade', 'hidden', 'twin'], 'slim'); d.bumpers = !!raw.bumpers;
-            d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof', 'snorkel', 'bonnetvent', 'louvres'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad'], 'none');
+            d.cabinStyle = oneOf(raw.cabinStyle, ['canopy', 'glasshouse', 'bubble', 'tallglass', 'visor', 'open', 'berlinetta'], 'canopy'); d.cabinWB = num(raw.cabinWB, 0.6, 0.95, 0.82); d.cabinWT = num(raw.cabinWT, 0.4, 0.8, 0.58);
+            d.grille = oneOf(raw.grille, ['none', 'shield'], 'none'); d.lamps = oneOf(raw.lamps, ['slim', 'round', 'pods', 'blade', 'hidden', 'twin', 'swept'], 'slim'); d.bumpers = !!raw.bumpers;
+            d.scoop = oneOf(raw.scoop, ['none', 'bonnet', 'roof', 'snorkel', 'bonnetvent', 'louvres'], 'none'); d.exhaust = oneOf(raw.exhaust, ['none', 'twin', 'quad', 'high'], 'none');
         }
         if (ver >= 3) {
             d.cross = oneOf(raw.cross, ['flat', 'triple', 'vee'], 'flat'); d.crossB = num(raw.crossB, 0, 0.12, 0.07); d.crossW = num(raw.crossW, 0, 0.15, 0.09);
@@ -2390,6 +2781,7 @@ export function decodeDesign(code) {
         if (ver >= 8) d.deckRear = num(raw.deckRear, 0.8, 1.3, 1);
         if (ver >= 9) { d.roofLen = num(raw.roofLen, 0, 0.95, 0); d.rallyLights = !!raw.rallyLights; }
         if (ver >= 10) d.waist = num(raw.waist, 0.8, 1, 0.95);
+        if (ver >= 11) { d.noseDucts = !!raw.noseDucts; d.scallop = !!raw.scallop; d.buttress = !!raw.buttress; d.engineGlass = !!raw.engineGlass; d.tailRound = !!raw.tailRound; }
         return tidyDesign(d);   // (closed cars keep their old limits; only a Formula racer may be up to 5.6 m long)
     } catch (e) { return null; }
 }
