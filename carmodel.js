@@ -368,7 +368,7 @@ function cabinTexture(d, pr, seeThrough = false) {
     const style = pr.q.cabinStyle;
     x.fillStyle = style === 'glasshouse' || style === 'tallglass' || style === 'visor' || style === 'berlinetta' ? d.paint : glass; x.fillRect(0, 0, W, H);
     if (style === 'glasshouse' && gt && seeThrough) {
-        gloss = document.createElement('canvas'); gloss.width = W / 2; gloss.height = H / 2; const mk = gloss.getContext('2d'); mk.scale(0.5, 0.5);
+        gloss = document.createElement('canvas'); gloss.width = W; gloss.height = H; const mk = gloss.getContext('2d');   // (full size: the slim chrome window frames are marked on it)
         cabin60(x, d, pr, W, Y, rake, 'rgba(9,13,18,0.67)', mk);
     } else if (style === 'glasshouse') {
         x.fillStyle = glass;
@@ -494,14 +494,20 @@ function cabin60(x, d, pr, W, Y, rake, glass, mk) {
     const r0 = Math.min(0.9, D.roofEnd + 0.07), rear = [[r0, sTop + 0.004], [0.955, sTop], [0.955, 1 - sTop], [r0, 1 - sTop - 0.004]];
     const panes = [screen, win, mir(win), quarter, mir(quarter), rear]; if (uP - 0.008 > 0.06) panes.push(light, mir(light));
     const chrome = x.createLinearGradient(0, Y(0.75), 0, Y(0.25)); for (const [t, c] of [[0, '#8f979f'], [0.22, '#d3d8de'], [0.3, '#9aa1a9'], [0.5, '#c9ced5'], [0.7, '#9aa1a9'], [0.78, '#d3d8de'], [1, '#8f979f']]) chrome.addColorStop(t, c);   // (grey chrome, lighter where it faces the sky)
-    x.lineJoin = 'round'; x.lineCap = 'round'; if (mk) { mk.fillStyle = 'rgb(255,255,255)'; mk.fillRect(0, 0, W, Y(0)); }
+    // (on the marker picture, blue says how metallic a part is and green how smooth: the paint as its finish is, the chrome
+    // frames fully metal and mirror-smooth. A matte car keeps the old painted-on grey frames.)
+    const fin = FINISHES[d.finish] || FINISHES.gloss, real = !!mk && !!fin.clearcoat, bright = real ? '#f4f6f9' : chrome;
+    const mkChrome = `rgb(255,${Math.round(255 * Math.min(1, 0.045 / Math.min(gtRough(fin), 0.4)))},255)`;
+    x.lineJoin = 'round'; x.lineCap = 'round'; if (mk) { mk.lineJoin = mk.lineCap = 'round'; mk.fillStyle = real ? `rgb(255,255,${Math.round(255 * fin.metalness)})` : 'rgb(255,255,255)'; mk.fillRect(0, 0, W, Y(0)); }
     // (each pane is cut out of the paint first, so the glass really is see-through; then a dark rubber seal and a chrome frame go round it)
     for (const p of panes) {
         poly(x, p); x.globalCompositeOperation = 'destination-out'; x.fillStyle = '#000'; x.fill(); x.globalCompositeOperation = 'source-over'; x.fillStyle = glass; x.fill();
-        x.strokeStyle = '#07090c'; x.lineWidth = 2.6; x.stroke(); x.strokeStyle = chrome; x.lineWidth = 1.0; x.stroke();
-        if (mk) { poly(mk, p); mk.globalCompositeOperation = 'destination-out'; mk.fillStyle = '#000'; mk.fill(); mk.globalCompositeOperation = 'source-over'; mk.fillStyle = GLASS_EV; mk.fill(); } }
+        x.strokeStyle = '#07090c'; x.lineWidth = real ? 3 : 2.6; x.stroke(); x.strokeStyle = bright; x.lineWidth = real ? 1.5 : 1.0; x.stroke();
+        if (mk) { poly(mk, p); mk.globalCompositeOperation = 'destination-out'; mk.fillStyle = '#000'; mk.fill(); mk.globalCompositeOperation = 'source-over'; mk.fillStyle = GLASS_EV; mk.fill();
+            if (real) { mk.strokeStyle = mkChrome; mk.lineWidth = 1.5; mk.stroke(); } } }
     // chrome rain gutters along the edges of the roof
-    for (const v of [0.369, 0.631]) { x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 1.8; x.beginPath(); x.moveTo(0.03 * W, Y(v)); x.lineTo((qE + 0.02) * W, Y(v)); x.stroke(); x.strokeStyle = chrome; x.lineWidth = 0.8; x.stroke(); }
+    for (const v of [0.369, 0.631]) { x.strokeStyle = 'rgba(0,0,0,0.5)'; x.lineWidth = 1.8; x.beginPath(); x.moveTo(0.03 * W, Y(v)); x.lineTo((qE + 0.02) * W, Y(v)); x.stroke(); x.strokeStyle = bright; x.lineWidth = real ? 1.1 : 0.8; x.stroke();
+        if (real) { mk.strokeStyle = mkChrome; mk.lineWidth = 1.1; mk.beginPath(); mk.moveTo(0.03 * W, Y(v)); mk.lineTo((qE + 0.02) * W, Y(v)); mk.stroke(); } }
     // the framed door: its cut runs up in front of the door glass, along under the gutter and down behind the glass
     const cut = [[uP, belt - 0.004], [uP, 0.3645], [uB - 0.004, 0.3645], [uB - 0.004, belt - 0.004]];
     for (const pts of [cut, mir(cut)]) for (const [col, off, wd] of [['rgba(255,255,255,0.2)', 0.7, 0.8], ['rgba(0,0,0,0.75)', 0, 1.1]]) {
@@ -631,7 +637,8 @@ function makeWheel(p, mats, front, lite = false, covered = false, o = {}) {   //
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(rimR, rimR, tw * 0.9, ts, 1, true), mats.rim);
     barrel.rotation.x = Math.PI / 2; spin.add(barrel);
     // the rim's lip, a bright edge where the tyre meets the wheel
-    if (!lite) { const lip = new THREE.Mesh(new THREE.TorusGeometry(rimR * 0.99, 0.011, 6, ts), mats.rim); lip.position.z = tw * 0.44; spin.add(lip); }
+    const wire = !covered && p.rim === 'wire';   // (a wire wheel has its own dished rim, hub and spokes: see wireWheel)
+    if (!lite && !wire) { const lip = new THREE.Mesh(new THREE.TorusGeometry(rimR * 0.99, 0.011, 6, ts), mats.rim); lip.position.z = tw * 0.44; spin.add(lip); }
     const disc = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.82, rimR * 0.82, 0.032, lite ? 16 : 32), mats.brake);
     disc.rotation.x = Math.PI / 2; disc.position.z = 0.02; spin.add(disc);
     // the calliper: a chunky clamp over the top-back of the disc (it doesn't turn with the wheel)
@@ -639,8 +646,7 @@ function makeWheel(p, mats, front, lite = false, covered = false, o = {}) {   //
     const body = new THREE.Mesh(new THREE.BoxGeometry(rimR * 0.62, 0.075, 0.1), mats.caliper); cal.add(body);
     if (!lite) for (const dz of [-0.045, 0.045]) { const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, rimR * 0.66, 10), mats.caliper); pad.rotation.z = Math.PI / 2; pad.position.set(0, 0.03, dz); cal.add(pad); }
     const face = new THREE.Group(); face.position.z = tw * 0.42; spin.add(face);
-    const hub = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.18, rimR * 0.2, 0.05, 16), mats.rim);
-    hub.rotation.x = Math.PI / 2; face.add(hub);
+    if (!wire || lite) { const hub = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.18, rimR * 0.2, 0.05, 16), mats.rim); hub.rotation.x = Math.PI / 2; face.add(hub); }
     // wheel nuts round the hub
     if (o.nut) { const n = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.11, rimR * 0.13, 0.05, 6), mats.rim); n.rotation.x = Math.PI / 2; n.position.z = 0.04; face.add(n); }
     else if (!lite && !covered && p.rim !== 'wire') for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, n = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.03, 6), mats.chrome); n.rotation.x = Math.PI / 2; n.position.set(Math.cos(a) * rimR * 0.12, Math.sin(a) * rimR * 0.12, 0.03); face.add(n); }
@@ -656,10 +662,7 @@ function makeWheel(p, mats, front, lite = false, covered = false, o = {}) {   //
     if (rim === 'ten') spoke(10, rimR * 0.09);
     if (rim === 'mesh') { spoke(14, rimR * 0.05); const m = new THREE.Group(); face.add(m); spoke(14, rimR * 0.05, 0.5); }
     if (rim === 'turbine') spoke(12, rimR * 0.16, 0.6, 0.02, true);
-    if (rim === 'wire') {                 // many thin crossed spokes and a central spinner
-        spoke(24, rimR * 0.022, 0.18, 0.01); spoke(24, rimR * 0.022, -0.18, 0.01);
-        for (const r of [0, Math.PI / 2]) { const ear = new THREE.Mesh(new THREE.BoxGeometry(rimR * 0.5, rimR * 0.08, 0.04), mats.rim); ear.rotation.z = r + 0.4; ear.position.z = 0.03; face.add(ear); }
-    }
+    if (rim === 'wire') wireWheel(spin, rimR, tw, mats, lite, !!o.nut);
     if (rim === 'disc') {
         const d = new THREE.Mesh(new THREE.CylinderGeometry(rimR * 0.98, rimR * 0.98, 0.03, 32), mats.rim);
         d.rotation.x = Math.PI / 2; face.add(d);
@@ -668,6 +671,44 @@ function makeWheel(p, mats, front, lite = false, covered = false, o = {}) {   //
     // at speed the spokes blur into a soft disc, like a real wheel filmed going fast (see in the race)
     if (mats.spinBlur && !covered) { const b = new THREE.Mesh(new THREE.CircleGeometry(rimR * 0.97, 32), mats.spinBlur); b.position.z = tw * 0.42 + 0.045; g.add(b); }
     return g;
+}
+
+// Thin round rods, all in one shape (one thing to draw however many there are). list: [ax, ay, az, bx, by, bz] for each rod.
+function rodsGeometry(list, r, sides = 4) {
+    const pos = [], nor = [], idx = [], a = new THREE.Vector3(), b = new THREE.Vector3(), d = new THREE.Vector3(), u = new THREE.Vector3(), v = new THREE.Vector3(), n = new THREE.Vector3();
+    for (const s of list) {
+        a.set(s[0], s[1], s[2]); b.set(s[3], s[4], s[5]); d.subVectors(b, a).normalize(); u.set(0, 0, 1).cross(d).normalize(); v.crossVectors(d, u);
+        const base = pos.length / 3;
+        for (let k = 0; k < sides; k++) { const t = k / sides * Math.PI * 2; n.copy(u).multiplyScalar(Math.cos(t)).addScaledVector(v, Math.sin(t));
+            for (const e of [a, b]) { pos.push(e.x + n.x * r, e.y + n.y * r, e.z + n.z * r); nor.push(n.x, n.y, n.z); } }
+        for (let k = 0; k < sides; k++) { const i0 = base + k * 2, i1 = base + ((k + 1) % sides) * 2; idx.push(i0, i1, i0 + 1, i1, i1 + 1, i0 + 1); }
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); g.setIndex(idx);
+    return g;
+}
+// A wire wheel, as on a 1960s grand tourer: a dished rim with a rolled lip, a hub that stands out from the middle, and 72 thin
+// spokes laced the way real ones are. Half run from the front of the hub back to the rim and half from the back of the hub
+// forwards, and each one leans the opposite way to its neighbour, so they cross. In the middle is a three-eared 'knock-off'
+// spinner: the big nut that held such a wheel on, undone with a hammer. All of the spokes are one shape, so a wheel is
+// only a handful of things to draw.
+// lite (rival cars in a race): 24 thicker spokes and a plain cap. plainHub: no spinner (the Formula racer has its own wheel nut).
+function wireWheel(spin, rimR, tw, mats, lite, plainHub) {
+    const F = tw * 0.42, TAU = Math.PI * 2, at = (r, a, z) => [Math.cos(a) * r, Math.sin(a) * r, z];
+    const lace = (n, rHub, zHub, zRim, lean, turn) => Array.from({ length: n }, (_, i) => { const a = (i + turn) / n * TAU; return [...at(rHub, a + (i % 2 ? -lean : lean), zHub), ...at(rimR * 0.9, a, zRim)]; });
+    const lathe = (pts, seg) => { const m = new THREE.Mesh(new THREE.LatheGeometry(pts.map(([r, z]) => new THREE.Vector2(r, z)), seg), mats.rim); m.rotation.x = Math.PI / 2; spin.add(m); return m; };
+    if (lite) { spin.add(new THREE.Mesh(rodsGeometry(lace(24, rimR * 0.17, F + 0.012, F - 0.03, 0.75, 0), rimR * 0.02, 3), mats.rim)); return; }
+    // the rim: a rolled lip at the edge, then a slope down into the well where the spokes are fixed
+    lathe([[1, 0.4], [1, 0.455], [0.988, 0.474], [0.968, 0.478], [0.948, 0.462], [0.93, 0.41], [0.905, 0.3], [0.89, 0.14], [0.89, -0.3]].map(([r, z]) => [r * rimR, z * tw]), 36);
+    // the hub: wide at the back, narrowing to a flange at the front
+    lathe([[0.31, F - 0.085], [0.31, F - 0.07], [0.2, F - 0.05], [0.16, F - 0.012], [0.2, F - 0.002], [0.2, F + 0.012], [0.12, F + 0.016]].map(([r, z]) => [r * rimR, z]), 14);
+    spin.add(new THREE.Mesh(rodsGeometry([...lace(36, rimR * 0.185, F + 0.004, tw * 0.17, 0.62, 0), ...lace(36, rimR * 0.3, F - 0.076, tw * 0.3, 0.4, 0.5)], Math.max(0.0019, rimR * 0.0082), 3), mats.rim));
+    if (plainHub) return;
+    // the spinner: three ears round a domed cap
+    const ears = new THREE.Shape(), N = 30, r0 = rimR * 0.15, r1 = rimR * 0.38;
+    for (let i = 0; i < N; i++) { const a = i / N * TAU, r = r0 + (r1 - r0) * Math.pow(0.5 + 0.5 * Math.cos(3 * a), 1.5); ears[i ? 'lineTo' : 'moveTo'](Math.cos(a + 0.5) * r, Math.sin(a + 0.5) * r); }
+    const eg = new THREE.ExtrudeGeometry(ears, { depth: 0.01, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 1, curveSegments: 1 }); eg.deleteAttribute('uv');
+    const ear = new THREE.Mesh(eg, mats.rim); ear.position.z = F + 0.02; spin.add(ear);
+    lathe([[0.2, F + 0.012], [0.19, F + 0.03], [0.16, F + 0.044], [0.1, F + 0.054], [0, F + 0.058]].map(([r, z]) => [r * rimR, z]), 16);
 }
 
 // =====================================================================
@@ -1165,7 +1206,38 @@ function panelLines60(x, d, W, H, Y, pxU, pxV) {
         x.fillStyle = plug ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.6)'; x.beginPath(); x.arc(cx, cy, r * (plug ? 0.45 : 0.8), 0, Math.PI * 2); x.fill(); });
     x.restore();
 }
+// The 60s GT's own shine. Its paint, glass and chrome reflect the room as usual, but whatever they reflect from below the
+// horizon (the floor, the road) is dimmed, and a slim band just above the horizon is brightened. On the rounded flanks
+// that draws the bright line along the side that deep, hand-polished paint shows, with rich dark colour under it, and it
+// gives the chrome the bright-over-dark look of a mirror. Nothing is added that the surroundings don't already hold, so a
+// dark garage or a night race stays dark. Only this car's materials get it (they are given their own shader program).
+// low: how bright reflections from below the horizon stay (1 = untouched). band: how much brighter the line is.
+const GT_SHINE = { paint: [0.42, 0.55], chrome: [0.6, 0.8] };
+function horizonShine(mat, [low, band]) {
+    mat.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+#if defined( RE_IndirectSpecular ) && defined( USE_ENVMAP )
+{
+    #ifdef USE_CLEARCOAT
+        vec3 hzN = geometryClearcoatNormal;
+    #else
+        vec3 hzN = geometryNormal;
+    #endif
+    float hzY = inverseTransformDirection( reflect( - geometryViewDir, hzN ), viewMatrix ).y;
+    float hzK = mix( ${low.toFixed(3)}, 1.0, smoothstep( -0.12, 0.0, hzY ) ) + ${band.toFixed(3)} * smoothstep( -0.04, 0.015, hzY ) * ( 1.0 - smoothstep( 0.015, 0.3, hzY ) );
+    radiance *= hzK; clearcoatRadiance *= hzK;
+}
+#endif`); };
+    mat.customProgramCacheKey = () => 'gtshine' + low + '/' + band;
+    return mat;
+}
+// (the GT's paint is also smoother under its clear coat than the other cars', so reflections in it are crisper)
+const gtRough = f => f.clearcoat ? f.roughness * 0.6 : f.roughness;
 function paintMaterial(design, plain = false, hd = false) {
+    const m = paintMaterialPlain(design, plain, hd), f = FINISHES[design.finish];
+    if (isGT60(design) && f.clearcoat) { m.roughness = gtRough(f); m.clearcoatRoughness = 0.03; horizonShine(m, GT_SHINE.paint); }
+    return m;
+}
+function paintMaterialPlain(design, plain, hd) {
     const f = FINISHES[design.finish], useMap = !plain && (hasLivery(design) || isDetailed(design));
     return new THREE.MeshPhysicalMaterial({ color: useMap ? '#ffffff' : design.paint, map: useMap ? liveryTexture(design, hd && isDetailed(design)) : null,
         metalness: f.metalness, roughness: f.roughness, clearcoat: f.clearcoat, clearcoatRoughness: 0.08,
@@ -1175,19 +1247,21 @@ function paintMaterial(design, plain = false, hd = false) {
 }
 function buildMaterials(design, lite = false) {
     const rc = RIM_COLOURS[design.rimColour];
+    // (the 60s GT's chrome is polished smoother than the other cars', with the mirror-like shine described at horizonShine)
+    const chrome = () => isGT60(design) ? horizonShine(new THREE.MeshStandardMaterial({ color: 0xf6f8fb, metalness: 1, roughness: 0.035, envMapIntensity: 1.35 }), GT_SHINE.chrome) : null;
     return {
         paint: paintMaterial(design, false, !lite),
         paintPlain: paintMaterial(design, true),
         glass: new THREE.MeshPhysicalMaterial({ color: 0x0a0d12, metalness: 0.3, roughness: 0.06, clearcoat: 1, side: THREE.DoubleSide }),
         carbon: new THREE.MeshStandardMaterial({ color: 0x15171b, metalness: 0.4, roughness: 0.45 }),
         tyre: new THREE.MeshStandardMaterial({ color: 0xffffff, map: tyreTexture(), roughness: 0.88, side: THREE.DoubleSide }),
-        rim: rc === 'chrome' ? new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.05 })
+        rim: rc === 'chrome' ? chrome() || new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.05 })
                              : new THREE.MeshStandardMaterial({ color: rc, metalness: 0.8, roughness: 0.3, side: THREE.DoubleSide }),
         brake: new THREE.MeshStandardMaterial({ color: 0xffffff, map: discTexture(), metalness: 0.85, roughness: 0.38, emissive: 0xff4010, emissiveMap: discTexture(), emissiveIntensity: 0 }),   // (glows when the brakes get hot)
         spinBlur: spinBlurMaterial(design),
         caliper: new THREE.MeshStandardMaterial({ color: design.caliper, roughness: 0.4 }),
         dark: new THREE.MeshStandardMaterial({ color: 0x0b0c0f, roughness: 0.6 }),
-        chrome: new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.08 }),
+        chrome: chrome() || new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1, roughness: 0.08 }),
         lens: new THREE.MeshPhysicalMaterial({ color: 0x1a2028, roughness: 0.05, clearcoat: 1, transparent: true, opacity: 0.45, depthWrite: false }),
         grille: new THREE.MeshStandardMaterial({ color: 0x15171b, metalness: 0.6, roughness: 0.4 }),
         intake: new THREE.MeshStandardMaterial({ color: 0x0b0c0f, roughness: 0.7, side: THREE.DoubleSide }),
@@ -2297,6 +2371,8 @@ export function createCar(design, { merge = false, lite = false, draft = false }
         iridescence: fin.iridescence, iridescenceIOR: 1.6, side: fine ? THREE.BackSide : THREE.DoubleSide });   // (see-through glass shows only its outer skin, so it stays clear; the cabin's faces are wound inwards, so that is 'BackSide')
     if (fine && lt) Object.assign(cabinMat, { metalness: 0, roughness: 0.06, clearcoat: 0.5, envMapIntensity: 0.45, iridescence: 0 });   // (nearly all glass: dark and glossy, without the paint's metal flake washing it out)
     if (fine && (ev || w70 || gt || v8) && cabinMat.map.userData.gloss) cabinMat.roughnessMap = cabinMat.metalnessMap = cabinMat.clearcoatMap = cabinMat.specularIntensityMap = cabinMat.map.userData.gloss;   // (smooth dark glass; the painted roof keeps the paint's finish)
+    if (gt && fin.clearcoat) { cabinMat.roughness = Math.min(gtRough(fin), 0.4); cabinMat.clearcoatRoughness = 0.03; horizonShine(cabinMat, GT_SHINE.paint);
+        if (fine && cabinMat.metalnessMap) cabinMat.metalness = 1; }   // (the marker picture now says how metallic each part is: the paint as its finish is, the window frames fully: see cabin60)
     mats.cabin = cabinMat;
     car.add(new THREE.Mesh(cabinGeometry(p, pr, lite), cabinMat));
     const X = s => p.L / 2 - s * p.L;
@@ -2672,7 +2748,9 @@ export function createCar(design, { merge = false, lite = false, draft = false }
     if (v8) v8Detail(car, p, pr, mats, X, lite);
     if (merge) { wheels.forEach(w => { const sp = w.userData.spin; sp.userData.wheelRoot = true; mergeByMaterial(sp); w.userData.wheelRoot = true; mergeByMaterial(w); }); mergeByMaterial(car); }
     // (the shared tyre and disc pictures, and shared suspension parts, are kept for the next car)
-    return { group: car, mats, wheels, dispose: disposer(car, mats), draft: draft && fine };
+    // (the 60s GT asks the garage for a soft shadow where it sits on the floor: its size, and where each tyre touches)
+    const ground = gt && !lite ? { L: p.L, W: p.W, tyres: wheels.map(w => [w.position.x, w.position.z, w.userData.front ? 0.27 : 0.32]) } : null;
+    return { group: car, mats, wheels, dispose: disposer(car, mats), draft: draft && fine, ground };
 }
 // how to throw a car away when it is finished with, giving its memory back
 function disposer(car, mats) {

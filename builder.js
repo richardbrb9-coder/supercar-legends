@@ -11,7 +11,7 @@ import { GarageStage } from './garagelights.js';
 // =====================================================================
 //  SCENE
 // =====================================================================
-let renderer, scene, camera, controls, car = null, ground, floor, stage = null, lastT = 0, raf = null, started = false, mats, lightsMode = 'studio';
+let renderer, scene, camera, controls, car = null, ground, floor, contact = null, stage = null, lastT = 0, raf = null, started = false, mats, lightsMode = 'studio';
 let design = loadDesign();
 const saveDesign = () => saveDesignTo(design);
 const stats = () => carStats(design);
@@ -21,8 +21,57 @@ function buildCar(draft = false) {
     if (car) { scene.remove(car.group); car.dispose(); }
     car = createCar(design, { draft: draft === true, ...(window.__buildOpts || {}) }); mats = car.mats;   // (__buildOpts: testing only, to look at the race builds of a car)
     clearTimeout(sharpTimer); if (car.draft) sharpTimer = setTimeout(() => buildCar(false), 450);
+    setContactShadow(car.ground);
     setLights(lightsMode);
     scene.add(car.group);
+    measureCar(); fitCamera();
+}
+// A soft shadow on the floor under a car that asks for one (the 60s GT), so it sits on the ground instead of floating:
+// a wide pale one round the whole car, a darker one under the body and a small dark patch where each tyre touches.
+// It is a small picture drawn once each time the car changes, so it costs nothing to turn. Studio, Day and Night only:
+// Showroom draws its own shadow and Spotlight has a mirror floor. g: { L, W, tyres: [[x, z, width], ...] }, or nothing for no shadow
+let contactKey = '';
+function setContactShadow(g) {
+    const key = g ? JSON.stringify(g) : '';
+    if (key === contactKey) return;
+    contactKey = key;
+    if (contact) { scene.remove(contact); contact.geometry.dispose(); contact.material.map.dispose(); contact.material.dispose(); contact = null; }
+    if (!g) return;
+    const PAD = 1.3, w = g.L + PAD * 2, h = g.W + PAD * 2, K = 64, c = document.createElement('canvas'); c.width = Math.round(w * K); c.height = Math.round(h * K);
+    const x = c.getContext('2d'), FAR = 4000;
+    // (a blurred shape, the way that works in every browser: the shape itself is drawn far off the picture and only its soft shadow lands on it)
+    const soft = (cx, cz, len, wid, blur, alpha, round) => { x.shadowColor = `rgba(0,0,0,${alpha})`; x.shadowBlur = blur * K; x.shadowOffsetX = FAR; x.fillStyle = '#000';
+        x.beginPath(); x[x.roundRect ? 'roundRect' : 'rect']((cx + w / 2 - len / 2) * K - FAR, (cz + h / 2 - wid / 2) * K, len * K, wid * K, round * K); x.fill(); };   // (square corners on an old browser: the blur hides them)
+    soft(0, 0, g.L * 0.98, g.W * 0.92, 0.5, 0.5, 0.5);        // wide and pale
+    soft(0, 0, g.L * 0.86, g.W * 0.72, 0.22, 0.6, 0.3);       // under the body
+    for (const [tx, tz, tw] of g.tyres) soft(tx, tz, 0.3, tw * 0.9, 0.05, 0.85, 0.06);   // where each tyre touches
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    contact = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false }));
+    contact.rotation.x = -Math.PI / 2; contact.position.y = 0.004; contact.renderOrder = 1; scene.add(contact);
+}
+// How far back the camera must be for the whole car to stay in view as it turns. On a wide screen the usual distance already
+// does it; on an upright phone the view is narrow and the ends of the car were cut off, so there the camera moves back.
+// It is worked out from the car's real size and how wide the view is: every corner of the car has to fit at every turn.
+const BASE_DIST = Math.hypot(5.0, 1.9 - 0.6, 5.3);   // the usual starting distance
+let autoDist = BASE_DIST, carHalf = [2.4, 1.0];
+function measureCar() {
+    const b = new THREE.Box3().setFromObject(car.group);
+    if (isFinite(b.min.x)) carHalf = [Math.max(-b.min.x, b.max.x), Math.max(-b.min.z, b.max.z)];
+}
+function fitDistance() {
+    const T = Math.tan(camera.fov * Math.PI / 360) * camera.aspect, [hl, hw] = carHalf; let need = 0;
+    for (let i = 0; i <= 24; i++) { const a = i / 24 * Math.PI / 2, c = Math.cos(a), s = Math.sin(a);
+        // (a corner's distance to the side of the view's centre line, and how much nearer the camera it is than the middle of the car)
+        for (const z of [hw, -hw]) need = Math.max(need, Math.abs(hl * c - z * s) / T + (hl * s + z * c)); }
+    return Math.max(BASE_DIST, need * 1.03);
+}
+function fitCamera() {
+    if (!camera || !controls) return;
+    const want = fitDistance(), off = camera.position.clone().sub(controls.target), cur = off.length();
+    controls.maxDistance = Math.max(14, want * 1.3);
+    // (only if the camera is still where it was last put: once someone has zoomed for themselves, it is left alone)
+    if (Math.abs(cur - autoDist) < autoDist * 0.02 && Math.abs(want - cur) > 0.01) camera.position.copy(controls.target).addScaledVector(off, want / cur);
+    autoDist = want;
 }
 const hemi = new THREE.HemisphereLight(0xdde6ff, 0x1a1c20, 0.6);
 const sun = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -48,6 +97,7 @@ function setLights(mode) {
     scene.environmentIntensity = { studio: 1, day: 1.2, night: 0.35, spotlight: 0.8, showroom: 1 }[mode];
     const dark = mode === 'night' || mode === 'spotlight';
     if (mats) { mats.head.emissiveIntensity = dark ? 3 : 1.2; mats.tail.emissiveIntensity = dark ? 3 : 1.4; }
+    if (contact) contact.visible = mode !== 'spotlight' && mode !== 'showroom';
     if (!stage) stage = new GarageStage(renderer, scene, { hemi, sun, spare });
     stage.set(mode, car, [ground, floor]);
 }
@@ -86,6 +136,7 @@ function resize() {
     const el = renderer.domElement.parentElement, w = el.clientWidth, h = el.clientHeight;
     if (!w || !h) return;
     renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    fitCamera();
 }
 function frame() {
     raf = requestAnimationFrame(frame);
@@ -304,10 +355,11 @@ export function enter() {
 export function leave() { if (raf) { cancelAnimationFrame(raf); raf = null; } clearPaintPool(); }   // (and give back the spare paint canvases)
 export function refreshUnits() { if (started) renderStats(); }
 // Put the camera at a fixed angle (used for photo angles and testing)
-// (zoom, targetY, targetX: testing only, for close-up photos of small details)
+// (zoom, targetY, targetX: testing only, for close-up photos of small details. dist left empty: the distance the camera is at now)
 export function setView(azimuthDeg, elevationDeg = 14, dist = 9, zoom, targetY = 0.6, targetX = 0) {
     if (!controls) return;
     controls.autoRotate = false; syncTurntableButton();
+    if (dist == null) dist = camera.position.distanceTo(controls.target);
     const az = azimuthDeg * Math.PI / 180, el = elevationDeg * Math.PI / 180;
     camera.position.set(targetX + Math.cos(az) * Math.cos(el) * dist, 0.6 + Math.sin(el) * dist, Math.sin(az) * Math.cos(el) * dist);
     controls.target.set(targetX, targetY, 0); controls.update();
@@ -324,6 +376,6 @@ export function measure(n = 60) {
     }
     times.sort((a, b) => a - b);
     const i = renderer.info;
-    return { median: +times[n >> 1].toFixed(2), worst: +times[n - 1].toFixed(2), calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, programs: i.programs.length,
+    return { dist: +camera.position.distanceTo(controls.target).toFixed(2), fit: +fitDistance().toFixed(2), aspect: +camera.aspect.toFixed(2), half: carHalf.map(v => +v.toFixed(2)), median: +times[n >> 1].toFixed(2), worst: +times[n - 1].toFixed(2), calls: i.render.calls, triangles: i.render.triangles, geometries: i.memory.geometries, textures: i.memory.textures, programs: i.programs.length,
         mirror: stage && stage.refl ? { on: stage.refl.on, ready: stage.refl.ready, slow: stage.refl.slow } : null };
 }
