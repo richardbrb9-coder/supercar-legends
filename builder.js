@@ -42,7 +42,7 @@ function setLights(mode) {
     hemi.intensity = { studio: 0.6, day: 1.4, night: 0.15, spotlight: 0, showroom: 0 }[mode];
     sun.intensity = { studio: 1.6, day: 2.6, night: 0.3, spotlight: 0, showroom: 0 }[mode];
     accent.intensity = mode === 'night' ? 6 : 0;
-    scene.environmentIntensity = { studio: 1, day: 1.2, night: 0.35, spotlight: 1, showroom: 1 }[mode];
+    scene.environmentIntensity = { studio: 1, day: 1.2, night: 0.35, spotlight: 0.8, showroom: 1 }[mode];
     const dark = mode === 'night' || mode === 'spotlight';
     if (mats) { mats.head.emissiveIntensity = dark ? 3 : 1.2; mats.tail.emissiveIntensity = dark ? 3 : 1.4; }
     if (!stage) stage = new GarageStage(renderer, scene);

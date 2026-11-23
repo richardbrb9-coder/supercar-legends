@@ -13,7 +13,7 @@ const DEG = Math.PI / 180;
 // over the top to the floor behind the car. They all run left to right. A few broad ones, like the big soft lights of a
 // photo studio: lots of thin ones turn a curvy car into a zebra.
 const TUBES = [
-    { a: 6, w: 2.6, len: 26, power: 1.6, edge: 1, tint: [0.7, 0.82, 1.0] },   // low, wide and dim behind the camera: stops the doors going black
+    { a: 6, w: 2.6, len: 26, power: 1.1, edge: 1, tint: [0.7, 0.82, 1.0] },   // low, wide and dim behind the camera: stops the doors going black
     { a: 36, w: 1.0, len: 15, power: 17, edge: 1 },                           // a slimmer bright line along the side
     { a: 72, w: 2.6, len: 17, power: 15, edge: 0.3 },                         // the big soft light overhead
     { a: 126, w: 1.1, len: 17, power: 20, edge: 0.6, tint: [0.88, 0.94, 1.0] } // over the back: streaks along the bonnet and roof
@@ -42,10 +42,10 @@ void main(){
     vec3 col = vec3(0.0045, 0.005, 0.006) + vec3(0.030, 0.034, 0.042) * exp(-d * d / 26.0);
     if (uStrength > 0.0) {
         vec2 uv = vRefl.xy / vRefl.w;
-        vec3 r = texture2D(tRefl, uv).rgb * 0.2;
-        for (int i = 1; i <= 5; i++) {
-            float f = float(i), k = 0.19 * exp(-f * f / 9.0);
-            vec2 o = vec2(0.0, uTexel.y * f * 1.4);
+        vec3 r = texture2D(tRefl, uv).rgb * 0.16;
+        for (int i = 1; i <= 6; i++) {
+            float f = float(i), k = 0.151 * exp(-f * f / 14.0);
+            vec2 o = vec2(0.0, uTexel.y * f);
             r += (texture2D(tRefl, uv + o).rgb + texture2D(tRefl, uv - o).rgb) * k;
         }
         vec3 v = normalize(cameraPosition - vWorld);
@@ -159,7 +159,7 @@ export class GarageStage {
     updateSpotlight(camera, target, dt) {
         const az = Math.atan2(camera.position.x - target.x, camera.position.z - target.z);
         // the light bars rock slowly over the car, so the streaks keep gliding even when nothing is touched
-        const roll = Math.sin(this.t * 0.42) * 0.2 + Math.sin(this.t * 0.17 + 1) * 0.07;
+        const roll = Math.sin(this.t * 0.45) * 0.27 + Math.sin(this.t * 0.17 + 1) * 0.08;
         this.rig.rotation.y = az;
         this.scene.environmentRotation.set(roll, az, 0, 'XYZ');
         const r = this.refl;
