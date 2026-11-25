@@ -160,13 +160,13 @@ let racer = null;
 SCREEN_ENTER.race = () => import('./race.js').then(m => { racer = m; if (currentScreen === 'race') m.enter(); })
     .catch(err => { document.getElementById('race-menu').innerHTML = `<div class="panel"><h2>Racing could not start</h2><p>Check you're online the first time you open it, then reload.</p><p class="small">${escapeHtml(String(err && err.message || err))}</p></div>`; });
 SCREEN_LEAVE.push(id => { if (racer && id !== 'race') racer.leave(); });
-const GAME_SCREENS = ['games', 'trumps', 'guess', 'quiz', 'order'];
+const GAME_SCREENS = ['games', 'trumps', 'guess', 'quiz', 'lmquiz', 'order'];
 function switchScreen(screenId) {
     const navId = GAME_SCREENS.includes(screenId) ? 'games' : screenId;
     document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === `screen-${screenId}`));
     document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.screen === navId));
     const btn = document.querySelector(`.nav-btn[data-screen="${navId}"]`);
-    if (btn) btn.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    if (btn) btn.scrollIntoView({ inline: 'center', block: 'nearest' });   // on a phone the menu scrolls sideways: keep the chosen tab in the middle
     currentScreen = screenId;
     stopSpeaking(); closeModal();
     SCREEN_LEAVE.forEach(fn => fn(screenId));
@@ -508,8 +508,8 @@ function renderCredits() {
     const n = Object.keys(CREDITS).length;
     document.getElementById('credits-intro').innerHTML = `
         <p><b>Supercar Legends is not connected to, or endorsed by, any car company.</b> Car names are used only as facts about history. The app shows no car-maker logos, and cars you build in the app are your own designs.</p>
-        <p><b>Photos:</b> ${n + Object.keys(typeof PEOPLE_CREDITS !== 'undefined' ? PEOPLE_CREDITS : {}).length} free-licence photos from <a href="https://commons.wikimedia.org" target="_blank" rel="noopener">Wikimedia Commons</a>. Thank you to every photographer below. Tap a name to see the original.</p>
-        <p><b>Facts:</b> figures are the makers' claims where there are any, checked against Wikipedia and other sources in October 2026. Different sources sometimes give different numbers.</p>
+        <p><b>Photos:</b> ${n + Object.keys(typeof PEOPLE_CREDITS !== 'undefined' ? PEOPLE_CREDITS : {}).length + Object.keys(typeof LEMANS_CREDITS !== 'undefined' ? LEMANS_CREDITS : {}).length} free-licence photos from <a href="https://commons.wikimedia.org" target="_blank" rel="noopener">Wikimedia Commons</a>. Thank you to every photographer below. Tap a name to see the original.</p>
+        <p><b>Facts:</b> figures are the makers' claims where there are any, checked against Wikipedia and other sources in October 2026. The Le Mans pages were checked against Wikipedia on 25 November 2026. Different sources sometimes give different numbers.</p>
         <p><b>Fonts:</b> Orbitron, Russo One and Exo 2, all under the SIL Open Font Licence, saved inside the app. <b>3D:</b> three.js (MIT licence), saved inside the app. <b>Race textures</b> (asphalt, grass, sand, pavement): CC0 textures by Rob Tuytel and Charlotte Baglioni from <a href="https://polyhaven.com" target="_blank" rel="noopener">Poly Haven</a>. <b>Race skies:</b> CC0 photographed skies from Poly Haven by Greg Zaal, Jarod Guest and Dimitrios Savva. <b>Trees:</b> pictures made in Blender from CC0 tree models from Poly Haven by Rob Tuytel, Rico Cilliers, James Ray Cock and Jenelle van Heerden.  <b>Engine sounds:</b> recordings from Wikimedia Commons, cut into short loops: V8: <a href="https://commons.wikimedia.org/wiki/File:Rover-v8-rr79.ogg" target="_blank" rel="noopener">recording</a> by Collard at English Wikipedia, public domain; V10/V12: <a href="https://commons.wikimedia.org/wiki/File:M70.ogg" target="_blank" rel="noopener">recording</a> by Johannes Maximilian, <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a>; high revs: <a href="https://commons.wikimedia.org/wiki/File:Ford_Sierra_RS_Cosworth_(tuned,_about_600_hp)_-_engine_and_exhaust_sound_(YouTube_7e3q50wwmNE).opus" target="_blank" rel="noopener">recording</a> by hggi.car (YouTube), <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC BY 3.0</a>; start roar: <a href="https://commons.wikimedia.org/wiki/File:Pagani_Zonda_Roadster_F.ogg" target="_blank" rel="noopener">recording</a> by Edvvc, <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA 3.0</a>. The looped versions are shared under the same licences. The cars in the builder are drawn in code, so they are your own designs.</p>`;
     document.getElementById('credit-list').innerHTML = cars.filter(c => CREDITS[c.id]).sort(SORTS.name).map(c => {
         const cr = CREDITS[c.id];

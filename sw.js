@@ -2,7 +2,7 @@ const CACHE_NAME = 'supercar-legends-v46'; // Bump this on every change so table
 const CACHE_PREFIX = CACHE_NAME.replace(/\d+$/, ''); // Only delete this app's own old caches: every app on richardbrb9-coder.github.io shares the same cache storage
 
 // The car list and picture credits, so every photo can be saved for offline use.
-importScripts('cars.js', 'credits.js', 'people-credits.js');
+importScripts('cars.js', 'credits.js', 'people-credits.js', 'lemans-credits.js');
 
 // Everything is stored inside the app (no CDNs), and all addresses are relative so it works in a GitHub Pages subfolder.
 const CORE_FILES = [
@@ -15,6 +15,9 @@ const CORE_FILES = [
     './people.js',
     './people-credits.js',
     './motorsport.js',
+    './lemans.js',
+    './lemans-credits.js',
+    './lemans-app.js',
     './stories.js',
     './games.js',
     './builder.js',
@@ -81,7 +84,8 @@ const LIB_FILES = [
     './lib/addons/RoomEnvironment.js'
 ];
 const CAR_PICTURES = Object.keys(IMAGE_CREDITS).map((id) => `./car-images/${id}.webp`)
-    .concat(Object.keys(PEOPLE_CREDITS).map((id) => `./people-images/${id}.webp`));
+    .concat(Object.keys(PEOPLE_CREDITS).map((id) => `./people-images/${id}.webp`))
+    .concat(Object.keys(LEMANS_CREDITS).map((id) => `./lemans-images/${id}.webp`));
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();

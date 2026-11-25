@@ -1,4 +1,4 @@
-// Supercar Legends: Games hub, Guess the Car, Quiz and Timeline Order. (Top Trumps is in app.js.)
+// Supercar Legends: Games hub, Guess the Car, Quiz, Le Mans Quiz and Timeline Order. (Top Trumps is in app.js.)
 'use strict';
 
 const pick = arr => arr[Math.floor(Math.random() * arr.length)];
@@ -11,6 +11,7 @@ const GAMES = [
     ['trumps', 'Top Trumps Battle', 'Beat the computer with your best stat.', '#E10600'],
     ['guess', 'Guess the Car', 'Spot the car from a zoomed-in photo.', '#00B8D9'],
     ['quiz', 'Supercar Quiz', 'Ten questions about speed, history and makers.', '#FFB300'],
+    ['lmquiz', 'Le Mans Quiz', 'Twelve questions about the famous 24-hour race.', '#2979FF'],
     ['order', 'Timeline Order', 'Put four cars in date order.', '#7E57C2']
 ];
 document.getElementById('game-tiles').innerHTML = GAMES.map(([id, title, text, col]) =>
@@ -179,6 +180,49 @@ document.getElementById('quiz-answers').addEventListener('click', e => {
 });
 document.getElementById('quiz-next').onclick = () => { if (Q.n > 10) quizStart(); else quizNext(); };
 SCREEN_ENTER.quiz = () => { if (!Q || Q.n > 10) quizStart(); };
+
+// =====================================================================
+//  LE MANS QUIZ (questions are written out in lemans.js; twelve are picked at random for each game)
+// =====================================================================
+const LMQ_LENGTH = 12;
+let LQ = null;
+function lmQuizStart() {
+    const list = sample(LEMANS_QUIZ, LMQ_LENGTH).map(([q, answer, wrong, explain]) => ({ q, answer, options: shuffle([answer, ...wrong]), explain }));
+    LQ = { n: 0, score: 0, list: list.filter(validQuestion), cur: null, answered: false };
+    lmQuizNext();
+}
+function lmQuizNext() {
+    const total = LQ.list.length;
+    if (LQ.n >= total) return lmQuizEnd();
+    const q = LQ.cur = LQ.list[LQ.n]; LQ.n++; LQ.answered = false;
+    document.getElementById('lmquiz-progress').innerHTML = Array.from({ length: total }, (_, i) => `<i class="${i < LQ.n - 1 ? 'done' : i === LQ.n - 1 ? 'now' : ''}"></i>`).join('') + `<span>Score ${LQ.score}</span>`;
+    document.getElementById('lmquiz-q').textContent = q.q;
+    document.getElementById('lmquiz-answers').innerHTML = q.options.map(o => `<button class="answer" data-answer="${escapeHtml(o)}">${escapeHtml(o)}</button>`).join('');
+    document.getElementById('lmquiz-feedback').textContent = '';
+    document.getElementById('lmquiz-next').hidden = true;
+}
+function lmQuizEnd() {
+    const total = LQ.list.length;
+    document.getElementById('lmquiz-q').textContent = LQ.score >= total - 2 ? `🏆 ${LQ.score} out of ${total}. Le Mans legend!` : LQ.score >= total / 2 ? `${LQ.score} out of ${total}. A strong finish!` : `${LQ.score} out of ${total}. Read the Le Mans tab and try again!`;
+    document.getElementById('lmquiz-answers').innerHTML = '';
+    document.getElementById('lmquiz-feedback').textContent = '';
+    const b = document.getElementById('lmquiz-next'); b.hidden = false; b.textContent = 'Play again';
+    LQ.n = total + 1;
+    if (LQ.score >= total - 2) playSound('win');
+}
+document.getElementById('lmquiz-answers').addEventListener('click', e => {
+    const b = e.target.closest('[data-answer]'); if (!b || LQ.answered) return;
+    LQ.answered = true;
+    const right = b.dataset.answer === LQ.cur.answer;
+    if (right) LQ.score++;
+    document.querySelectorAll('#lmquiz-answers .answer').forEach(x => { x.disabled = true; if (x.dataset.answer === LQ.cur.answer) x.classList.add('right'); });
+    if (!right) b.classList.add('wrong');
+    playSound(right ? 'win' : 'lose');
+    document.getElementById('lmquiz-feedback').textContent = (right ? 'Correct! ' : 'Not quite. ') + LQ.cur.explain;
+    const next = document.getElementById('lmquiz-next'); next.hidden = false; next.textContent = LQ.n >= LQ.list.length ? 'See my score' : 'Next question';
+});
+document.getElementById('lmquiz-next').onclick = () => { if (LQ.n > LQ.list.length) lmQuizStart(); else lmQuizNext(); };
+SCREEN_ENTER.lmquiz = () => { if (!LQ || LQ.n > LQ.list.length) lmQuizStart(); };
 
 // =====================================================================
 //  TIMELINE ORDER

@@ -116,6 +116,7 @@ function renderMotorsport() {
         <div class="story-hero panel"><span class="kicker">${s.years}</span><h2>${escapeHtml(s.title)}</h2><p>${escapeHtml(s.intro)}</p>
             <button class="act-btn" id="story-speak">🔊 Read the story to me</button></div>
         <ol class="chapters">${s.chapters.map(([t, txt], i) => `<li class="chapter"><span class="ch-num">${String(i + 1).padStart(2, '0')}</span><div><h3>${escapeHtml(t)}</h3><p>${escapeHtml(txt)}</p></div></li>`).join('')}</ol>
+        ${s.id === 'le-mans' ? '<div class="lm-next"><button class="big-btn" data-screen="lemans">The whole Le Mans story ›</button></div>' : ''}
         <p class="section-label">The cars in this story</p>
         <div class="car-grid">${s.cars.map(n => carByName[n]).filter(Boolean).map(carCard).join('')}</div>
         ${storyPeople.length ? `<p class="section-label">The people in this story</p><div class="people-grid small-people">${storyPeople.map(personCard).join('')}</div>` : ''}`;

@@ -70,6 +70,7 @@
             <button class="nav-btn" data-screen="records">Speed Records</button>
             <button class="nav-btn" data-screen="legends">Legends</button>
             <button class="nav-btn" data-screen="motorsport">Motorsport</button>
+            <button class="nav-btn" data-screen="lemans">Le Mans</button>
             <button class="nav-btn" data-screen="games">Games</button>
             <button class="nav-btn" data-screen="build">Build</button>
             <button class="nav-btn" data-screen="race">Race</button>
@@ -146,6 +147,16 @@
             <article class="story" id="story"></article>
         </section>
 
+        <!-- LE MANS -->
+        <section id="screen-lemans" class="screen">
+            <div class="screen-head">
+                <h1><span class="kicker">Le Mans</span>The greatest 24 hours in racing</h1>
+                <p class="subtitle">The story of the Le Mans 24 Hours, from 1923 to today: the race, the circuit, the records and the cars that won.</p>
+            </div>
+            <div class="story-tabs lm-tabs" id="lm-tabs"></div>
+            <div class="lm-body" id="lm-body"></div>
+        </section>
+
         <!-- GAMES HUB -->
         <section id="screen-games" class="screen">
             <div class="screen-head">
@@ -203,6 +214,22 @@
                 <div class="answer-grid" id="quiz-answers"></div>
                 <p class="quiz-feedback" id="quiz-feedback"></p>
                 <div class="game-actions"><button class="big-btn" id="quiz-next" hidden>Next question</button></div>
+            </div>
+        </section>
+
+        <!-- LE MANS QUIZ -->
+        <section id="screen-lmquiz" class="screen game-screen">
+            <div class="game-tabs"></div>
+            <div class="screen-head">
+                <h1><span class="kicker">Game</span>Le Mans Quiz</h1>
+                <p class="subtitle">Twelve questions about the world's most famous 24-hour race. Stuck? The answers are all in the Le Mans tab.</p>
+            </div>
+            <div class="panel quiz-panel">
+                <div class="quiz-progress" id="lmquiz-progress"></div>
+                <h2 class="quiz-q" id="lmquiz-q"></h2>
+                <div class="answer-grid" id="lmquiz-answers"></div>
+                <p class="quiz-feedback" id="lmquiz-feedback"></p>
+                <div class="game-actions"><button class="big-btn" id="lmquiz-next" hidden>Next question</button><button class="act-btn ghost" data-screen="lemans">Read about Le Mans</button></div>
             </div>
         </section>
 
@@ -324,8 +351,11 @@
     <script src="people.js"></script>
     <script src="people-credits.js"></script>
     <script src="motorsport.js"></script>
+    <script src="lemans.js"></script>
+    <script src="lemans-credits.js"></script>
     <script src="app.js"></script>
     <script src="stories.js"></script>
+    <script src="lemans-app.js"></script>
     <script src="games.js"></script>
 </body>
 </html>

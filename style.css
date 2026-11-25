@@ -560,3 +560,152 @@ body.racing .topbar { display: none; }
     .pod-sheet .big-btn, .pod-sheet .act-btn { padding: 8px 14px; font-size: .78rem; }
 }
 @media (prefers-reduced-motion: reduce) { .race-panel.podium .pod-sheet { animation: none; } }
+
+/* ---------- Le Mans ---------- */
+.lm-body { --sc: #2979FF; --dc: #2979FF; }
+.lm-lead { color: var(--muted); font-size: 1.05rem; line-height: 1.55; margin: 0 0 14px; max-width: 820px; }
+.lm-lead b { color: var(--text); }
+.lm-hero { display: grid; grid-template-columns: 1.15fr 1fr; gap: 16px; align-items: start; }
+.lm-hero .story-hero p { font-size: 1.05rem; }
+.lm-photo { margin: 0; background: var(--panel); clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px)); }
+.lm-photo img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; background: #0B0C0F; }
+.lm-photo.car img { aspect-ratio: 4 / 3; }
+.lm-photo.tall img { aspect-ratio: 3 / 4; }
+.lm-photo figcaption { padding: 9px 12px 11px 20px; font-size: .9rem; line-height: 1.4; border-top: 3px solid var(--sc); }
+.lm-credit { display: block; margin-top: 3px; font-size: .7rem; line-height: 1.35; color: var(--dim); }
+.lm-credit a { color: inherit; }
+.lm-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.lm-tile { background: linear-gradient(160deg, var(--panel-2), var(--bg-2)); padding: 14px 14px 13px; border-left: 4px solid var(--sc); clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%); }
+.lm-tile b { display: block; font-family: var(--head); font-weight: 400; font-size: clamp(1.3rem, 2.5vw, 1.8rem); line-height: 1.1; color: var(--sc); }
+.lm-tile span { display: block; margin-top: 5px; font-size: .86rem; line-height: 1.35; color: var(--muted); }
+.lm-boxes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; align-content: start; }
+.lm-boxes.one { grid-template-columns: 1fr; margin-top: 0; }
+.lm-boxes .info-box { margin: 0; }
+.lm-boxes .info-box h3 { color: var(--text); font-size: .86rem; letter-spacing: .1em; }
+.lm-boxes .info-box p { line-height: 1.6; }
+.lm-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+.lm-note { margin: 12px 0 0; line-height: 1.5; }
+.lm-next { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+/* The story */
+.lm-chapters .chapter > div { min-width: 0; }
+.lm-years { display: inline-block; font-family: var(--display); font-weight: 700; font-size: .78rem; letter-spacing: .14em; color: #111; background: var(--sc); padding: 3px 12px 3px 8px; margin-bottom: 7px; clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%); }
+.lm-chapters .chapter h3 { font-size: 1.25rem; margin-bottom: 8px; }
+.lm-ch-body p + p { margin-top: 10px; }
+.lm-ch-body.has-photo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 360px); gap: 16px; align-items: start; }
+.lm-links { margin-top: 12px; align-items: center; }
+.lm-chip { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px; text-align: left; }
+.lm-chip img { width: 46px; height: 34px; object-fit: cover; display: block; }
+.lm-speak { border-left-color: var(--cyan); color: var(--cyan); }
+/* The circuit */
+.lm-circuit { display: grid; grid-template-columns: minmax(300px, 460px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.lm-circuit > div { min-width: 0; }
+.lm-map-panel { padding: 12px; }
+.lm-map svg { display: block; width: 100%; height: auto; touch-action: manipulation; }
+.lm-road-edge { fill: none; stroke: #0B0C0F; stroke-width: 230; stroke-linejoin: round; }
+.lm-road { fill: none; stroke: #8FD694; stroke-width: 110; stroke-linejoin: round; stroke-linecap: round; }
+.lm-road.public { stroke: var(--amber); }
+.lm-line { stroke: #fff; stroke-width: 70; stroke-dasharray: 48 47; }
+.lm-arrow { fill: #111317; }
+.lm-car-dot { fill: #fff; stroke: var(--red); stroke-width: 40; }
+.lm-compass { fill: none; stroke: var(--dim); stroke-width: 28; stroke-linecap: round; stroke-linejoin: round; }
+.lm-small { font-family: var(--body); font-size: 150px; font-weight: 600; fill: var(--dim); }
+.lm-pt { cursor: pointer; outline: none; }
+.lm-hit { fill: transparent; }
+.lm-dot { fill: #15181D; stroke: #F4F6F8; stroke-width: 44; transition: fill .15s; }
+.lm-num { font-family: var(--head); font-weight: 400; font-size: 200px; fill: #F4F6F8; pointer-events: none; }
+.lm-name { font-family: var(--head); font-size: 185px; fill: var(--muted); }
+.lm-pt:hover .lm-dot, .lm-pt:focus-visible .lm-dot { fill: #2C323C; stroke: var(--cyan); }
+.lm-pt.on .lm-dot { fill: var(--red); stroke: #fff; }
+.lm-pt.on .lm-name { fill: #fff; }
+.lm-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 10px 0 6px; font-size: .86rem; color: var(--muted); }
+.lm-legend i { display: inline-block; width: 26px; height: 6px; margin-right: 7px; vertical-align: middle; background: #8FD694; }
+.lm-legend i.pub { background: var(--amber); }
+.lm-map-panel .small { margin: 0; }
+.lm-pt-chips { margin-bottom: 12px; }
+.lm-point-card { --cut: 14px; }
+.lm-pt-head { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }
+.lm-pt-num { flex-shrink: 0; width: 52px; height: 52px; display: grid; place-items: center; background: var(--red); color: #fff; font-family: var(--head); font-weight: 400; font-size: 1.6rem; clip-path: polygon(20% 0, 100% 0, 80% 100%, 0 100%); }
+.lm-pt-head .kicker { margin-bottom: 3px; color: #8FD694; letter-spacing: .18em; }
+.lm-pt-head h2 { font-size: clamp(1.3rem, 2.6vw, 1.8rem); margin: 0; }
+.lm-point-card > p { font-size: 1.06rem; line-height: 1.65; margin: 0 0 14px; }
+.lm-point-card .lm-photo { max-width: 620px; }
+.lm-pt-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; }
+/* Records */
+.lm-records-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 16px; align-items: start; }
+.lm-records-cols.wide-left { grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); }
+.lm-side { display: grid; gap: 14px; align-content: start; }
+.lm-side .lm-note { margin: 0; }
+.lm-tabs .story-tab.active.light { color: rgba(255,255,255,.85); }
+.lm-tabs .story-tab.active.light b { color: #fff; }
+.lm-bars { display: grid; gap: 8px; }
+.lm-bar { display: grid; grid-template-columns: 150px 1fr 30px; gap: 10px; align-items: center; }
+.lm-bar-name { font-weight: 700; font-size: .95rem; }
+.lm-bar-track { height: 16px; background: rgba(255,255,255,.07); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.lm-bar-track i { display: block; height: 100%; background: var(--amber); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.lm-bar b { font-family: var(--head); font-weight: 400; font-size: 1.05rem; text-align: right; color: var(--amber); }
+.record-list.lm-record-list li { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.lm-record-list .r-speed { color: var(--amber); white-space: nowrap; font-family: var(--head); font-weight: 400; font-size: 1.08rem; }   /* Russo One: its 7 is easier to read than Orbitron's */
+/* Race day */
+.lm-latest { margin-bottom: 16px; }
+.lm-latest h2 { font-size: clamp(1.3rem, 2.6vw, 1.8rem); color: var(--sc); }
+.lm-results { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.lm-result { background: rgba(0,0,0,.28); padding: 12px 14px; border-left: 4px solid var(--sc); line-height: 1.45; }
+.lm-result b, .lm-result span { display: block; }
+.lm-result b { font-family: var(--head); font-weight: 400; font-size: 1.05rem; margin: 2px 0 4px; }
+.lm-cls { font-size: .7rem; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.lm-classes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 8px 0 18px; }
+.lm-class, .lm-car { position: relative; background: linear-gradient(180deg, var(--panel-2), var(--panel)); color: var(--text); text-align: left; border: 0; padding: 0; font: inherit; display: flex; flex-direction: column;
+    clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px)); }
+.lm-class::before, .lm-car::before { content: ''; position: absolute; inset: 0; border-top: 3px solid var(--tc); pointer-events: none; z-index: 2; }
+.lm-class .cc-photo, .lm-car .cc-photo { width: 100%; flex-shrink: 0; }
+.lm-class .cc-year, .lm-car .cc-year { font-size: .82rem; }
+.lm-car-body { padding: 11px 14px 16px 16px; display: flex; flex-direction: column; flex: 1; }
+.lm-car-body h3 { font-size: 1.15rem; line-height: 1.2; margin: 3px 0 7px; }
+.lm-car-body p { margin: 4px 0 10px; line-height: 1.5; font-size: .98rem; }
+.lm-car-body .cc-maker { letter-spacing: .12em; }
+.lm-car-body .gt-go { --gc: var(--cyan); margin: 0 0 8px; }
+.lm-car-body .lm-credit { margin-top: auto; padding-left: 4px; }
+.lm-how { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin-top: 8px; align-items: start; }
+/* Famous cars */
+.lm-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+.lm-car.linked { cursor: pointer; transition: transform .18s ease, filter .18s; }
+.lm-car.linked:hover { transform: translateY(-3px); filter: brightness(1.08); }
+.lm-car.linked:active { transform: scale(.98); }
+
+/* Nine tabs: tighten the top menu so it all fits on a small laptop or a tablet on its side */
+@media (max-width: 1280px) {
+    .topbar { gap: 10px; padding-left: 14px; padding-right: 14px; }
+    .nav-btn { padding: 10px 10px; font-size: .84rem; letter-spacing: .02em; }
+    nav { gap: 2px; }
+}
+@media (max-width: 1080px) {
+    .nav-btn { padding: 10px 8px; font-size: .8rem; }
+}
+/* Narrower than that (an upright tablet or a phone) the menu scrolls sideways, so fade its right edge to show there is more */
+@media (max-width: 1010px) {
+    nav { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 26px), transparent); padding-right: 22px; }
+}
+@media (max-width: 900px) {
+    .lm-hero, .lm-circuit, .lm-records-cols, .lm-records-cols.wide-left, .lm-how { grid-template-columns: 1fr; }
+    .lm-ch-body.has-photo { grid-template-columns: 1fr; }
+    .lm-ch-body.has-photo .lm-photo { max-width: 520px; }
+    .lm-map-panel { max-width: 520px; width: 100%; margin: 0 auto; }
+    .lm-side { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .lm-side .lm-note { grid-column: 1 / -1; }
+    .lm-results { grid-template-columns: 1fr; }
+    .lm-classes { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .lm-tabs.story-tabs { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 640px) {
+    .nav-btn { padding: 10px 12px; font-size: .88rem; }   /* phones: bigger targets again, as the menu has its own row */
+    .lm-boxes, .lm-pair { grid-template-columns: 1fr; }
+    .lm-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .lm-tile { padding: 11px 10px; }
+    .lm-chapters .chapter h3 { font-size: 1.1rem; }
+    .lm-gallery { grid-template-columns: 1fr; }
+    .lm-bar { grid-template-columns: 128px 1fr 26px; gap: 8px; }
+    .lm-bar-name { font-size: .88rem; }
+    .lm-pt-num { width: 44px; height: 44px; font-size: 1.25rem; }
+    .lm-map-panel { padding: 8px; }
+    .lm-next .big-btn { width: 100%; }
+}
