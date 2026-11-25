@@ -601,8 +601,8 @@ body.racing .topbar { display: none; }
 .lm-circuit > div { min-width: 0; }
 .lm-map-panel { padding: 12px; }
 .lm-map svg { display: block; width: 100%; height: auto; touch-action: manipulation; }
-.lm-road-edge { fill: none; stroke: #0B0C0F; stroke-width: 230; stroke-linejoin: round; }
-.lm-road { fill: none; stroke: #8FD694; stroke-width: 110; stroke-linejoin: round; stroke-linecap: round; }
+.lm-road-edge { fill: none; stroke: #0B0C0F; stroke-width: 200; stroke-linejoin: round; }
+.lm-road { fill: none; stroke: #8FD694; stroke-width: 95; stroke-linejoin: round; stroke-linecap: round; }
 .lm-road.public { stroke: var(--amber); }
 .lm-line { stroke: #fff; stroke-width: 70; stroke-dasharray: 48 47; }
 .lm-arrow { fill: #111317; }
@@ -612,7 +612,7 @@ body.racing .topbar { display: none; }
 .lm-pt { cursor: pointer; outline: none; }
 .lm-hit { fill: transparent; }
 .lm-dot { fill: #15181D; stroke: #F4F6F8; stroke-width: 44; transition: fill .15s; }
-.lm-num { font-family: var(--head); font-weight: 400; font-size: 200px; fill: #F4F6F8; pointer-events: none; }
+.lm-num { font-family: var(--head); font-weight: 400; font-size: 180px; fill: #F4F6F8; pointer-events: none; }
 .lm-name { font-family: var(--head); font-size: 185px; fill: var(--muted); }
 .lm-pt:hover .lm-dot, .lm-pt:focus-visible .lm-dot { fill: #2C323C; stroke: var(--cyan); }
 .lm-pt.on .lm-dot { fill: var(--red); stroke: #fff; }
@@ -621,6 +621,7 @@ body.racing .topbar { display: none; }
 .lm-legend i { display: inline-block; width: 26px; height: 6px; margin-right: 7px; vertical-align: middle; background: #8FD694; }
 .lm-legend i.pub { background: var(--amber); }
 .lm-map-panel .small { margin: 0; }
+.lm-map-panel .small a { color: var(--cyan); }
 .lm-pt-chips { margin-bottom: 12px; }
 .lm-point-card { --cut: 14px; }
 .lm-pt-head { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; }

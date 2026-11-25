@@ -68,46 +68,43 @@ function lmStoryHtml() {
 // =====================================================================
 //  3. THE CIRCUIT (a map drawn in code)
 // =====================================================================
-// A smooth closed line through the track points. Each piece is a curve whose ends lean the way the track is heading.
-function lmTrackSegments() {
-    const pts = LE_MANS.track.map(([x, y]) => [x, -y]), n = pts.length, P = i => pts[(i + n) % n];
-    const unit = (a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1; return [dx / l, dy / l]; };
-    const tangent = i => { const a = unit(P(i - 1), P(i)), b = unit(P(i), P(i + 1)), l = Math.hypot(a[0] + b[0], a[1] + b[1]) || 1; return [(a[0] + b[0]) / l, (a[1] + b[1]) / l]; };
-    const r = v => Math.round(v);
-    return pts.map((p1, i) => {
-        const p2 = P(i + 1), t1 = tangent(i), t2 = tangent(i + 1), h = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 3;
-        return { from: p1, curve: `C${r(p1[0] + t1[0] * h)} ${r(p1[1] + t1[1] * h)} ${r(p2[0] - t2[0] * h)} ${r(p2[1] - t2[1] * h)} ${r(p2[0])} ${r(p2[1])}` };
-    });
-}
-const LM_SEGS = lmTrackSegments();
-const lmPath = (from, to) => `M${LM_SEGS[from].from.map(Math.round).join(' ')}` + LM_SEGS.slice(from, to).map(s => s.curve).join('');
-const LM_FULL = lmPath(0, LM_SEGS.length) + 'Z';
-const LM_ROADS = lmPath(11, 33);   // from Tertre Rouge to the start of the Porsche Curves: public roads
+// The track is a line through the points in LE_MANS.track (metres east and north of the start line, from OpenStreetMap).
+// In the drawing, y points down, so north is at the top.
+const LM_PTS = LE_MANS.track.map(([x, y]) => [x, -y]);
+const lmPath = (from, to) => 'M' + LM_PTS.slice(from, to + 1).map(([x, y]) => `${x} ${y}`).join('L');
+const LM_FULL = lmPath(0, LM_PTS.length - 1) + 'Z';
+const LM_ROADS = LE_MANS.publicRuns.map(([a, b]) => lmPath(a, b)).join('');   // the parts on public roads
 function lmMapSvg() {
-    const arrow = (x, y, deg) => `<path d="M-90 -75 L90 0 L-90 75 Z" transform="translate(${x} ${y}) rotate(${deg})" class="lm-arrow"/>`;
+    // A direction arrow in the middle of the piece of track that starts at point i
+    const arrow = i => {
+        const [x1, y1] = LM_PTS[i], [x2, y2] = LM_PTS[(i + 1) % LM_PTS.length];
+        const deg = Math.round(Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI);
+        return `<path d="M-80 -65 L80 0 L-80 65 Z" transform="translate(${Math.round((x1 + x2) / 2)} ${Math.round((y1 + y2) / 2)}) rotate(${deg})" class="lm-arrow"/>`;
+    };
+    const chicane = (i, n) => `<text class="lm-small" x="${LM_PTS[i][0] + 210}" y="${LM_PTS[i][1] + 50}">${n} chicane</text>`;
     const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const points = LE_MANS.points.map((p, i) => {
         const x = p.at[0], y = -p.at[1], [dx, dy, anchor] = p.label, on = p.id === lmPoint;
         return `<g class="lm-pt ${on ? 'on' : ''}" data-lm-point="${p.id}" role="button" tabindex="0" aria-label="${i + 1}: ${escapeHtml(p.name)}" aria-pressed="${on}">
-            <circle class="lm-hit" cx="${x}" cy="${y}" r="300"/>
-            <circle class="lm-dot" cx="${x}" cy="${y}" r="${on ? 200 : 170}"/>
-            <text class="lm-num" x="${x}" y="${y + 68}" text-anchor="middle">${i + 1}</text>
+            <circle class="lm-hit" cx="${x}" cy="${y}" r="230"/>
+            <circle class="lm-dot" cx="${x}" cy="${y}" r="${on ? 175 : 150}"/>
+            <text class="lm-num" x="${x}" y="${y + 62}" text-anchor="middle">${i + 1}</text>
             <text class="lm-name" x="${x + dx}" y="${y + dy}" text-anchor="${anchor}">${p.wrap
                 ? p.name.split(' ').map((w, j) => `<tspan x="${x + dx}" dy="${j ? 200 : 0}">${escapeHtml(w)}</tspan>`).join('')
                 : escapeHtml(p.name)}</text></g>`;
     }).join('');
-    return `<svg viewBox="-2000 -1320 5420 6400" role="group" aria-label="Map of the Le Mans circuit. North is at the top.">
+    return `<svg viewBox="-2050 -1800 5800 6450" role="group" aria-label="Map of the Le Mans circuit. North is at the top.">
         <path d="${LM_FULL}" class="lm-road-edge"/>
         <path d="${LM_FULL}" class="lm-road"/>
         <path d="${LM_ROADS}" class="lm-road public"/>
-        <path d="M-95 -29 L95 29" class="lm-line"/>
-        ${arrow(2517, 3479, 74.5)}${arrow(1400, 3765, 209.5)}${arrow(-350, 2425, 270)}${arrow(580, -930, -5)}
-        ${calm ? '' : `<circle r="75" class="lm-car-dot"><animateMotion dur="30s" repeatCount="indefinite" path="${LM_FULL}"/></circle>`}
-        <text class="lm-small" x="1700" y="1235" text-anchor="end">1st chicane</text>
-        <text class="lm-small" x="2090" y="2540" text-anchor="end">2nd chicane</text>
-        <text class="lm-small" x="1050" y="-1130">↑ to the city of Le Mans</text>
-        <g transform="translate(-1650 -700)"><path d="M0 250 L0 -200 M-90 -80 L0 -230 L90 -80" class="lm-compass"/><text class="lm-small" x="0" y="430" text-anchor="middle">North</text></g>
-        <g transform="translate(-1800 4800)"><path d="M0 0 H1000 M0 -60 V60 M1000 -60 V60" class="lm-compass"/><text class="lm-small" x="500" y="-110" text-anchor="middle">1 km</text></g>
+        <path d="M-120 0 L120 0" class="lm-line"/>
+        ${LE_MANS.arrows.map(arrow).join('')}
+        ${calm ? '' : `<circle r="70" class="lm-car-dot"><animateMotion dur="30s" repeatCount="indefinite" path="${LM_FULL}"/></circle>`}
+        ${chicane(LE_MANS.chicanes[0], '1st')}${chicane(LE_MANS.chicanes[1], '2nd')}
+        <text class="lm-small" x="600" y="-1560" text-anchor="middle">↑ to the city of Le Mans</text>
+        <g transform="translate(-1650 -1150)"><path d="M0 250 L0 -200 M-90 -80 L0 -230 L90 -80" class="lm-compass"/><text class="lm-small" x="0" y="430" text-anchor="middle">North</text></g>
+        <g transform="translate(-1800 4150)"><path d="M0 0 H1000 M0 -60 V60 M1000 -60 V60" class="lm-compass"/><text class="lm-small" x="500" y="-110" text-anchor="middle">1 km</text></g>
+        <text class="lm-small" x="-1800" y="4480">© OpenStreetMap contributors</text>
         ${points}
     </svg>`;
 }
@@ -127,7 +124,7 @@ function lmCircuitHtml() {
             <div class="panel lm-map-panel">
                 <div class="lm-map" id="lm-map">${lmMapSvg()}</div>
                 <div class="lm-legend"><span><i class="perm"></i>Racetrack</span><span><i class="pub"></i>Public roads, closed for the race</span></div>
-                <p class="small">A simple drawing of the circuit. The shape is right, but it is not an exact map.</p>
+                <p class="small">The outline of the track comes from OpenStreetMap. Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).</p>
             </div>
             <div>
                 <div class="chip-row lm-pt-chips" id="lm-pt-chips">${LE_MANS.points.map((p, i) => `<button class="chip ${p.id === lmPoint ? 'active' : ''}" data-lm-point="${p.id}" style="--cc:#43A047">${i + 1} ${escapeHtml(p.name)}</button>`).join('')}</div>
@@ -143,7 +140,7 @@ function lmSelectPoint(id, scroll) {
     map.querySelectorAll('.lm-pt').forEach(g => {
         const on = g.dataset.lmPoint === id;
         g.classList.toggle('on', on); g.setAttribute('aria-pressed', on);
-        g.querySelector('.lm-dot').setAttribute('r', on ? 200 : 170);
+        g.querySelector('.lm-dot').setAttribute('r', on ? 175 : 150);
     });
     const row = document.getElementById('lm-pt-chips');
     row.querySelectorAll('.chip').forEach(c => {
@@ -287,6 +284,7 @@ openModal = function (c, withSound = true) {
 const lmBaseRenderCredits = renderCredits;
 renderCredits = function () {
     lmBaseRenderCredits();
+    document.getElementById('credits-intro').insertAdjacentHTML('beforeend', `<p><b>Le Mans circuit map:</b> the outline of the track comes from OpenStreetMap. Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, available under the Open Database Licence (ODbL).</p>`);
     document.getElementById('credit-list').insertAdjacentHTML('beforeend', Object.entries(LMCREDITS).map(([id, cr]) =>
         `<div class="credit-item"><img src="lemans-images/${id}.webp" alt="" loading="lazy"><div><b>Le Mans: ${escapeHtml(cr.title)}</b>
             <a href="${escapeHtml(cr.url)}" target="_blank" rel="noopener">${escapeHtml(cr.author)}</a> · ${licenceLink(cr.license)}</div></div>`).join(''));

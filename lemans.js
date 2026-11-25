@@ -154,47 +154,63 @@ const LE_MANS = {
 
     // ---------------------------------------------------------------- 3. The circuit
     // The map is drawn in code (lemans-app.js) from the points in "track": x is metres east and y is metres north
-    // of the start line. It is a simple drawing of the real shape, not an exact survey.
+    // of the start line, going round the lap clockwise. The outline comes from OpenStreetMap (route relation
+    // "Circuit des 24 Heures du Mans", © OpenStreetMap contributors, ODbL), projected to metres and simplified
+    // to within 3 m. "publicRuns" are the parts on public roads ([from, to] point numbers): every part that
+    // OpenStreetMap does not tag as a racetrack (highway=raceway).
     circuitIntro: 'One lap is 13.626 km (8.467 miles), one of the longest laps in motor racing. The cars go round clockwise. Tap a number on the map to explore.',
     track: [
-        [0, 0], [70, 220], [170, 480], [225, 590], [300, 650], [350, 770], [480, 900], [680, 930], [820, 850], [960, 830], [1150, 780],
-        [1330, 660], [1420, 480], [1834, -1014], [1817, -1179], [1917, -1313], [2289, -2657], [2389, -2791], [2372, -2956], [2662, -4002],
-        [2775, -4410], [2792, -4515], [2690, -4490], [2400, -4330], [400, -3200], [250, -3085], [150, -3040], [60, -3120], [-110, -3290],
-        [-195, -3200], [-300, -2950], [-350, -2600], [-350, -2250], [-320, -1980], [-220, -1720], [-60, -1560], [10, -1380], [-30, -1180],
-        [-110, -1020], [-150, -850], [-150, -650], [-140, -480], [-95, -420], [-130, -350], [-90, -270], [-55, -150]
+        [0, 0], [9, 250], [16, 316], [40, 431], [75, 529], [96, 564], [122, 589], [255, 672], [260, 685], [251, 729],
+        [255, 744], [354, 810], [415, 852], [467, 923], [505, 955], [567, 980], [684, 987], [715, 998], [734, 1017],
+        [745, 1038], [754, 1104], [762, 1126], [774, 1140], [863, 1205], [1015, 1265], [1034, 1269], [1054, 1263],
+        [1120, 1225], [1186, 1179], [1247, 1121], [1309, 1033], [1415, 867], [1464, 781], [1497, 702], [1559, 513],
+        [1679, 141], [1915, -590], [1914, -612], [1893, -645], [1889, -665], [1896, -689], [1915, -708], [1953, -741],
+        [1968, -760], [2003, -859], [2061, -1038], [2217, -1516], [2322, -1841], [2511, -2424], [2530, -2443], [2573, -2461],
+        [2586, -2481], [2587, -2505], [2574, -2552], [2571, -2608], [2633, -2800], [2648, -2881], [2708, -3915], [2704, -3965],
+        [2671, -4080], [2653, -4088], [2611, -4076], [1945, -3894], [1465, -3652], [1422, -3625], [1121, -3404], [992, -3298],
+        [972, -3278], [958, -3253], [918, -3126], [911, -3113], [898, -3104], [869, -3102], [615, -3200], [600, -3199],
+        [592, -3192], [588, -3178], [473, -2697], [451, -2625], [256, -2230], [151, -2077], [109, -1993], [106, -1954],
+        [112, -1919], [128, -1882], [151, -1855], [218, -1782], [239, -1746], [248, -1702], [243, -1625], [236, -1571],
+        [224, -1540], [199, -1509], [146, -1463], [119, -1422], [108, -1388], [107, -1345], [115, -1310], [133, -1276],
+        [199, -1213], [210, -1197], [222, -1166], [225, -1142], [198, -948], [208, -852], [208, -816], [96, -400], [84, -378],
+        [48, -354], [26, -259], [16, -250], [0, -244], [-7, -235]
     ],
+    publicRuns: [[30, 34], [35, 36], [44, 45], [46, 73], [76, 81]],
+    // Points on the track where the map shows a direction arrow, and where the two Mulsanne chicanes are
+    arrows: [3, 35, 62, 78],
+    chicanes: [41, 53],
     // id, number, name, position [x, y], label offset [dx, dy] and side (wrap: name on two lines), short line, text, optional photo
     points: [
-        { id: 'start', name: 'Start and finish', at: [0, 0], label: [-230, 60, 'end'],
+        { id: 'start', name: 'Start and finish', at: [0, 0], label: [-250, 70, 'end'],
           line: 'Where the race begins and ends',
           text: 'The race starts and finishes here, in front of the main grandstands. The pit lane runs alongside, with a garage for every team. After 24 hours, marshals all around the track wave their flags to salute the cars on the last lap.',
           photo: 'start', caption: 'The start and finish straight, packed with fans.' },
-        { id: 'dunlop', name: 'Dunlop Bridge', at: [350, 770], label: [-60, -280, 'end'],
+        { id: 'dunlop', name: 'Dunlop Bridge', at: [354, 810], label: [-250, 40, 'end'],
           line: 'The most famous bridge in racing',
           text: 'A footbridge shaped like half of a giant tyre, and the best-known landmark at Le Mans. Cars used to fly underneath at 180 mph (290 km/h). In 1987 a chicane was added before it, which slowed them to about 110 mph (180 km/h).',
           photo: 'dunlop_bridge', caption: 'Marshals wave blue flags as cars come under the Dunlop Bridge in 2014.' },
-        { id: 'tertre', name: 'Tertre Rouge', at: [1330, 660], label: [230, -60, 'start'],
+        { id: 'tertre', name: 'Tertre Rouge', at: [1015, 1265], label: [230, 70, 'start'],
           line: 'The corner before the long straight',
           text: 'The name is French for "red hillock". This right-hand corner leads onto the Mulsanne Straight, so drivers need to come out of it as fast as they can. Any speed lost here is lost all the way down the straight.' },
-        { id: 'mulsanne', name: 'Mulsanne Straight', at: [2103, -1985], label: [230, -40, 'start'], wrap: true,
+        { id: 'mulsanne', name: 'Mulsanne Straight', at: [2322, -1841], label: [230, -40, 'start'], wrap: true,
           line: 'A public road, and two chicanes',
           text: 'The most famous straight in racing. Its real name is the Ligne Droite des Hunaudières, and for most of the year it is an ordinary main road. It used to be 6 km (3.7 miles) of flat-out driving, the longest straight on any racetrack. Since 1990 two chicanes have split it into three parts of about 2 km each. Cars still reach close to 200 mph (320 km/h) here.',
           photo: 'mulsanne', caption: 'One of the two chicanes on the Mulsanne Straight.' },
-        { id: 'mulsannecorner', name: 'Mulsanne Corner', at: [2792, -4515], label: [-60, 420, 'end'],
+        { id: 'mulsannecorner', name: 'Mulsanne Corner', at: [2653, -4088], label: [60, 400, 'end'],
           line: 'The biggest stop of the lap',
           text: 'At the end of the straight, near the village of Mulsanne, the track turns sharp right. Drivers brake from over 200 mph (322 km/h) to about 62 mph (100 km/h). It is a huge stop, and the brakes take a real pounding.' },
-        { id: 'indianapolis', name: 'Indianapolis', at: [150, -3040], label: [210, -200, 'start'],
+        { id: 'indianapolis', name: 'Indianapolis', at: [911, -3113], label: [190, -200, 'start'],
           line: 'A fast run into a left-hander',
           text: 'After a long, fast run comes this left-hand corner. It shares its name with the famous Indianapolis racetrack in America. At night, with only headlights to see by, it takes real courage.',
           photo: 'night', caption: 'A Hypercar at Indianapolis during the night in 2026.' },
-        { id: 'arnage', name: 'Arnage', at: [-110, -3290], label: [0, 420, 'middle'],
+        { id: 'arnage', name: 'Arnage', at: [600, -3199], label: [-230, 70, 'end'],
           line: 'Slow in, fast out',
           text: 'A tight right-hand corner named after the nearby village of Arnage. It is one of the slowest corners on the lap, and it comes straight after one of the fastest parts. Brake too late and you will not make the corner.' },
-        { id: 'porsche', name: 'Porsche Curves', at: [-60, -1560], label: [220, 30, 'start'],
+        { id: 'porsche', name: 'Porsche Curves', at: [199, -1509], label: [230, 70, 'start'],
           line: 'A fast, flowing set of bends',
           text: 'A series of quick, sweeping bends where the cars change direction again and again at high speed. They were built in 1972 to replace a dangerous fast kink called Maison Blanche, which means "White House".',
           photo: 'porsche_curves', caption: 'LMP2 cars in the Porsche Curves on the lap before the start in 2014.' },
-        { id: 'ford', name: 'Ford Chicanes', at: [-130, -400], label: [-220, -40, 'end'],
+        { id: 'ford', name: 'Ford Chicanes', at: [48, -354], label: [-250, 80, 'end'],
           line: 'The last corners of the lap',
           text: 'Two tight chicanes that slow the cars down before they reach the pits and the finish line. The first Ford chicane was added in 1968. After 24 hours, this is the last corner the winner takes.',
           photo: 'toyota_tr010', caption: 'The 2026 winner at the Ford Chicanes.' }
