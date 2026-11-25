@@ -92,9 +92,11 @@ function lmMapSvg() {
             <circle class="lm-hit" cx="${x}" cy="${y}" r="300"/>
             <circle class="lm-dot" cx="${x}" cy="${y}" r="${on ? 200 : 170}"/>
             <text class="lm-num" x="${x}" y="${y + 68}" text-anchor="middle">${i + 1}</text>
-            <text class="lm-name" x="${x + dx}" y="${y + dy}" text-anchor="${anchor}">${escapeHtml(p.name)}</text></g>`;
+            <text class="lm-name" x="${x + dx}" y="${y + dy}" text-anchor="${anchor}">${p.wrap
+                ? p.name.split(' ').map((w, j) => `<tspan x="${x + dx}" dy="${j ? 200 : 0}">${escapeHtml(w)}</tspan>`).join('')
+                : escapeHtml(p.name)}</text></g>`;
     }).join('');
-    return `<svg viewBox="-2000 -1320 5220 6400" role="group" aria-label="Map of the Le Mans circuit. North is at the top.">
+    return `<svg viewBox="-2000 -1320 5420 6400" role="group" aria-label="Map of the Le Mans circuit. North is at the top.">
         <path d="${LM_FULL}" class="lm-road-edge"/>
         <path d="${LM_FULL}" class="lm-road"/>
         <path d="${LM_ROADS}" class="lm-road public"/>

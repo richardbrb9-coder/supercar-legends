@@ -52,7 +52,7 @@ const MOTORSPORT_STORIES = [
       chapters: [
         ['Porsche’s first win', 'The mighty Porsche 917, with its flat-12 engine, gave Porsche its first overall win in 1970, and won again in 1971. Porsche has since won Le Mans more times than any other maker.'],
         ['A road car wins', 'In 1995 the McLaren F1 GTR, a racing version of a road car, won Le Mans at its first try and beat purpose-built prototypes. Three years later Porsche won with the 911 GT1.'],
-        ['The Bentley Boys return', 'Bentley won Le Mans five times in the 1920s. In 2003 it came back with the Speed 8 and finished first and second.'],
+        ['The Bentley Boys return', 'Bentley won Le Mans five times between 1924 and 1930. In 2003 it came back with the Speed 8 and finished first and second.'],
         ['The Hypercar class', 'Since 2021 the top class at Le Mans has been called Hypercar. Ferrari returned with the 499P and won in 2023, 2024 and 2025. Aston Martin raced its Valkyrie there from 2025. In June 2026, Toyota won and ended Ferrari’s run.']
       ],
       cars: ['Porsche 917', 'McLaren F1', 'Porsche 911 GT1', 'Bentley Speed 8', 'Ford GT (2017)', 'Ferrari 499P', 'Aston Martin Valkyrie'],

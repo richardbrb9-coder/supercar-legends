@@ -1,9 +1,12 @@
 // The Le Mans 24 Hours: the story of the race, the circuit, the records, how the race works and the famous cars.
 // Checked against Wikipedia on 25 November 2026: "24 Hours of Le Mans", "Circuit de la Sarthe", "Mulsanne Straight",
 // "List of 24 Hours of Le Mans records", the pages for each race mentioned (1923 to 2026) and the page for each car.
+// The 2026 results were also checked against crash.net, racer.com and fia.com race reports (62 starters: 18 Hypercar,
+// 19 LMP2, 25 LMGT3; all 62 are in the results as finishers or retirements). Second review on 25 November 2026.
 // Results are up to and including the 2026 race (13-14 June 2026).
 // Notes on numbers that differ between sources:
-//   - WM P88 top speed: officially timed at 405 km/h in the 1988 race; some pages give 407 km/h. 405 is used here.
+//   - WM P88 top speed: 405 km/h is the official figure (Peugeot, who made the engine, announced it); the WM P88 page
+//     and the records list give 407 km/h. 405 is used here, with a note in the record book.
 //   - The 1966 Ford finish: the gap is given as 8 metres or 20 metres, so no number is given here.
 // Photos are free-licence files from Wikimedia Commons (lemans-images/, credits in lemans-credits.js).
 // Car and people names must match cars.js and people.js exactly, so they can open the existing cards.
@@ -110,7 +113,7 @@ const LE_MANS = {
           text: [
               'In 1982 new rules called Group C arrived. Teams could build almost any engine they liked, but every car was given a limited amount of fuel. To win, you had to be fast and waste nothing. Porsche’s new 956 finished first, second and third that year, and Porsche won Le Mans seven times in a row from 1981 to 1987.',
               'Then the others caught up. Jaguar won in 1988 with the V12 XJR-9, and Sauber-Mercedes won in 1989. In 1991 Mazda became the first Japanese maker to win, with the 787B. It is still the only winner with a rotary engine, which has spinning rotors instead of pistons.',
-              'Group C cars were astonishingly fast on the Mulsanne Straight. In 1988 a small French team called WM taped over the cooling vents of its car to make it slip through the air, and turned up the engine power. Roger Dorchy was timed at 252 mph (405 km/h), the highest speed ever recorded at Le Mans. The engine, starved of cooling air, soon gave up. Speeds like that were too dangerous, so in 1990 two chicanes were built into the straight to slow the cars down.'
+              'Group C cars were astonishingly fast on the Mulsanne Straight. In 1988 a small French team called WM built its car to slip through the air as easily as possible, and turned up the power of its turbo engine for the straight. Roger Dorchy was timed at 252 mph (405 km/h), the highest speed ever recorded at Le Mans. Speeds like that were too dangerous, so in 1990 two chicanes were built into the straight to slow the cars down.'
           ],
           photo: 'wm_p88', caption: 'The WM P88, the fastest car ever timed at Le Mans.',
           cars: [], people: [] },
@@ -118,7 +121,7 @@ const LE_MANS = {
         { years: '1994–1999', title: 'A road car wins', color: '#F57C00',
           text: [
               'In the 1990s, cars based on road-going supercars came back to Le Mans. Gordon Murray had designed the McLaren F1 as the ultimate road car, and he never planned to race it. But a racing version, the F1 GTR, was built anyway.',
-              'In 1995 the McLarens went to Le Mans for the first time. Few people expected them to beat the purpose-built racing prototypes. Then it rained for about 17 hours. The prototypes hit trouble, and the McLarens kept going. JJ Lehto, Yannick Dalmas and Masanori Sekiya won, and McLarens took four of the first five places. Only Ferrari, in 1949, had also won at its first attempt.',
+              'In 1995 the McLarens went to Le Mans for the first time. Few people expected them to beat the purpose-built racing prototypes. Then it rained for about 17 hours. The prototypes hit trouble, and the McLarens kept going. JJ Lehto, Yannick Dalmas and Masanori Sekiya won, and McLarens took four of the first five places. Since the very first race in 1923, only Ferrari, in 1949, had also won at its first attempt.',
               'Other makers copied the idea and built ever wilder "road cars" for racing. One of them, the Porsche 911 GT1, won in 1998.'
           ],
           cars: ['McLaren F1', 'Porsche 911 GT1'], people: ['Gordon Murray', 'Bruce McLaren'] },
@@ -134,7 +137,7 @@ const LE_MANS = {
         { years: '2014–2022', title: 'Hybrid heroes and heartbreak', color: '#D32F2F',
           text: [
               'Next came the great hybrid battle between Audi, Porsche and Toyota. Their cars saved energy every time they braked, then used it for a burst of electric power out of the corners. Porsche returned to the top class in 2014 and won three times in a row with the 919 Hybrid, from 2015 to 2017.',
-              'Toyota had been trying to win Le Mans for years. In 2016 it finally looked certain. With about three minutes of the 24 hours left, Kazuki Nakajima’s Toyota was in the lead. Then it suddenly lost power, and it rolled to a stop right in front of the pits. A Porsche swept past to win on the very last lap. It was one of the most heartbreaking finishes racing has ever seen.',
+              'Toyota had been trying to win Le Mans for years. In 2016 it finally looked certain. With only a few minutes of the 24 hours left, Kazuki Nakajima’s Toyota was in the lead. Then it suddenly lost power, and on the last lap it rolled to a stop right by the pits. A Porsche swept past to win. It was one of the most heartbreaking finishes racing has ever seen.',
               'Toyota did not give up. In 2018 it won at last, and Kazuki Nakajima was one of the winning drivers, along with Sébastien Buemi and Formula 1 champion Fernando Alonso. Toyota went on to win five times in a row, from 2018 to 2022.'
           ],
           cars: [], people: [] },
@@ -143,7 +146,7 @@ const LE_MANS = {
           text: [
               'Since 2021 the top class at Le Mans has been called Hypercar. The rules give designers more freedom and cost less than before, so lots of famous makers have joined in.',
               'In 2023 the race celebrated its 100th birthday, and Ferrari came back to fight for the overall win for the first time in 50 years. In front of 325,000 fans, Alessandro Pier Guidi, James Calado and Antonio Giovinazzi won in the Ferrari 499P. It was Ferrari’s first Le Mans win since 1965. Ferrari won again in 2024 and in 2025.',
-              'The most recent race was held on 13 and 14 June 2026. Toyota ended Ferrari’s run. Mike Conway, Kamui Kobayashi and Nyck de Vries won in the number 7 Toyota TR010 Hybrid after 381 laps, with a BMW second. It was a close race: seven cars finished on the same lap as the winner. Genesis, from South Korea, raced at Le Mans for the first time. It was Toyota’s sixth win.'
+              'The most recent race was held on 13 and 14 June 2026. Toyota ended Ferrari’s run. Mike Conway, Kamui Kobayashi and Nyck de Vries won in the number 7 Toyota TR010 Hybrid after 381 laps. A BMW finished second, less than 11 seconds behind. It was a close race: seven cars finished on the same lap as the winner. Genesis, from South Korea, raced at Le Mans for the first time. It was Toyota’s sixth win.'
           ],
           photo: 'toyota_tr010', caption: 'The number 7 Toyota TR010 Hybrid, winner in 2026, at the Ford Chicanes.',
           cars: ['Ferrari 499P', 'Aston Martin Valkyrie'], people: [] }
@@ -160,7 +163,7 @@ const LE_MANS = {
         [-195, -3200], [-300, -2950], [-350, -2600], [-350, -2250], [-320, -1980], [-220, -1720], [-60, -1560], [10, -1380], [-30, -1180],
         [-110, -1020], [-150, -850], [-150, -650], [-140, -480], [-95, -420], [-130, -350], [-90, -270], [-55, -150]
     ],
-    // id, number, name, position [x, y], label offset [dx, dy] and side, short line, text, optional photo
+    // id, number, name, position [x, y], label offset [dx, dy] and side (wrap: name on two lines), short line, text, optional photo
     points: [
         { id: 'start', name: 'Start and finish', at: [0, 0], label: [-230, 60, 'end'],
           line: 'Where the race begins and ends',
@@ -173,7 +176,7 @@ const LE_MANS = {
         { id: 'tertre', name: 'Tertre Rouge', at: [1330, 660], label: [230, -60, 'start'],
           line: 'The corner before the long straight',
           text: 'The name is French for "red hillock". This right-hand corner leads onto the Mulsanne Straight, so drivers need to come out of it as fast as they can. Any speed lost here is lost all the way down the straight.' },
-        { id: 'mulsanne', name: 'Mulsanne Straight', at: [2103, -1985], label: [-230, -60, 'end'],
+        { id: 'mulsanne', name: 'Mulsanne Straight', at: [2103, -1985], label: [230, -40, 'start'], wrap: true,
           line: 'A public road, and two chicanes',
           text: 'The most famous straight in racing. Its real name is the Ligne Droite des Hunaudières, and for most of the year it is an ordinary main road. It used to be 6 km (3.7 miles) of flat-out driving, the longest straight on any racetrack. Since 1990 two chicanes have split it into three parts of about 2 km each. Cars still reach close to 200 mph (320 km/h) here.',
           photo: 'mulsanne', caption: 'One of the two chicanes on the Mulsanne Straight.' },
@@ -209,12 +212,12 @@ const LE_MANS = {
     driverWins: [['Tom Kristensen', 9, '🇩🇰'], ['Jacky Ickx', 6, '🇧🇪'], ['Derek Bell', 5, '🇬🇧'], ['Frank Biela', 5, '🇩🇪'], ['Emanuele Pirro', 5, '🇮🇹']],
     // [label, value, note, mph (if it is a speed, so the units switch can show it)]
     records: [
-        ['Highest speed', null, 'Roger Dorchy in the WM P88 on the Mulsanne Straight, 1988. Some sources say 407 km/h.', 251.7],
-        ['Fastest lap ever', '3 min 14.791 s', 'Kamui Kobayashi, Toyota TS050 Hybrid, in qualifying in 2017. That is an average of 156.5 mph (251.9 km/h) for the whole lap.'],
+        ['Highest speed', null, 'Roger Dorchy in the WM P88 on the Mulsanne Straight, 1988. This is the official figure. Some sources say 407 km/h.', 251.7],
+        ['Fastest lap on today’s track', '3 min 14.791 s', 'Kamui Kobayashi, Toyota TS050 Hybrid, in qualifying in 2017. That is an average of 156.5 mph (251.9 km/h) for the whole lap.'],
         ['Fastest lap in a race', '3 min 17.297 s', 'Mike Conway, Toyota TS050 Hybrid, 2019.'],
         ['Longest distance', '5,410.7 km', 'An Audi R15+ TDI covered 397 laps (3,362 miles) in 2010. It beat a record that had stood since 1971.'],
         ['Closest racing finish', 'About 120 m', 'In 1969 Jacky Ickx’s Ford GT40 beat Hans Herrmann’s Porsche by about 120 metres after 24 hours.'],
-        ['A finish decided by seconds', '13.854 s', 'In 2011 an Audi beat a Peugeot by under 14 seconds after 355 laps.'],
+        ['A finish decided by seconds', '10.913 s', 'In 2026 the winning Toyota beat a BMW by less than 11 seconds after 381 laps. In 2011 an Audi beat a Peugeot by under 14 seconds.'],
         ['Biggest winning margin', '349.8 km', 'In 1927 the winning Bentley finished almost 350 km (217 miles) ahead of the next car.'],
         ['Most wins in a row by a maker', '7', 'Porsche, from 1981 to 1987.'],
         ['Most wins by one type of car', '5', 'The Audi R8 racing car: 2000, 2001, 2002, 2004 and 2005.'],
@@ -273,7 +276,7 @@ const LE_MANS = {
         { name: 'Porsche 956', won: '1982, 1983, 1984, 1985', photo: 'porsche_956', flag: '🇩🇪',
           text: 'The first Porsche to use the air flowing under the car to suck it onto the track. It won four times in a row. This is the car that won in 1985.' },
         { name: 'Sauber-Mercedes C9', won: '1989', photo: 'sauber_c9', flag: '🇨🇭',
-          text: 'A silver prototype from the Swiss team Sauber, with a turbocharged Mercedes V8 engine. It reached 249 mph (400 km/h) in qualifying in 1989.' },
+          text: 'A silver prototype from the Swiss team Sauber, with a turbocharged Mercedes V8 engine. It reached 248 mph (400 km/h) in qualifying in 1989.' },
         { name: 'Mazda 787B', won: '1991', photo: 'mazda_787b', flag: '🇯🇵',
           text: 'The first Japanese winner, and the only winner with a rotary engine, which has spinning rotors instead of pistons. This is the winning car.' },
         { name: 'McLaren F1 GTR', won: '1995', photo: 'mclaren_f1_gtr', car: 'McLaren F1', flag: '🇬🇧',
